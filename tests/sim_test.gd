@@ -24,6 +24,8 @@ func _run() -> void:
 	var totals := [0, 0]
 	var goals := 0
 	var outs := {}
+	var ref_calls := {}
+	var cards := {"yellow": 0, "red": 0}
 	for i in 6:
 		var m = MatchScene.instantiate()
 		m.manual_step = true
@@ -36,10 +38,16 @@ func _run() -> void:
 		for e in m.events:
 			if e["type"] in ["Shy", "Corner", "Hit-out", "save"]:
 				outs[e["type"]] = outs.get(e["type"], 0) + 1
+		for c in m.referee.calls:
+			var key: String = c["call"] if c["call"] != "missed" else "missed " + c["kind"]
+			ref_calls[key] = ref_calls.get(key, 0) + 1
+		for c in m.referee.cards:
+			cards[c["colour"]] += 1
 		print("Match %d: %s %d - %d %s   shots %s  (%d steps, full time: %s)" % [i + 1, teams[0]["name"], m.score[0], m.score[1], teams[1]["name"], str(m.shots), steps, m.state == m.State.FULL_TIME])
 		totals[0] += m.score[0]
 		totals[1] += m.score[1]
 		goals += m.score[0] + m.score[1]
 		m.free()
 	print("Totals: ", totals, "  restarts/saves: ", outs)
+	print("Referee: ", ref_calls, "  cards: ", cards)
 	quit(0 if goals > 0 else 1)

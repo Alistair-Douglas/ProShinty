@@ -42,8 +42,12 @@ entry to `teams` with an `id`, `name`, `short` and `colors`.
 
 - 12-a-side, 150 x 75 yard pitch, hails 12 ft wide and 10 ft high.
 - Matches start (and restart after every hail) with a throw-up.
-- Ball over the sideline: a shy to the other side. Over the byline: a hit-out,
-  or a corner if a defender put it there.
+- Ball over the sideline: a shy to the other side. Over the byline: a hit-out
+  from the edge of the D, or a corner if a defender put it there.
+- A referee (in black) runs with play and enforces the rules: free hits,
+  penalty hits from 20 yards for fouls in the D, offside, advantage, no goals
+  straight from a free hit, and yellow and red cards. A shoulder barge is fair;
+  a push in the back is a foul the referee can miss. See `docs/rules.md`.
 - Ratings matter: pace sets speed, control decides whether you trap a fast ball
   or keep it in a tackle, passing and shooting set accuracy, keeping sets the
   keeper's reach and save chance.
@@ -54,6 +58,8 @@ entry to `teams` with an `id`, `name`, `short` and `colors`.
 - `scenes/main_menu.tscn`, `scripts/main_menu.gd`: team and match setup.
 - `scenes/match.tscn`, `scripts/match.gd`: the match rules, ball physics and AI.
   The simulation runs on a flat pitch in yards; nothing in it depends on 3D.
+- `scripts/referee.gd`: the referee. It reads the match's events and
+  calls fouls, cards, offside and set pieces; `docs/rules.md` lists the rules.
 - `scripts/match_view.gd`: builds and animates the 3D players, ball, hails and
   broadcast camera from the match state, using the models in `models/`.
 - `pitch/`: the Aberdour pitch, scenery, sky and lighting (from the separate
@@ -64,6 +70,8 @@ entry to `teams` with an `id`, `name`, `short` and `colors`.
 - `scripts/team_data.gd`: loads squads and calculates overall ratings.
 - `tests/sim_test.gd`: plays six computer-vs-computer matches headless.
   Run: `godot --headless --path . -s tests/sim_test.gd`
+- `tests/referee_test.gd`: staged fouls, offside, penalties and cards.
+  Run: `godot --headless --path . -s tests/referee_test.gd`
 - `tests/play_test.gd`: drives the real game with simulated key presses and
   saves screenshots (needs a display).
 - `tests/menu_test.gd`: clicks through the menu dropdowns and Play button.

@@ -12,6 +12,7 @@ var camera: Camera3D
 var ball: Node3D
 var ball_shadow: MeshInstance3D
 var figures := {}  # Player -> Dictionary of nodes
+var referee_figure: Dictionary
 var cam_x := 0.0
 var cam_zoom := 1.0
 
@@ -30,6 +31,7 @@ func _ready() -> void:
 	_build_hails()
 	for p in m.players:
 		figures[p] = _build_player(p)
+	referee_figure = _build_referee()
 	var bm := ShintyBallModel.new()
 	bm.simulate = false
 	bm.auto_find_hails = false
@@ -53,8 +55,12 @@ func w(v: Vector2, height: float = 0.0) -> Vector3:
 # ---------------------------------------------------------------- per frame
 
 func _process(delta: float) -> void:
-	for p in m.players:
-		_update_player(p, figures[p], delta)
+	for p in figures:
+		if p in m.players:
+			_update_player(p, figures[p], delta)
+		else:
+			figures[p]["root"].visible = false  # sent off
+	_update_referee(delta)
 	ball.position = w(m.ball_pos, m.ball_z + ShintyBallPhysics.RADIUS * ShintyMatchAdapter.TO_YARDS)
 	_update_camera(delta)
 
@@ -72,6 +78,15 @@ func _update_player(p, f: Dictionary, delta: float) -> void:
 	f["ring"].visible = p == m.human
 	f["arrow"].visible = p == m.human
 	f["tag"].visible = p == m.human or p.is_keeper()
+
+
+func _update_referee(delta: float) -> void:
+	var ref = m.referee
+	var root: Node3D = referee_figure["root"]
+	root.position = w(ref.pos)
+	var target := atan2(-ref.facing.x, -ref.facing.y)
+	root.rotation.y = lerp_angle(root.rotation.y, target, min(1.0, delta * 8.0))
+	ShintyMatchAdapter.update_player(referee_figure, ref.vel, 0.0, false, w(m.ball_pos, m.ball_z))
 
 
 func _update_camera(delta: float) -> void:
@@ -125,6 +140,20 @@ func _build_player(p) -> Dictionary:
 	root.add_child(tag)
 	root.position = w(p.pos)
 	f.merge({"ring": ring, "arrow": arrow, "tag": tag, "phase": 0.0})
+	return f
+
+
+## The referee: an all-black kit, no helmet and no caman.
+func _build_referee() -> Dictionary:
+	var kit := {"colors": {"primary": "#15161a", "secondary": "#15161a", "socks": "#15161a"}}
+	var f := ShintyMatchAdapter.build_player(self, {"name": "Referee", "number": 0, "position": "REF", "pace": 60, "tackling": 40}, kit)
+	var model: ShintyPlayerModel = f["model"]
+	model.wear_helmet = false
+	model.rebuild()
+	var caman := model.find_child("Caman", true, false)
+	if caman:
+		caman.visible = false
+	f["root"].position = w(m.referee.pos)
 	return f
 
 
