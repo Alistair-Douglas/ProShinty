@@ -9,6 +9,9 @@ extends Node3D
 ## - Kingussie (The Dell): a striped, railed pitch with a stand behind the west
 ##   hail, dugouts and a gravel car park on the north side, and the River Spey
 ##   curving round the south side and the east end, under the Cairngorms.
+## - Tighnabruaich (Kyles Athletic): on the shore of the Kyles of Bute, with a
+##   rocky sea wall and the loch along one side, the shore road and a wooded
+##   hillside along the other, and the clubhouse and tennis court at one end.
 ##
 ## Everything is generated when the node enters the tree (also in the editor).
 ## The layout of each ground lives in venues/; this script holds the pitch,
@@ -19,12 +22,14 @@ extends Node3D
 ## touchline at -Z. Match code that works in yards with the origin in a corner
 ## (like the 2D game) converts with sim_to_world() / world_to_sim().
 
-enum Venue { ABERDOUR, KINGUSSIE }
+enum Venue { ABERDOUR, KINGUSSIE, TIGHNABRUAICH }
 enum Lighting { SUMMER_AFTERNOON, SUMMER_EVENING, OVERCAST }
 enum Detail { LOW, MEDIUM, HIGH }
 
 ## Display names for menus, in Venue order.
-const VENUE_NAMES := ["Aberdour", "Kingussie (The Dell)"]
+const VENUE_NAMES := ["Aberdour", "Kingussie (The Dell)", "Tighnabruaich (Kyles Athletic)"]
+## The club that plays at each venue, for matching a home team to its ground.
+const VENUE_CLUBS := ["Aberdour", "Kingussie", "Kyles"]
 const YARD_M := 0.9144
 const GOAL_WIDTH_YD := 4.0      # 12 ft between the posts
 const GOAL_HEIGHT_YD := 3.3333  # 10 ft to the crossbar
@@ -175,7 +180,7 @@ func _rebuild() -> void:
 	noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
 	noise.frequency = 0.012
 	_mats.clear()
-	var files := ["aberdour.gd", "kingussie.gd"]
+	var files := ["aberdour.gd", "kingussie.gd", "tighnabruaich.gd"]
 	_layout = _load_local("venues/" + files[venue]).new(self)
 
 	var s := units_per_yard / YARD_M
@@ -248,6 +253,7 @@ func _build_ground(root: Node3D) -> void:
 			st.add_index(i + nx + 1)
 			st.add_index(i + nx)
 	st.generate_normals()
+	st.generate_tangents()
 	var mi := MeshInstance3D.new()
 	mi.name = "Ground"
 	mi.mesh = st.commit()
@@ -358,10 +364,13 @@ func _build_water(root: Node3D) -> void:
 	var pm := PlaneMesh.new()
 	pm.size = Vector2(16000, 16000)
 	sea.mesh = pm
-	var m := StandardMaterial3D.new()
-	m.albedo_color = w.color
-	m.roughness = w.roughness
-	m.metallic_specular = 0.7
+	var m := ShaderMaterial.new()
+	m.shader = _load_local("water.gdshader")
+	m.set_shader_parameter("deep_color", w.color)
+	m.set_shader_parameter("roughness", w.roughness)
+	m.set_shader_parameter("sky_color", _lighting_preset().sky_horizon)
+	if w.has("wave_scale"):
+		m.set_shader_parameter("wave_scale", w.wave_scale)
 	sea.material_override = m
 	sea.position = Vector3(0, w.level, 0)
 	sea.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -389,8 +398,14 @@ func _build_environment() -> void:
 	sun.light_energy = p.sun_energy
 	sun.shadow_enabled = true
 	sun.shadow_blur = p.shadow_blur
-	sun.directional_shadow_max_distance = 260.0 * units_per_yard / YARD_M
+	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
+	sun.directional_shadow_max_distance = 320.0 * units_per_yard / YARD_M
+	sun.directional_shadow_split_1 = 0.05
+	sun.directional_shadow_split_2 = 0.15
+	sun.directional_shadow_split_3 = 0.4
 	sun.directional_shadow_blend_splits = true
+	sun.shadow_normal_bias = 1.2
+	sun.light_angular_distance = 0.5  # soft shadow edges (Forward+)
 	_gen.add_child(sun)
 
 	var sky_mat := ShaderMaterial.new()
@@ -408,22 +423,33 @@ func _build_environment() -> void:
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
 	env.ambient_light_energy = p.ambient
 	env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
-	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	env.tonemap_exposure = p.exposure
-	env.tonemap_white = 6.0
+	env.tonemap_mode = Environment.TONE_MAPPER_AGX
+	env.tonemap_exposure = p.exposure * 1.15
 	env.fog_enabled = true
-	env.fog_light_color = p.sky_horizon
+	# A little bluer and darker than the horizon so distant hills turn hazy
+	# blue rather than washing out white.
+	env.fog_light_color = p.sky_horizon.lerp(p.sky_top, 0.35) * 0.8
+	env.fog_sun_scatter = 0.08
 	env.fog_density = _layout.fog_density() / units_per_yard * YARD_M
-	env.fog_aerial_perspective = 0.7
+	env.fog_aerial_perspective = 0.4
 	env.fog_sky_affect = 0.0
-	env.ssao_enabled = true
-	env.ssao_radius = 1.5
-	env.ssao_intensity = 1.2
 	env.glow_enabled = true
-	env.glow_intensity = 0.3
-	env.glow_bloom = 0.02
+	env.glow_intensity = 0.45
+	env.glow_bloom = 0.04
+	env.glow_hdr_threshold = 1.1
+	env.glow_blend_mode = Environment.GLOW_BLEND_MODE_SOFTLIGHT
 	env.adjustment_enabled = true
-	env.adjustment_saturation = 1.08
+	env.adjustment_contrast = 1.06
+	env.adjustment_saturation = 1.1
+	# Forward+ only; the Compatibility renderer ignores these.
+	env.ssao_enabled = true
+	env.ssao_radius = 1.2
+	env.ssao_intensity = 1.6
+	env.ssao_light_affect = 0.2
+	env.ssil_enabled = true
+	env.ssil_radius = 4.0
+	env.ssr_enabled = true
+	env.ssr_max_steps = 48
 	var we := WorldEnvironment.new()
 	we.name = "WorldEnvironment"
 	we.environment = env
@@ -459,8 +485,19 @@ func _lighting_preset() -> Dictionary:
 
 class TreeBatch:
 	var trunks: Array[Transform3D] = []
+	var trunk_colors: Array[Color] = []
 	var canopies: Array[Transform3D] = []
 	var colors: Array[Color] = []
+
+	func add_trunk(xf: Transform3D, color := Color(0.3, 0.26, 0.21)) -> void:
+		trunks.append(xf)
+		trunk_colors.append(color.srgb_to_linear())
+
+	## A limb from `from`, leaning `tilt` radians from upright towards `heading`.
+	func add_limb(from: Vector3, length: float, radius: float, tilt: float, heading: float) -> void:
+		var basis := Basis(Vector3.UP, heading) * Basis(Vector3.RIGHT, tilt)
+		var dir := basis * Vector3.UP
+		add_trunk(Transform3D(basis * Basis.from_scale(Vector3(radius, length, radius)), from + dir * length * 0.5))
 
 
 func leaf_color(rng: RandomNumberGenerator, dark := false) -> Color:
@@ -476,8 +513,11 @@ func leaf_color(rng: RandomNumberGenerator, dark := false) -> Color:
 func add_broadleaf(b: TreeBatch, rng: RandomNumberGenerator, base: Vector3, size := 1.0) -> void:
 	var trunk_h := rng.randf_range(3.5, 6.0) * size
 	var trunk_r := rng.randf_range(0.3, 0.55) * size
-	b.trunks.append(Transform3D(Basis.from_scale(Vector3(trunk_r, trunk_h + 2.0, trunk_r)), base + Vector3(0, (trunk_h + 2.0) * 0.5, 0)))
+	b.add_trunk(Transform3D(Basis.from_scale(Vector3(trunk_r, trunk_h + 2.0, trunk_r)), base + Vector3(0, (trunk_h + 2.0) * 0.5, 0)))
 	var r := rng.randf_range(4.2, 6.8) * size
+	for i in 4:
+		b.add_limb(base + Vector3(0, trunk_h * rng.randf_range(0.8, 1.0), 0), r * rng.randf_range(0.7, 0.95),
+				trunk_r * 0.5, rng.randf_range(0.5, 0.9), i * TAU / 4.0 + rng.randf_range(-0.4, 0.4))
 	var top := base + Vector3(0, trunk_h + r * 0.75, 0)
 	var col := leaf_color(rng)
 	b.canopies.append(Transform3D(Basis.from_scale(Vector3(r, r * 0.82, r)), top))
@@ -493,7 +533,7 @@ func add_broadleaf(b: TreeBatch, rng: RandomNumberGenerator, base: Vector3, size
 ## Dense dark evergreen crown down to the ground (holm oak, yew).
 func add_dark_round(b: TreeBatch, rng: RandomNumberGenerator, base: Vector3) -> void:
 	var r := rng.randf_range(5.5, 7.5)
-	b.trunks.append(Transform3D(Basis.from_scale(Vector3(0.6, 3.0, 0.6)), base + Vector3(0, 1.5, 0)))
+	b.add_trunk(Transform3D(Basis.from_scale(Vector3(0.6, 3.0, 0.6)), base + Vector3(0, 1.5, 0)))
 	var col := leaf_color(rng, true)
 	b.canopies.append(Transform3D(Basis.from_scale(Vector3(r, r * 1.2, r)), base + Vector3(0, r * 1.15, 0)))
 	b.colors.append(col)
@@ -519,7 +559,7 @@ func add_woodland(b: TreeBatch, rng: RandomNumberGenerator, base: Vector3, dark_
 ## Birch or alder by the river: thin pale trunk, narrow light crown.
 func add_birch(b: TreeBatch, rng: RandomNumberGenerator, base: Vector3) -> void:
 	var h := rng.randf_range(7.0, 12.0)
-	b.trunks.append(Transform3D(Basis.from_scale(Vector3(0.18, h, 0.18)), base + Vector3(0, h * 0.5, 0)))
+	b.add_trunk(Transform3D(Basis.from_scale(Vector3(0.18, h, 0.18)), base + Vector3(0, h * 0.5, 0)), Color(0.85, 0.84, 0.8))
 	var col := Color(0.4, 0.5, 0.2).lerp(Color(0.5, 0.56, 0.26), rng.randf()).srgb_to_linear()
 	var r := rng.randf_range(1.8, 2.8)
 	for i in 3:
@@ -531,7 +571,7 @@ func add_birch(b: TreeBatch, rng: RandomNumberGenerator, base: Vector3) -> void:
 ## Scots pine: tall bare trunk with a flat dark crown on top.
 func add_pine(b: TreeBatch, rng: RandomNumberGenerator, base: Vector3) -> void:
 	var h := rng.randf_range(10.0, 17.0)
-	b.trunks.append(Transform3D(Basis.from_scale(Vector3(0.3, h, 0.3)), base + Vector3(0, h * 0.5, 0)))
+	b.add_trunk(Transform3D(Basis.from_scale(Vector3(0.3, h, 0.3)), base + Vector3(0, h * 0.5, 0)), Color(0.5, 0.33, 0.24))
 	var col := Color(0.12, 0.2, 0.12).lerp(Color(0.16, 0.25, 0.14), rng.randf()).srgb_to_linear()
 	var r := rng.randf_range(2.5, 3.8)
 	b.canopies.append(Transform3D(Basis.from_scale(Vector3(r, r * 0.55, r)), base + Vector3(0, h, 0)))
@@ -546,11 +586,13 @@ func add_bush(b: TreeBatch, rng: RandomNumberGenerator, base: Vector3) -> void:
 	b.colors.append(leaf_color(rng, rng.randf() < 0.5))
 
 
-## Turns a batch into two MultiMeshes (trunks and canopies).
-func emit_trees(root: Node3D, b: TreeBatch, segs: int, rings: int, label: String) -> void:
+## Turns a batch into two MultiMeshes: trunks and limbs, and canopies. Each
+## canopy blob is a lumpy core wrapped in `cards` leaf cards, which give the
+## ragged outline, the dappled shadows and the gaps you see through real trees.
+func emit_trees(root: Node3D, b: TreeBatch, segs: int, rings: int, cards: int, label: String) -> void:
 	if not b.trunks.is_empty():
 		var cyl := CylinderMesh.new()
-		cyl.top_radius = 0.7
+		cyl.top_radius = 0.65
 		cyl.bottom_radius = 1.0
 		cyl.height = 1.0
 		cyl.radial_segments = 7
@@ -559,26 +601,25 @@ func emit_trees(root: Node3D, b: TreeBatch, segs: int, rings: int, label: String
 		cyl.cap_bottom = false
 		var mm := MultiMesh.new()
 		mm.transform_format = MultiMesh.TRANSFORM_3D
+		mm.use_colors = true
 		mm.mesh = cyl
 		mm.instance_count = b.trunks.size()
 		for i in b.trunks.size():
 			mm.set_instance_transform(i, b.trunks[i])
+			mm.set_instance_color(i, b.trunk_colors[i])
 		var mmi := MultiMeshInstance3D.new()
 		mmi.name = label + "Trunks"
 		mmi.multimesh = mm
-		mmi.material_override = mat("bark", Color(0.3, 0.26, 0.21), 0.95)
+		var bark := ShaderMaterial.new()
+		bark.shader = _load_local("bark.gdshader")
+		mmi.material_override = bark
 		root.add_child(mmi)
 	if b.canopies.is_empty():
 		return
-	var sphere := SphereMesh.new()
-	sphere.radius = 1.0
-	sphere.height = 2.0
-	sphere.radial_segments = segs
-	sphere.rings = rings
 	var mm2 := MultiMesh.new()
 	mm2.transform_format = MultiMesh.TRANSFORM_3D
 	mm2.use_colors = true
-	mm2.mesh = sphere
+	mm2.mesh = _canopy_mesh(segs, rings, cards)
 	mm2.instance_count = b.canopies.size()
 	for i in b.canopies.size():
 		mm2.set_instance_transform(i, b.canopies[i])
@@ -590,6 +631,108 @@ func emit_trees(root: Node3D, b: TreeBatch, segs: int, rings: int, label: String
 	cm.shader = _load_local("canopy.gdshader")
 	mmi2.material_override = cm
 	root.add_child(mmi2)
+
+
+## Unit-radius canopy blob: a sphere core (UV2.x = 0) and leaf cards
+## (UV2.x = 1) scattered over its surface. Every vertex gets a normal pointing
+## out from the centre, so the blob shades as one soft mass.
+func _canopy_mesh(segs: int, rings: int, cards: int) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var sphere := SphereMesh.new()
+	sphere.radius = 0.82
+	sphere.height = 1.64
+	sphere.radial_segments = segs
+	sphere.rings = rings
+	var arrays := sphere.get_mesh_arrays()
+	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var idx: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
+	for i in idx:
+		var v := verts[i]
+		st.set_normal(v.normalized())
+		st.set_uv(Vector2(0.5, 0.5))
+		st.set_uv2(Vector2(0.0, 0.0))
+		st.add_vertex(v)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7 + cards
+	for c in cards:
+		# Even-ish spread over the sphere, more cards towards the top.
+		var y := rng.randf_range(-0.55, 1.0)
+		var a := rng.randf() * TAU
+		var ring := sqrt(1.0 - y * y)
+		var n := Vector3(cos(a) * ring, y, sin(a) * ring)
+		var centre := n * rng.randf_range(0.8, 1.02)
+		var size := rng.randf_range(0.45, 0.7)
+		# Card plane roughly facing outwards, spun randomly about its normal.
+		var tangent := n.cross(Vector3.UP if absf(n.y) < 0.95 else Vector3.RIGHT).normalized()
+		tangent = tangent.rotated(n, rng.randf() * TAU)
+		var bitangent := n.cross(tangent)
+		var tilt := rng.randf_range(-0.5, 0.5)
+		bitangent = (bitangent + n * tilt).normalized()
+		var corners := [Vector2(-1, -1), Vector2(1, -1), Vector2(1, 1), Vector2(-1, 1)]
+		var order := [0, 1, 2, 0, 2, 3]
+		for k in order:
+			var cc: Vector2 = corners[k]
+			var v := centre + (tangent * cc.x + bitangent * cc.y) * size * 0.5
+			st.set_normal(v.normalized())
+			st.set_uv(cc * 0.5 + Vector2(0.5, 0.5))
+			st.set_uv2(Vector2(1.0, rng.randf()))
+			st.add_vertex(v)
+	return st.commit()
+
+
+## Scatters about `count` tufts of long grass over `area` (metres). `density`
+## is called with (x, z) and returns the chance, 0 to 1, of keeping a tuft
+## there. Colours follow `color`, varied a little per tuft.
+func emit_tufts(root: Node3D, rng: RandomNumberGenerator, count: int, area: Rect2, density: Callable, color: Color) -> void:
+	count = int(count * [0.4, 1.0, 1.8][scenery_detail])
+	var xforms: Array[Transform3D] = []
+	var colors: Array[Color] = []
+	for i in count:
+		var x := rng.randf_range(area.position.x, area.end.x)
+		var z := rng.randf_range(area.position.y, area.end.y)
+		if rng.randf() >= float(density.call(x, z)):
+			continue
+		var size := rng.randf_range(0.5, 1.0)
+		var basis := Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(size * 1.1, size * rng.randf_range(0.6, 1.1), size * 1.1))
+		xforms.append(Transform3D(basis, Vector3(x, height_m(x, z) - 0.03, z)))
+		colors.append((color * rng.randf_range(0.85, 1.12)).srgb_to_linear())
+	if xforms.is_empty():
+		return
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_colors = true
+	mm.mesh = _tuft_mesh()
+	mm.instance_count = xforms.size()
+	for i in xforms.size():
+		mm.set_instance_transform(i, xforms[i])
+		mm.set_instance_color(i, colors[i])
+	var mmi := MultiMeshInstance3D.new()
+	mmi.name = "LongGrass"
+	mmi.multimesh = mm
+	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mmi.visibility_range_end = 220.0
+	var mat := ShaderMaterial.new()
+	mat.shader = _load_local("tuft.gdshader")
+	mmi.material_override = mat
+	root.add_child(mmi)
+
+
+## Three crossed 1 m x 0.5 m cards standing on the ground (UV.y 0 at the top).
+func _tuft_mesh() -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for k in 3:
+		var a := k * PI / 3.0
+		var dx := Vector3(cos(a), 0, sin(a)) * 0.5
+		var n := Vector3(-sin(a), 0, cos(a))
+		var quad := [[-dx, Vector2(0, 1)], [dx, Vector2(1, 1)], [dx + Vector3(0, 0.5, 0), Vector2(1, 0)],
+				[-dx + Vector3(0, 0.5, 0), Vector2(0, 0)]]
+		for i in [0, 1, 2, 0, 2, 3]:
+			st.set_normal(n)
+			st.set_uv(quad[i][1])
+			st.add_vertex(quad[i][0])
+	return st.commit()
 
 
 ## A house with a pitched roof, chimney and windows on its two long sides

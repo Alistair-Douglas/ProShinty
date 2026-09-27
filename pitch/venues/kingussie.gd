@@ -44,11 +44,11 @@ func extra_cloud() -> float:
 
 ## Thinner haze than Aberdour so the hills read on the horizon.
 func fog_density() -> float:
-	return 0.00016
+	return 0.00009
 
 
 func water() -> Dictionary:
-	return {"level": WATER_LEVEL, "color": Color(0.1, 0.12, 0.12), "roughness": 0.08}
+	return {"level": WATER_LEVEL, "color": Color(0.1, 0.12, 0.12), "roughness": 0.06, "wave_scale": 0.8}
 
 
 func ground_look() -> Dictionary:
@@ -62,6 +62,8 @@ func ground_look() -> Dictionary:
 		"earth_color": Color(0.3, 0.27, 0.25),     # heather on the hills
 		"gravel_color": Color(0.55, 0.53, 0.5),
 		"sand_color": Color(0.52, 0.49, 0.44),     # river shingle
+		"field_strength": 0.35,
+		"field_start": 260.0,
 	}
 
 
@@ -105,6 +107,7 @@ func ground_mask(x: float, z: float, h: float) -> Color:
 
 func build(root: Node3D, rng: RandomNumberGenerator) -> void:
 	_build_trees(root, rng)
+	_build_long_grass(root, rng)
 	_build_ground_furniture(root)
 	_build_town(root, rng)
 	_build_cars(root, rng)
@@ -167,8 +170,21 @@ func _build_trees(root: Node3D, rng: RandomNumberGenerator) -> void:
 				p.add_woodland(far, rng, Vector3(px, h - 0.4, pz), 1.0)
 			gx += spacing
 		gz += spacing
-	p.emit_trees(root, near, 12, 7, "TreesNear")
-	p.emit_trees(root, far, 10, 6, "Woodland")
+	p.emit_trees(root, near, 12, 7, 64, "TreesNear")
+	p.emit_trees(root, far, 8, 5, 22, "Woodland")
+
+
+## Tussocks in the unmown meadow round the ground, greener by the river.
+func _build_long_grass(root: Node3D, rng: RandomNumberGenerator) -> void:
+	var meadow := func(x: float, z: float) -> float:
+		var c := ground_mask(x, z, p.height_m(x, z))
+		return c.g * (1.0 - c.b) * (1.0 - c.a)
+	var bank := func(x: float, z: float) -> float:
+		return meadow.call(x, z) * (1.0 - smoothstep(10.0, 30.0, p.dist_to_path(Vector2(x, z), river)))
+	p.emit_tufts(root, rng, 11000, Rect2(-hl - 80.0, -hw - 70.0, hl * 2.0 + 170.0, hw * 2.0 + 130.0),
+			meadow, Color(0.55, 0.5, 0.32))
+	p.emit_tufts(root, rng, 3000, Rect2(-hl - 80.0, hw + 15.0, hl * 2.0 + 170.0, 50.0),
+			bank, Color(0.38, 0.45, 0.22))
 
 
 func _build_ground_furniture(root: Node3D) -> void:
