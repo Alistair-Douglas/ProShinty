@@ -1,7 +1,7 @@
 # Shinty (working title)
 
-A 3D shinty match game built in Godot 4.7. Pick Kingussie or Aberdour and play
-a full 12-a-side match against the computer.
+A 3D shinty match game built in Godot 4.7. Pick Kingussie or Aberdour, pick
+where to play (Aberdour, Kingussie or Tighnabruaich), and play a full 12-a-side match against the computer.
 
 ## Run it
 
@@ -110,9 +110,10 @@ crests come from shinty.com and belong to the clubs.
   angles, runs in behind, overlaps, coming short, marking and cover.
 - `scripts/match_view.gd`: builds and animates the 3D players, ball, goals and
   broadcast camera from the match state, using the models in `models/`.
-- `pitch/`: the Aberdour pitch, scenery, sky and lighting (from the separate
-  shinty-pitch project; see `docs/pitch.md`). The match uses it in yards
-  (`units_per_yard = 1`) with its own placeholder goals turned off.
+- `pitch/`: the grounds (Aberdour, Kingussie's The Dell and Tighnabruaich) with their
+  scenery, sky and lighting; each ground's layout is in `pitch/venues/`. See
+  `docs/pitch.md`. The match uses it in yards (`units_per_yard = 1`) with its
+  own placeholder goals turned off, at the ground picked in the menu.
 - `scripts/hud.gd`: scoreboard, power bar and messages on top of the 3D view.
 - `scripts/game.gd`: autoload with menu choices and control bindings.
 - `scripts/team_data.gd`: loads squads and calculates overall ratings.
@@ -135,8 +136,8 @@ crests come from shinty.com and belong to the clubs.
 - `tests/model_test.gd`: model and physics checks.
   Run: `godot --headless --path . -s tests/model_test.gd`
 - `preview/preview.tscn`: orbit-camera preview of the pitch on its own. Open
-  it and press F6. Drag to orbit, scroll to zoom, 1 to 5 for set views, L for
-  lighting.
+  it and press F6. Drag to orbit, scroll to zoom, 1 to 6 for set views, L for
+  lighting, V to switch ground.
 - `tests/render_views.gd`: renders the pitch views into `renders/`.
   Run: `xvfb-run godot --path . --rendering-method gl_compatibility -s tests/render_views.gd`
 - `docs/`: notes for the models and pitch, and screenshots.

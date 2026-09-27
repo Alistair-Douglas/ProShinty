@@ -1,26 +1,43 @@
 @tool
 class_name ShintyPitch
 extends Node3D
-## A 3D shinty pitch modelled on Aberdour's home ground: open parkland with a
-## tree-lined touchline and cars parked under the trees on the south side, a
-## clump of big dark trees, earthworks and a wooded hill on the north side,
-## houses on the rise behind the west end, and the Firth of Forth to the south.
+## A 3D shinty pitch at a real ground, picked with `venue`:
 ##
-## Everything is generated when the node enters the tree (also in the editor),
-## so this one script plus the three shaders beside it is the whole pitch.
+## - Aberdour (Fife): open parkland between the railway and Brachi Woods to the
+##   north and a tree-lined path to the south, with the beach and the Firth of
+##   Forth past the east end.
+## - Kingussie (The Dell): a striped, railed pitch with a stand behind the west
+##   hail, dugouts and a gravel car park on the north side, and the River Spey
+##   curving round the south side and the east end, under the Cairngorms.
+## - Tighnabruaich (Kyles Athletic): on the shore of the Kyles of Bute, with a
+##   rocky sea wall and the loch along one side, the shore road and a wooded
+##   hillside along the other, and the clubhouse and tennis court at one end.
+##
+## Everything is generated when the node enters the tree (also in the editor).
+## The layout of each ground lives in venues/; this script holds the pitch,
+## markings, lighting, the public API and the building blocks both grounds use.
 ##
 ## Coordinates: the pitch is centred on this node, lengthways along X and
-## across along Z. West goal is at -X, east goal at +X, north touchline at -Z.
-## Match code that works in yards with the origin in a corner (like the 2D
-## game) converts with sim_to_world() / world_to_sim().
+## across along Z. West goal is at -X, east goal at +X, the far (north)
+## touchline at -Z. Match code that works in yards with the origin in a corner
+## (like the 2D game) converts with sim_to_world() / world_to_sim().
 
+enum Venue { ABERDOUR, KINGUSSIE, TIGHNABRUAICH }
 enum Lighting { SUMMER_AFTERNOON, SUMMER_EVENING, OVERCAST }
 enum Detail { LOW, MEDIUM, HIGH }
 
+## Display names for menus, in Venue order.
+const VENUE_NAMES := ["Aberdour", "Kingussie (The Dell)", "Tighnabruaich (Kyles Athletic)"]
+## The club that plays at each venue, for matching a home team to its ground.
+const VENUE_CLUBS := ["Aberdour", "Kingussie", "Kyles"]
 const YARD_M := 0.9144
 const GOAL_WIDTH_YD := 4.0      # 12 ft between the posts
 const GOAL_HEIGHT_YD := 3.3333  # 10 ft to the crossbar
-const SEA_LEVEL_M := -3.5
+
+@export var venue: Venue = Venue.ABERDOUR:
+	set(v):
+		venue = v
+		_queue_rebuild()
 
 @export_group("Pitch")
 ## Shinty rules allow 140 to 170 yards. Matches the 2D game's 150.
@@ -56,8 +73,8 @@ const SEA_LEVEL_M := -3.5
 	set(v):
 		include_environment = v
 		_queue_rebuild()
-## Trees, hills, houses, cars and sea. Off leaves just the pitch and a flat
-## surround, which is handy for debugging.
+## Trees, hills, buildings, cars and water. Off leaves just the pitch and a
+## flat surround, which is handy for debugging.
 @export var show_scenery := true:
 	set(v):
 		show_scenery = v
@@ -67,7 +84,7 @@ const SEA_LEVEL_M := -3.5
 		scenery_detail = v
 		_queue_rebuild()
 ## Simple white hails so the pitch looks right on its own. Turn off once the
-## real goal models are placed at goal_position().
+## real goal models are placed at goal_transform().
 @export var show_placeholder_goals := true:
 	set(v):
 		show_placeholder_goals = v
@@ -76,8 +93,8 @@ const SEA_LEVEL_M := -3.5
 	set(v):
 		show_flags = v
 		_queue_rebuild()
-## 0 = lush green, 1 = dry midsummer park.
-@export_range(0.0, 1.0) var grass_wear := 0.55:
+## 0 = lush green, 1 = dry midsummer park. Negative uses the ground's own look.
+@export_range(-1.0, 1.0) var grass_wear := -1.0:
 	set(v):
 		grass_wear = v
 		_queue_rebuild()
@@ -88,12 +105,13 @@ const SEA_LEVEL_M := -3.5
 
 var _gen: Node3D
 var _pending := false
-var _noise := FastNoiseLite.new()
 var _mats := {}
-# Half length and half width of the pitch in metres. Scenery is laid out in
-# metres around these and scaled to world units at the end.
-var _hl := 0.0
-var _hw := 0.0
+var _layout: RefCounted  # the venue script instance (venues/*.gd)
+## Half length and half width of the pitch in metres. Scenery is laid out in
+## metres around these and scaled to world units at the end.
+var hl := 0.0
+var hw := 0.0
+var noise := FastNoiseLite.new()
 
 
 func _ready() -> void:
@@ -135,7 +153,7 @@ func goal_transform(end: int) -> Transform3D:
 ## Ground height in world units at a point in this node's space (0 on the pitch).
 func ground_height(p: Vector3) -> float:
 	var s := units_per_yard / YARD_M
-	return _height_m(p.x / s, p.z / s) * s
+	return height_m(p.x / s, p.z / s) * s
 
 
 # --- Build ------------------------------------------------------------------
@@ -156,12 +174,14 @@ func _rebuild() -> void:
 	_gen.name = "Generated"
 	add_child(_gen)
 
-	_hl = length_yd * YARD_M * 0.5
-	_hw = width_yd * YARD_M * 0.5
-	_noise.seed = layout_seed
-	_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
-	_noise.frequency = 0.012
+	hl = length_yd * YARD_M * 0.5
+	hw = width_yd * YARD_M * 0.5
+	noise.seed = layout_seed
+	noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
+	noise.frequency = 0.012
 	_mats.clear()
+	var files := ["aberdour.gd", "kingussie.gd", "tighnabruaich.gd"]
+	_layout = _load_local("venues/" + files[venue]).new(self)
 
 	var s := units_per_yard / YARD_M
 	var root := Node3D.new()  # everything below is in metres
@@ -178,50 +198,39 @@ func _rebuild() -> void:
 	if show_scenery:
 		var rng := RandomNumberGenerator.new()
 		rng.seed = layout_seed
-		_build_sea(root)
-		_build_trees(root, rng)
-		_build_houses(root, rng)
-		_build_cars(root, rng)
-		_build_site_fence_and_hut(root)
+		_build_water(root)
+		_layout.build(root, rng)
 	if add_ground_collision:
 		_build_collision(s)
 	if include_environment:
 		_build_environment()
 
 
-## Height of the land in metres. Flat across the park, rising to the wooded
-## hill north-east, a gentle rise with houses to the west and north-west, and
-## dropping to the beach and sea to the south.
-func _height_m(x: float, z: float) -> float:
+## Height of the land in metres at (x, z) metres from the centre spot.
+func height_m(x: float, z: float) -> float:
 	if not show_scenery:
 		return 0.0
-	var hl := _hl
-	var hw := _hw
-	var ne := 42.0 * smoothstep(-hl * 0.2, hl * 0.35, x) * smoothstep(hw + 50.0, hw + 120.0, -z)
-	var east := 34.0 * smoothstep(hl + 40.0, hl + 140.0, x)
-	var west := 18.0 * smoothstep(hl + 45.0, hl + 230.0, -x) * (1.0 - smoothstep(hw + 30.0, hw + 110.0, z))
-	var north := 22.0 * smoothstep(hw + 55.0, hw + 240.0, -z) * (1.0 - smoothstep(-hl * 0.3, hl * 0.2, x) * 0.3)
-	var rise: float = max(max(ne, east), max(west, north))
-	var south := -7.5 * smoothstep(hw + 52.0, hw + 95.0, z)
-	# Keep the park (pitch plus surrounds) dead flat.
-	var fx := smoothstep(hl + 22.0, hl + 40.0, abs(x))
-	var fz := smoothstep(hw + 20.0, hw + 38.0, abs(z))
-	var wild: float = max(fx, fz)
-	var bumps := _noise.get_noise_2d(x, z) * (2.0 + rise * 0.18)
-	return (rise + bumps) * wild + south
+	return _layout.height_m(x, z)
+
+
+## 0 inside the flat park around the pitch, rising to 1 beyond it.
+func wildness(x: float, z: float, margin_x := 22.0, margin_z := 20.0) -> float:
+	var fx := smoothstep(hl + margin_x, hl + margin_x + 18.0, abs(x))
+	var fz := smoothstep(hw + margin_z, hw + margin_z + 18.0, abs(z))
+	return max(fx, fz)
 
 
 func _build_ground(root: Node3D) -> void:
-	# 4 m grid over the park and nearby hills, coarser further out so the land
-	# runs on towards the horizon without costing many triangles.
+	# 4 m grid over the park and nearby land, much coarser further out so the
+	# land runs on to the horizon hills without costing many triangles.
 	var xs: PackedFloat32Array
 	var zs: PackedFloat32Array
 	if show_scenery:
-		xs = _grid_axis(_hl + 360.0, _hl + 1600.0)
-		zs = _grid_axis(_hw + 320.0, _hw + 1500.0)
+		xs = _grid_axis(hl + 360.0, 7000.0)
+		zs = _grid_axis(hw + 320.0, 7000.0)
 	else:
-		xs = _grid_axis(_hl + 40.0, _hl + 40.0)
-		zs = _grid_axis(_hw + 40.0, _hw + 40.0)
+		xs = _grid_axis(hl + 40.0, hl + 40.0)
+		zs = _grid_axis(hw + 40.0, hw + 40.0)
 	var nx := xs.size()
 	var nz := zs.size()
 	var st := SurfaceTool.new()
@@ -230,8 +239,8 @@ func _build_ground(root: Node3D) -> void:
 		for ix in nx:
 			var x := xs[ix]
 			var z := zs[iz]
-			var h := _height_m(x, z)
-			st.set_color(_ground_mask(x, z, h))
+			var h := height_m(x, z)
+			st.set_color(_layout.ground_mask(x, z, h) if show_scenery else Color(0, 0, 0, 0))
 			st.set_uv(Vector2(x, z))
 			st.add_vertex(Vector3(x, h, z))
 	for iz in nz - 1:
@@ -244,6 +253,7 @@ func _build_ground(root: Node3D) -> void:
 			st.add_index(i + nx + 1)
 			st.add_index(i + nx)
 	st.generate_normals()
+	st.generate_tangents()
 	var mi := MeshInstance3D.new()
 	mi.name = "Ground"
 	mi.mesh = st.commit()
@@ -251,7 +261,11 @@ func _build_ground(root: Node3D) -> void:
 	mat.shader = _load_local("ground.gdshader")
 	mat.set_shader_parameter("unit", YARD_M)  # the Site node is in metres
 	mat.set_shader_parameter("pitch_size", Vector2(length_yd, width_yd))
-	mat.set_shader_parameter("wear", grass_wear)
+	var look: Dictionary = _layout.ground_look()
+	for k in look:
+		mat.set_shader_parameter(k, look[k])
+	if grass_wear >= 0.0:
+		mat.set_shader_parameter("wear", grass_wear)
 	mi.material_override = mat
 	root.add_child(mi)
 
@@ -264,7 +278,7 @@ func _grid_axis(inner: float, outer: float) -> PackedFloat32Array:
 	while v < outer:
 		half.append(v)
 		if v >= inner:
-			step = min(step * 1.25, 120.0)
+			step = min(step * 1.25, 400.0)
 		v += step
 	half.append(outer)
 	var out := PackedFloat32Array()
@@ -273,35 +287,6 @@ func _grid_axis(inner: float, outer: float) -> PackedFloat32Array:
 	for h in half:
 		out.append(h)
 	return out
-
-
-## Vertex colour masks for the ground shader (r earth, g rough, b gravel, a sand).
-func _ground_mask(x: float, z: float, h: float) -> Color:
-	var hl := _hl
-	var hw := _hw
-	var c := Color(0, 0, 0, 0)
-	if not show_scenery:
-		return c
-	# Rough grass everywhere beyond the mown park.
-	var park: float = 1.0 - max(smoothstep(hl + 24.0, hl + 36.0, abs(x)), smoothstep(hw + 22.0, hw + 32.0, abs(z)))
-	c.g = 1.0 - park
-	# Long-grass strip in front of the earthworks (photo: reeds before the site).
-	if z < -(hw + 10.0) and z > -(hw + 18.0) and x > -hl * 0.15:
-		c.g = 0.8
-	# Earthworks at the foot of the wooded hill.
-	if z < -(hw + 18.0) and z > -(hw + 48.0) and x > -hl * 0.05 and x < hl + 26.0:
-		c.r = 1.0
-		c.g = 0.0
-	# Gravel: car park behind the west goal and the verge under the south trees.
-	if x < -(hl + 10.0) and x > -(hl + 32.0) and z < -6.0 and z > -(hw + 6.0):
-		c.b = 1.0
-	if z > hw + 12.0 and z < hw + 19.0 and abs(x) < hl + 20.0:
-		c.b = 0.85
-	# Beach between the grass and the sea.
-	c.a = smoothstep(-0.8, -2.2, h)
-	if c.a > 0.0:
-		c.g *= 1.0 - c.a
-	return c
 
 
 func _build_markers(s: float) -> void:
@@ -314,10 +299,10 @@ func _build_markers(s: float) -> void:
 	var centre := Marker3D.new()
 	centre.name = "CentreSpot"
 	_gen.add_child(centre)
-	# Broadcast camera spot above the south touchline, in front of the trees.
+	# Broadcast camera spot above the south touchline.
 	var cam := Marker3D.new()
 	cam.name = "BroadcastCamera"
-	var pos := Vector3(0.0, 20.0, _hw + 10.0) * s
+	var pos := Vector3(0.0, 20.0, hw + 10.0) * s
 	cam.transform = Transform3D(Basis.looking_at(-pos + Vector3(0, 0, -4.0 * s)), pos)
 	_gen.add_child(cam)
 
@@ -330,7 +315,7 @@ func _build_goals(root: Node3D) -> void:
 	var height := GOAL_HEIGHT_YD * YARD_M
 	var depth := 1.3
 	var r := 0.05
-	var white := _mat("goal_post", Color(0.96, 0.96, 0.96), 0.4)
+	var white := mat("goal_post", Color(0.96, 0.96, 0.96), 0.4)
 	var net := StandardMaterial3D.new()
 	net.albedo_color = Color(1, 1, 1, 0.22)
 	net.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
@@ -339,35 +324,28 @@ func _build_goals(root: Node3D) -> void:
 	for end in 2:
 		var g := Node3D.new()
 		var sx := -1.0 if end == 0 else 1.0
-		g.position = Vector3(sx * _hl, 0, 0)
+		g.position = Vector3(sx * hl, 0, 0)
 		holder.add_child(g)
 		for side in [-1.0, 1.0]:
-			_add_cyl(g, Vector3(0, height * 0.5, side * half_w), r, height, white)
-			_add_cyl(g, Vector3(sx * depth, height * 0.4, side * half_w), r * 0.6, height * 0.8, white)
-		var bar := _add_cyl(g, Vector3(0, height, 0), r, half_w * 2.0 + r * 2.0, white)
+			add_cyl(g, Vector3(0, height * 0.5, side * half_w), r, height, white)
+			add_cyl(g, Vector3(sx * depth, height * 0.4, side * half_w), r * 0.6, height * 0.8, white)
+		var bar := add_cyl(g, Vector3(0, height, 0), r, half_w * 2.0 + r * 2.0, white)
 		bar.rotation.x = PI * 0.5
-		# Net: back, roof and sides as one see-through box behind the line.
-		var box := MeshInstance3D.new()
-		var bm := BoxMesh.new()
-		bm.size = Vector3(depth, height, half_w * 2.0)
-		box.mesh = bm
-		box.material_override = net
-		box.position = Vector3(sx * depth * 0.5, height * 0.5, 0)
+		var box := add_box(g, Vector3(depth, height, half_w * 2.0), Vector3(sx * depth * 0.5, height * 0.5, 0), net)
 		box.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		g.add_child(box)
 
 
 func _build_flags(root: Node3D) -> void:
-	var pole := _mat("flag_pole", Color(0.95, 0.95, 0.95), 0.5)
-	var cloth := _mat("flag_cloth", Color(0.85, 0.12, 0.1), 0.8)
+	var pole := mat("flag_pole", Color(0.95, 0.95, 0.95), 0.5)
+	var cloth := mat("flag_cloth", Color(0.85, 0.12, 0.1), 0.8)
 	cloth.cull_mode = BaseMaterial3D.CULL_DISABLED
-	var spots := [Vector2(-_hl, -_hw), Vector2(_hl, -_hw), Vector2(-_hl, _hw), Vector2(_hl, _hw),
-			Vector2(0, -_hw - 1.0), Vector2(0, _hw + 1.0)]
+	var spots := [Vector2(-hl, -hw), Vector2(hl, -hw), Vector2(-hl, hw), Vector2(hl, hw),
+			Vector2(0, -hw - 1.0), Vector2(0, hw + 1.0)]
 	for p in spots:
 		var f := Node3D.new()
 		f.position = Vector3(p.x, 0, p.y)
 		root.add_child(f)
-		_add_cyl(f, Vector3(0, 0.75, 0), 0.02, 1.5, pole)
+		add_cyl(f, Vector3(0, 0.75, 0), 0.02, 1.5, pole)
 		var q := MeshInstance3D.new()
 		var qm := QuadMesh.new()
 		qm.size = Vector2(0.4, 0.3)
@@ -377,409 +355,34 @@ func _build_flags(root: Node3D) -> void:
 		f.add_child(q)
 
 
-func _build_sea(root: Node3D) -> void:
+## One big flat water plane; the ground mesh hides it except where the venue
+## carves the land below its level (the sea at Aberdour, the Spey at Kingussie).
+func _build_water(root: Node3D) -> void:
+	var w: Dictionary = _layout.water()
 	var sea := MeshInstance3D.new()
-	sea.name = "Sea"
+	sea.name = "Water"
 	var pm := PlaneMesh.new()
-	pm.size = Vector2(9000, 6000)
+	pm.size = Vector2(16000, 16000)
 	sea.mesh = pm
-	var m := StandardMaterial3D.new()
-	m.albedo_color = Color(0.16, 0.27, 0.36)
-	m.roughness = 0.12
-	m.metallic_specular = 0.7
+	var m := ShaderMaterial.new()
+	m.shader = _load_local("water.gdshader")
+	m.set_shader_parameter("deep_color", w.color)
+	m.set_shader_parameter("roughness", w.roughness)
+	m.set_shader_parameter("sky_color", _lighting_preset().sky_horizon)
+	if w.has("wave_scale"):
+		m.set_shader_parameter("wave_scale", w.wave_scale)
 	sea.material_override = m
-	sea.position = Vector3(0, SEA_LEVEL_M, _hw + 3000.0 - 40.0)
+	sea.position = Vector3(0, w.level, 0)
 	sea.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	root.add_child(sea)
-	if scenery_detail == Detail.LOW:
-		return
-	# The far shore of the Forth: a long low hazy ridge.
-	var shore := MeshInstance3D.new()
-	shore.name = "FarShore"
-	var bm := PrismMesh.new()
-	bm.size = Vector3(260.0, 70.0, 9000.0)
-	shore.mesh = bm
-	shore.rotation.y = PI * 0.5
-	shore.position = Vector3(-600, SEA_LEVEL_M + 30.0, _hw + 5200.0)
-	shore.scale = Vector3(1.0, 1.0, 1.0)
-	shore.material_override = _mat("far_shore", Color(0.42, 0.5, 0.5), 1.0)
-	shore.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	root.add_child(shore)
 
-
-# --- Trees ------------------------------------------------------------------
-
-class TreeBatch:
-	var trunks: Array[Transform3D] = []
-	var canopies: Array[Transform3D] = []
-	var colors: Array[Color] = []
-
-
-func _build_trees(root: Node3D, rng: RandomNumberGenerator) -> void:
-	var hl := _hl
-	var hw := _hw
-	var big := TreeBatch.new()
-	var small := TreeBatch.new()  # woodland and bushes, lower poly
-
-	# South touchline: a long row of mature broadleaves with cars under them.
-	var x := -hl - 45.0
-	while x < hl + 45.0:
-		_add_broadleaf(big, rng, Vector3(x + rng.randf_range(-2, 2), 0, hw + 22.0 + rng.randf_range(-2, 2.5)))
-		x += rng.randf_range(10.0, 15.0)
-	# A looser second row towards the beach, with gaps to see the water.
-	x = -hl - 80.0
-	while x < hl + 80.0:
-		if rng.randf() < 0.6:
-			_add_broadleaf(big, rng, Vector3(x, 0, hw + 40.0 + rng.randf_range(-5, 5)))
-		x += rng.randf_range(12.0, 22.0)
-
-	# North side: the clump of big dark round trees left of centre.
-	for i in 4:
-		var px := lerpf(-hl * 0.42, -hl * 0.12, i / 3.0) + rng.randf_range(-3, 3)
-		_add_dark_round(big, rng, Vector3(px, 0, -(hw + 17.0) + rng.randf_range(-3, 3)))
-	_add_dark_round(big, rng, Vector3(hl * 0.36, 0, -(hw + 19.0)))
-	# Broadleaves along the north-west side and around the car park.
-	x = -hl - 40.0
-	while x < -hl * 0.48:
-		_add_broadleaf(big, rng, Vector3(x, 0, -(hw + 15.0) + rng.randf_range(-3, 3)))
-		x += rng.randf_range(11.0, 16.0)
-	for i in 5:
-		_add_broadleaf(big, rng, Vector3(-hl - 38.0 + rng.randf_range(-4, 4), 0, rng.randf_range(-hw, hw)))
-	# Bushes in the long grass in front of the earthworks.
-	x = -hl * 0.1
-	while x < hl + 20.0:
-		if rng.randf() < 0.55:
-			_add_bush(small, rng, Vector3(x, 0, -(hw + rng.randf_range(11.0, 17.0))))
-		x += rng.randf_range(4.0, 9.0)
-
-	# Woodland on the hills: dense on the north-east hill and east end,
-	# scattered hedgerow trees on the western and northern fields.
-	var spacing: float = [11.0, 7.5, 6.0][scenery_detail]
-	var gz := -(hw + 330.0)
-	while gz < hw + 60.0:
-		var gx := -(hl + 350.0)
-		while gx < hl + 350.0:
-			var px := gx + rng.randf_range(-spacing, spacing) * 0.45
-			var pz := gz + rng.randf_range(-spacing, spacing) * 0.45
-			var h := _height_m(px, pz)
-			var wooded := (px > -hl * 0.15 and pz < -(hw + 50.0)) or px > hl + 42.0
-			var p := 0.0
-			if wooded and h > 3.0:
-				p = 0.92
-			elif h > 2.0:
-				p = 0.035
-			if rng.randf() < p:
-				_add_woodland(small, rng, Vector3(px, h - 0.4, pz))
-			gx += spacing
-		gz += spacing
-
-	_emit_batch(root, big, 18, 9, "TreesNear")
-	_emit_batch(root, small, 10, 6, "Woodland")
-
-
-func _leaf_color(rng: RandomNumberGenerator, dark := false) -> Color:
-	var c: Color
-	if dark:
-		c = Color(0.16, 0.24, 0.12).lerp(Color(0.2, 0.3, 0.14), rng.randf())
-	else:
-		c = Color(0.26, 0.38, 0.14).lerp(Color(0.36, 0.47, 0.18), rng.randf())
-	return c.srgb_to_linear()
-
-
-func _add_broadleaf(b: TreeBatch, rng: RandomNumberGenerator, base: Vector3) -> void:
-	var trunk_h := rng.randf_range(3.5, 6.0)
-	var trunk_r := rng.randf_range(0.3, 0.55)
-	b.trunks.append(Transform3D(Basis.from_scale(Vector3(trunk_r, trunk_h + 2.0, trunk_r)), base + Vector3(0, (trunk_h + 2.0) * 0.5, 0)))
-	var r := rng.randf_range(4.2, 6.8)
-	var top := base + Vector3(0, trunk_h + r * 0.75, 0)
-	var col := _leaf_color(rng)
-	b.canopies.append(Transform3D(Basis.from_scale(Vector3(r, r * 0.82, r)), top))
-	b.colors.append(col)
-	for i in rng.randi_range(3, 5):
-		var a := rng.randf() * TAU
-		var rr := r * rng.randf_range(0.5, 0.72)
-		var off := Vector3(cos(a) * r * 0.62, rng.randf_range(-0.25, 0.45) * r, sin(a) * r * 0.62)
-		b.canopies.append(Transform3D(Basis.from_scale(Vector3(rr, rr * 0.85, rr)), top + off))
-		b.colors.append(col * rng.randf_range(0.9, 1.08))
-
-
-func _add_dark_round(b: TreeBatch, rng: RandomNumberGenerator, base: Vector3) -> void:
-	var r := rng.randf_range(5.5, 7.5)
-	b.trunks.append(Transform3D(Basis.from_scale(Vector3(0.6, 3.0, 0.6)), base + Vector3(0, 1.5, 0)))
-	var col := _leaf_color(rng, true)
-	b.canopies.append(Transform3D(Basis.from_scale(Vector3(r, r * 1.2, r)), base + Vector3(0, r * 1.15, 0)))
-	b.colors.append(col)
-	for i in 3:
-		var a := rng.randf() * TAU
-		var rr := r * rng.randf_range(0.55, 0.7)
-		b.canopies.append(Transform3D(Basis.from_scale(Vector3(rr, rr * 1.1, rr)),
-				base + Vector3(cos(a) * r * 0.5, r * rng.randf_range(0.8, 1.8), sin(a) * r * 0.5)))
-		b.colors.append(col * rng.randf_range(0.9, 1.1))
-
-
-func _add_woodland(b: TreeBatch, rng: RandomNumberGenerator, base: Vector3) -> void:
-	var r := rng.randf_range(3.2, 5.2)
-	var dark := rng.randf() < 0.4
-	var col := _leaf_color(rng, dark)
-	b.canopies.append(Transform3D(Basis.from_scale(Vector3(r, r * 1.1, r)), base + Vector3(0, r * 1.25, 0)))
-	b.colors.append(col)
-	var a := rng.randf() * TAU
-	b.canopies.append(Transform3D(Basis.from_scale(Vector3(r, r, r) * 0.7), base + Vector3(cos(a) * r * 0.6, r * 1.6, sin(a) * r * 0.6)))
-	b.colors.append(col * 1.05)
-
-
-func _add_bush(b: TreeBatch, rng: RandomNumberGenerator, base: Vector3) -> void:
-	var r := rng.randf_range(1.0, 2.2)
-	b.canopies.append(Transform3D(Basis.from_scale(Vector3(r * 1.3, r, r * 1.3)), base + Vector3(0, r * 0.6, 0)))
-	b.colors.append(_leaf_color(rng, rng.randf() < 0.5))
-
-
-func _emit_batch(root: Node3D, b: TreeBatch, segs: int, rings: int, label: String) -> void:
-	if not b.trunks.is_empty():
-		var cyl := CylinderMesh.new()
-		cyl.top_radius = 0.7
-		cyl.bottom_radius = 1.0
-		cyl.height = 1.0
-		cyl.radial_segments = 7
-		cyl.rings = 1
-		cyl.cap_top = false
-		cyl.cap_bottom = false
-		var mm := MultiMesh.new()
-		mm.transform_format = MultiMesh.TRANSFORM_3D
-		mm.mesh = cyl
-		mm.instance_count = b.trunks.size()
-		for i in b.trunks.size():
-			mm.set_instance_transform(i, b.trunks[i])
-		var mmi := MultiMeshInstance3D.new()
-		mmi.name = label + "Trunks"
-		mmi.multimesh = mm
-		mmi.material_override = _mat("bark", Color(0.3, 0.26, 0.21), 0.95)
-		root.add_child(mmi)
-	var sphere := SphereMesh.new()
-	sphere.radius = 1.0
-	sphere.height = 2.0
-	sphere.radial_segments = segs
-	sphere.rings = rings
-	var mm2 := MultiMesh.new()
-	mm2.transform_format = MultiMesh.TRANSFORM_3D
-	mm2.use_colors = true
-	mm2.mesh = sphere
-	mm2.instance_count = b.canopies.size()
-	for i in b.canopies.size():
-		mm2.set_instance_transform(i, b.canopies[i])
-		mm2.set_instance_color(i, b.colors[i])
-	var mmi2 := MultiMeshInstance3D.new()
-	mmi2.name = label + "Canopy"
-	mmi2.multimesh = mm2
-	var cm := ShaderMaterial.new()
-	cm.shader = _load_local("canopy.gdshader")
-	mmi2.material_override = cm
-	root.add_child(mmi2)
-
-
-# --- Houses -----------------------------------------------------------------
-
-func _build_houses(root: Node3D, rng: RandomNumberGenerator) -> void:
-	var holder := Node3D.new()
-	holder.name = "Houses"
-	root.add_child(holder)
-	var hl := _hl
-	var hw := _hw
-	var count: int = [6, 10, 14][scenery_detail]
-	# A street of cottages on the rise behind the west end, facing the pitch.
-	for i in count:
-		var pz := -hw - 70.0 + i * 12.5 + rng.randf_range(-1.5, 1.5)
-		var px := -hl - 95.0 - rng.randf_range(0.0, 6.0) - (i % 2) * 2.0
-		_add_house(holder, rng, Vector3(px, _height_m(px, pz), pz), 0.0)
-	# A terrace on the hill to the north-west, seen past the dark trees.
-	for i in int(count * 0.5) + 2:
-		var px := -hl * 0.95 + i * 11.0
-		var pz := -hw - 95.0 - rng.randf_range(0.0, 4.0)
-		_add_house(holder, rng, Vector3(px, _height_m(px, pz), pz), PI * 0.5)
-	# A couple of bigger houses further up the west hill.
-	for i in 3:
-		var px := -hl - 150.0 - i * 25.0
-		var pz := -hw - 20.0 + i * 30.0
-		_add_house(holder, rng, Vector3(px, _height_m(px, pz), pz), rng.randf_range(-0.3, 0.3))
-
-
-func _add_house(holder: Node3D, rng: RandomNumberGenerator, base: Vector3, yaw: float) -> void:
-	var walls := [Color(0.9, 0.88, 0.82), Color(0.76, 0.72, 0.64), Color(0.66, 0.58, 0.48),
-			Color(0.82, 0.8, 0.76), Color(0.58, 0.52, 0.44)]
-	var roofs := [Color(0.24, 0.25, 0.28), Color(0.3, 0.3, 0.33), Color(0.45, 0.24, 0.18)]
-	var w := rng.randf_range(6.0, 7.5)     # depth, across the ridge
-	var l := rng.randf_range(8.0, 12.0)    # length, along the ridge
-	var h := rng.randf_range(5.0, 6.5)
-	var rh := rng.randf_range(2.4, 3.2)
-	var house := Node3D.new()
-	house.position = base
-	house.rotation.y = yaw
-	holder.add_child(house)
-	var wi := rng.randi() % walls.size()
-	var body := _add_box(house, Vector3(w, h + 1.5, l), Vector3(0, (h + 1.5) * 0.5 - 1.5, 0),
-			_mat("wall%d" % wi, walls[wi], 0.95))
-	body.name = "Walls"
-	var roof := MeshInstance3D.new()
-	var pm := PrismMesh.new()
-	pm.size = Vector3(w + 0.6, rh, l + 0.4)
-	roof.mesh = pm
-	var ri := rng.randi() % roofs.size()
-	roof.material_override = _mat("roof%d" % ri, roofs[ri], 0.85)
-	roof.position = Vector3(0, h + rh * 0.5, 0)
-	house.add_child(roof)
-	_add_box(house, Vector3(0.7, 1.6, 1.0), Vector3(0, h + rh * 0.6, l * 0.5 - 0.6), _mat("wall%d" % wi, walls[wi], 0.95))
-	var glass := _mat("window", Color(0.12, 0.14, 0.17), 0.2)
-	var frame := _mat("window_frame", Color(0.95, 0.95, 0.93), 0.8)
-	var n_win := int(l / 3.2)
-	for side in [-1.0, 1.0]:
-		for i in n_win:
-			var wz := (i - (n_win - 1) * 0.5) * 3.0
-			for wy in [1.4, 3.9]:
-				if wy > h - 1.2:
-					continue
-				_add_box(house, Vector3(0.08, 1.35, 1.05), Vector3(side * w * 0.5, wy, wz), frame)
-				_add_box(house, Vector3(0.1, 1.15, 0.85), Vector3(side * w * 0.5, wy, wz), glass)
-
-
-# --- Cars -------------------------------------------------------------------
-
-func _build_cars(root: Node3D, rng: RandomNumberGenerator) -> void:
-	var holder := Node3D.new()
-	holder.name = "Cars"
-	root.add_child(holder)
-	var hl := _hl
-	var hw := _hw
-	# Car park behind the west goal, nose in towards the pitch.
-	var z := -hw - 2.0
-	while z < -9.0:
-		if rng.randf() < 0.7:
-			_add_car(holder, rng, Vector3(-hl - 18.0, 0, z), 0.0)
-		z += 2.9
-	z = -hw
-	while z < -12.0:
-		if rng.randf() < 0.45:
-			_add_car(holder, rng, Vector3(-hl - 27.0, 0, z), PI)
-		z += 2.9
-	# Parked on the verge under the south trees, facing the pitch.
-	var x := -hl * 0.1
-	var placed_van := false
-	while x < hl + 12.0:
-		if rng.randf() < 0.65:
-			if not placed_van and x > hl * 0.2:
-				_add_van(holder, Vector3(x, 0, hw + 15.5))
-				placed_van = true
-				x += 1.0
-			else:
-				_add_car(holder, rng, Vector3(x, 0, hw + 15.0), PI * 0.5)
-		x += 3.1
-
-
-func _add_car(holder: Node3D, rng: RandomNumberGenerator, pos: Vector3, yaw: float) -> void:
-	var paints := [Color(0.93, 0.93, 0.93), Color(0.08, 0.08, 0.09), Color(0.62, 0.64, 0.66),
-			Color(0.1, 0.15, 0.32), Color(0.62, 0.08, 0.08), Color(0.3, 0.31, 0.33)]
-	var idx := rng.randi() % paints.size()
-	var paint := _mat("paint%d" % idx, paints[idx], 0.35)
-	var car := Node3D.new()
-	car.position = pos
-	car.rotation.y = yaw + rng.randf_range(-0.05, 0.05)
-	holder.add_child(car)
-	var length := rng.randf_range(4.0, 4.6)
-	_add_box(car, Vector3(length, 0.72, 1.8), Vector3(0, 0.66, 0), paint)
-	_add_box(car, Vector3(length * 0.52, 0.56, 1.62), Vector3(-length * 0.06, 1.3, 0), _mat("car_glass", Color(0.1, 0.12, 0.15), 0.15))
-	_add_box(car, Vector3(length * 0.48, 0.07, 1.58), Vector3(-length * 0.06, 1.6, 0), paint)
-	var tyre := _mat("tyre", Color(0.06, 0.06, 0.06), 0.9)
-	for sx in [-1.0, 1.0]:
-		for sz in [-1.0, 1.0]:
-			var w := _add_cyl(car, Vector3(sx * length * 0.32, 0.33, sz * 0.82), 0.33, 0.24, tyre)
-			w.rotation.x = PI * 0.5
-
-
-func _add_van(holder: Node3D, pos: Vector3) -> void:
-	var van := Node3D.new()
-	van.position = pos
-	van.rotation.y = PI * 0.5
-	holder.add_child(van)
-	var white := _mat("paint0", Color(0.93, 0.93, 0.93), 0.35)
-	_add_box(van, Vector3(5.3, 1.95, 2.0), Vector3(-0.3, 1.35, 0), white)
-	_add_box(van, Vector3(0.9, 0.8, 1.9), Vector3(2.55, 1.9, 0), _mat("car_glass", Color(0.1, 0.12, 0.15), 0.15))
-	_add_box(van, Vector3(1.2, 0.9, 2.0), Vector3(2.4, 0.8, 0), white)
-	var tyre := _mat("tyre", Color(0.06, 0.06, 0.06), 0.9)
-	for sx in [-1.9, 2.1]:
-		for sz in [-1.0, 1.0]:
-			var w := _add_cyl(van, Vector3(sx, 0.36, sz * 0.9), 0.36, 0.26, tyre)
-			w.rotation.x = PI * 0.5
-
-
-# --- Earthworks fence and hut -----------------------------------------------
-
-func _build_site_fence_and_hut(root: Node3D) -> void:
-	var hl := _hl
-	var hw := _hw
-	var fz := -(hw + 49.0)
-	var x0 := -hl * 0.05
-	var x1 := hl + 26.0
-	var posts := MultiMesh.new()
-	posts.transform_format = MultiMesh.TRANSFORM_3D
-	var box := BoxMesh.new()
-	box.size = Vector3(0.08, 1.9, 0.08)
-	posts.mesh = box
-	var n := int((x1 - x0) / 2.5) + 1
-	posts.instance_count = n
-	for i in n:
-		var px := x0 + i * 2.5
-		posts.set_instance_transform(i, Transform3D(Basis(), Vector3(px, _height_m(px, fz) + 0.95, fz)))
-	var pmi := MultiMeshInstance3D.new()
-	pmi.name = "FencePosts"
-	pmi.multimesh = posts
-	var grey := _mat("fence", Color(0.45, 0.47, 0.45), 0.6)
-	pmi.material_override = grey
-	root.add_child(pmi)
-	var mesh_mat := StandardMaterial3D.new()
-	mesh_mat.albedo_color = Color(0.4, 0.42, 0.4, 0.35)
-	mesh_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	mesh_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-	var panel := _add_box(root, Vector3(x1 - x0, 1.8, 0.02), Vector3((x0 + x1) * 0.5, 0.95, fz), mesh_mat)
-	panel.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	# Timber hut with a red tiled roof by the earthworks (seen in photo 1).
-	var hut := Node3D.new()
-	hut.name = "Hut"
-	hut.position = Vector3(-hl * 0.02, 0, -(hw + 26.0))
-	hut.rotation.y = 0.15
-	root.add_child(hut)
-	_add_box(hut, Vector3(9.0, 3.0, 5.5), Vector3(0, 1.5, 0), _mat("timber", Color(0.55, 0.42, 0.3), 0.9))
-	var roof := MeshInstance3D.new()
-	var pm := PrismMesh.new()
-	pm.size = Vector3(6.2, 1.8, 9.6)
-	roof.mesh = pm
-	roof.rotation.y = PI * 0.5
-	roof.material_override = _mat("hut_roof", Color(0.55, 0.3, 0.22), 0.85)
-	roof.position = Vector3(0, 3.9, 0)
-	hut.add_child(roof)
-	# Soil heaps on the site.
-	var soil := _mat("soil", Color(0.5, 0.32, 0.22), 1.0)
-	for p in [Vector3(hl * 0.3, 0, -(hw + 34.0)), Vector3(hl * 0.62, 0, -(hw + 40.0)), Vector3(hl * 0.12, 0, -(hw + 42.0))]:
-		var heap := MeshInstance3D.new()
-		var sm := SphereMesh.new()
-		sm.radius = 1.0
-		sm.height = 2.0
-		sm.radial_segments = 12
-		sm.rings = 6
-		sm.is_hemisphere = true
-		heap.mesh = sm
-		heap.scale = Vector3(9.0, 3.5, 6.0)
-		heap.position = p
-		heap.material_override = soil
-		root.add_child(heap)
-
-
-# --- Physics and environment ------------------------------------------------
 
 func _build_collision(s: float) -> void:
 	var body := StaticBody3D.new()
 	body.name = "GroundBody"
 	var shape := CollisionShape3D.new()
 	var bs := BoxShape3D.new()
-	bs.size = Vector3(_hl * 2.0 + 60.0, 2.0, _hw * 2.0 + 60.0) * s
+	bs.size = Vector3(hl * 2.0 + 60.0, 2.0, hw * 2.0 + 60.0) * s
 	shape.shape = bs
 	shape.position = Vector3(0, -1.0 * s, 0)
 	body.add_child(shape)
@@ -795,15 +398,21 @@ func _build_environment() -> void:
 	sun.light_energy = p.sun_energy
 	sun.shadow_enabled = true
 	sun.shadow_blur = p.shadow_blur
-	sun.directional_shadow_max_distance = 260.0 * units_per_yard / YARD_M
+	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
+	sun.directional_shadow_max_distance = 320.0 * units_per_yard / YARD_M
+	sun.directional_shadow_split_1 = 0.05
+	sun.directional_shadow_split_2 = 0.15
+	sun.directional_shadow_split_3 = 0.4
 	sun.directional_shadow_blend_splits = true
+	sun.shadow_normal_bias = 1.2
+	sun.light_angular_distance = 0.5  # soft shadow edges (Forward+)
 	_gen.add_child(sun)
 
 	var sky_mat := ShaderMaterial.new()
 	sky_mat.shader = _load_local("sky.gdshader")
 	sky_mat.set_shader_parameter("top_color", p.sky_top)
 	sky_mat.set_shader_parameter("horizon_color", p.sky_horizon)
-	sky_mat.set_shader_parameter("cloud_cover", p.clouds)
+	sky_mat.set_shader_parameter("cloud_cover", clamp(p.clouds + _layout.extra_cloud(), 0.0, 1.0))
 	sky_mat.set_shader_parameter("cloud_color", p.cloud_color)
 	sky_mat.set_shader_parameter("cloud_shadow_color", p.cloud_shadow)
 	var sky := Sky.new()
@@ -814,22 +423,34 @@ func _build_environment() -> void:
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
 	env.ambient_light_energy = p.ambient
 	env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
-	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	env.tonemap_exposure = p.exposure
-	env.tonemap_white = 6.0
+	env.tonemap_mode = Environment.TONE_MAPPER_AGX
+	env.tonemap_exposure = p.exposure * 1.15
 	env.fog_enabled = true
-	env.fog_light_color = p.sky_horizon
-	env.fog_density = 0.0009 / units_per_yard * YARD_M
-	env.fog_aerial_perspective = 0.7
+	# A little bluer and darker than the horizon so distant hills turn hazy
+	# blue rather than washing out white.
+	env.fog_light_color = p.sky_horizon.lerp(p.sky_top, 0.35) * 0.8
+	env.fog_sun_scatter = 0.08
+	env.fog_density = _layout.fog_density() / units_per_yard * YARD_M
+	env.fog_aerial_perspective = 0.4
 	env.fog_sky_affect = 0.0
-	env.ssao_enabled = true
-	env.ssao_radius = 1.5
-	env.ssao_intensity = 1.2
 	env.glow_enabled = true
-	env.glow_intensity = 0.3
-	env.glow_bloom = 0.02
+	env.glow_intensity = 0.45
+	env.glow_bloom = 0.04
+	env.glow_hdr_threshold = 1.1
+	env.glow_blend_mode = Environment.GLOW_BLEND_MODE_SOFTLIGHT
 	env.adjustment_enabled = true
-	env.adjustment_saturation = 1.08
+	env.adjustment_contrast = 1.06
+	env.adjustment_saturation = 1.1
+	# Forward+ only (the Compatibility renderer warns about them).
+	if RenderingServer.get_current_rendering_method() == "forward_plus":
+		env.ssao_enabled = true
+		env.ssao_radius = 1.2
+		env.ssao_intensity = 1.6
+		env.ssao_light_affect = 0.2
+		env.ssil_enabled = true
+		env.ssil_radius = 4.0
+		env.ssr_enabled = true
+		env.ssr_max_steps = 48
 	var we := WorldEnvironment.new()
 	we.name = "WorldEnvironment"
 	we.environment = env
@@ -861,13 +482,392 @@ func _lighting_preset() -> Dictionary:
 			}
 
 
-# --- Helpers ----------------------------------------------------------------
+# --- Building blocks shared by the venues -------------------------------------
 
-func _load_local(file: String) -> Resource:
-	return load(get_script().resource_path.get_base_dir().path_join(file))
+class TreeBatch:
+	var trunks: Array[Transform3D] = []
+	var trunk_colors: Array[Color] = []
+	var canopies: Array[Transform3D] = []
+	var colors: Array[Color] = []
+
+	func add_trunk(xf: Transform3D, color := Color(0.3, 0.26, 0.21)) -> void:
+		trunks.append(xf)
+		trunk_colors.append(color.srgb_to_linear())
+
+	## A limb from `from`, leaning `tilt` radians from upright towards `heading`.
+	func add_limb(from: Vector3, length: float, radius: float, tilt: float, heading: float) -> void:
+		var basis := Basis(Vector3.UP, heading) * Basis(Vector3.RIGHT, tilt)
+		var dir := basis * Vector3.UP
+		add_trunk(Transform3D(basis * Basis.from_scale(Vector3(radius, length, radius)), from + dir * length * 0.5))
 
 
-func _mat(key: String, color: Color, roughness: float) -> StandardMaterial3D:
+func leaf_color(rng: RandomNumberGenerator, dark := false) -> Color:
+	var c: Color
+	if dark:
+		c = Color(0.16, 0.24, 0.12).lerp(Color(0.2, 0.3, 0.14), rng.randf())
+	else:
+		c = Color(0.26, 0.38, 0.14).lerp(Color(0.36, 0.47, 0.18), rng.randf())
+	return c.srgb_to_linear()
+
+
+## Mature park tree (sycamore, beech, lime): short trunk, big lumpy crown.
+func add_broadleaf(b: TreeBatch, rng: RandomNumberGenerator, base: Vector3, size := 1.0) -> void:
+	var trunk_h := rng.randf_range(3.5, 6.0) * size
+	var trunk_r := rng.randf_range(0.3, 0.55) * size
+	b.add_trunk(Transform3D(Basis.from_scale(Vector3(trunk_r, trunk_h + 2.0, trunk_r)), base + Vector3(0, (trunk_h + 2.0) * 0.5, 0)))
+	var r := rng.randf_range(4.2, 6.8) * size
+	for i in 4:
+		b.add_limb(base + Vector3(0, trunk_h * rng.randf_range(0.8, 1.0), 0), r * rng.randf_range(0.7, 0.95),
+				trunk_r * 0.5, rng.randf_range(0.5, 0.9), i * TAU / 4.0 + rng.randf_range(-0.4, 0.4))
+	var top := base + Vector3(0, trunk_h + r * 0.75, 0)
+	var col := leaf_color(rng)
+	b.canopies.append(Transform3D(Basis.from_scale(Vector3(r, r * 0.82, r)), top))
+	b.colors.append(col)
+	for i in rng.randi_range(3, 5):
+		var a := rng.randf() * TAU
+		var rr := r * rng.randf_range(0.5, 0.72)
+		var off := Vector3(cos(a) * r * 0.62, rng.randf_range(-0.25, 0.45) * r, sin(a) * r * 0.62)
+		b.canopies.append(Transform3D(Basis.from_scale(Vector3(rr, rr * 0.85, rr)), top + off))
+		b.colors.append(col * rng.randf_range(0.9, 1.08))
+
+
+## Dense dark evergreen crown down to the ground (holm oak, yew).
+func add_dark_round(b: TreeBatch, rng: RandomNumberGenerator, base: Vector3) -> void:
+	var r := rng.randf_range(5.5, 7.5)
+	b.add_trunk(Transform3D(Basis.from_scale(Vector3(0.6, 3.0, 0.6)), base + Vector3(0, 1.5, 0)))
+	var col := leaf_color(rng, true)
+	b.canopies.append(Transform3D(Basis.from_scale(Vector3(r, r * 1.2, r)), base + Vector3(0, r * 1.15, 0)))
+	b.colors.append(col)
+	for i in 3:
+		var a := rng.randf() * TAU
+		var rr := r * rng.randf_range(0.55, 0.7)
+		b.canopies.append(Transform3D(Basis.from_scale(Vector3(rr, rr * 1.1, rr)),
+				base + Vector3(cos(a) * r * 0.5, r * rng.randf_range(0.8, 1.8), sin(a) * r * 0.5)))
+		b.colors.append(col * rng.randf_range(0.9, 1.1))
+
+
+## Woodland tree seen from a distance: two blobs, no visible trunk.
+func add_woodland(b: TreeBatch, rng: RandomNumberGenerator, base: Vector3, dark_share := 0.4) -> void:
+	var r := rng.randf_range(3.2, 5.2)
+	var col := leaf_color(rng, rng.randf() < dark_share)
+	b.canopies.append(Transform3D(Basis.from_scale(Vector3(r, r * 1.1, r)), base + Vector3(0, r * 1.25, 0)))
+	b.colors.append(col)
+	var a := rng.randf() * TAU
+	b.canopies.append(Transform3D(Basis.from_scale(Vector3(r, r, r) * 0.7), base + Vector3(cos(a) * r * 0.6, r * 1.6, sin(a) * r * 0.6)))
+	b.colors.append(col * 1.05)
+
+
+## Birch or alder by the river: thin pale trunk, narrow light crown.
+func add_birch(b: TreeBatch, rng: RandomNumberGenerator, base: Vector3) -> void:
+	var h := rng.randf_range(7.0, 12.0)
+	b.add_trunk(Transform3D(Basis.from_scale(Vector3(0.18, h, 0.18)), base + Vector3(0, h * 0.5, 0)), Color(0.85, 0.84, 0.8))
+	var col := Color(0.4, 0.5, 0.2).lerp(Color(0.5, 0.56, 0.26), rng.randf()).srgb_to_linear()
+	var r := rng.randf_range(1.8, 2.8)
+	for i in 3:
+		var off := Vector3(rng.randf_range(-0.8, 0.8), h * (0.55 + i * 0.17), rng.randf_range(-0.8, 0.8))
+		b.canopies.append(Transform3D(Basis.from_scale(Vector3(r, r * 1.3, r) * (1.0 - i * 0.18)), base + off))
+		b.colors.append(col * rng.randf_range(0.92, 1.08))
+
+
+## Scots pine: tall bare trunk with a flat dark crown on top.
+func add_pine(b: TreeBatch, rng: RandomNumberGenerator, base: Vector3) -> void:
+	var h := rng.randf_range(10.0, 17.0)
+	b.add_trunk(Transform3D(Basis.from_scale(Vector3(0.3, h, 0.3)), base + Vector3(0, h * 0.5, 0)), Color(0.5, 0.33, 0.24))
+	var col := Color(0.12, 0.2, 0.12).lerp(Color(0.16, 0.25, 0.14), rng.randf()).srgb_to_linear()
+	var r := rng.randf_range(2.5, 3.8)
+	b.canopies.append(Transform3D(Basis.from_scale(Vector3(r, r * 0.55, r)), base + Vector3(0, h, 0)))
+	b.colors.append(col)
+	b.canopies.append(Transform3D(Basis.from_scale(Vector3(r, r * 0.5, r) * 0.7), base + Vector3(rng.randf_range(-1, 1), h - r * 0.6, rng.randf_range(-1, 1))))
+	b.colors.append(col * 0.95)
+
+
+func add_bush(b: TreeBatch, rng: RandomNumberGenerator, base: Vector3) -> void:
+	var r := rng.randf_range(1.0, 2.2)
+	b.canopies.append(Transform3D(Basis.from_scale(Vector3(r * 1.3, r, r * 1.3)), base + Vector3(0, r * 0.6, 0)))
+	b.colors.append(leaf_color(rng, rng.randf() < 0.5))
+
+
+## Turns a batch into two MultiMeshes: trunks and limbs, and canopies. Each
+## canopy blob is a lumpy core wrapped in `cards` leaf cards, which give the
+## ragged outline, the dappled shadows and the gaps you see through real trees.
+func emit_trees(root: Node3D, b: TreeBatch, segs: int, rings: int, cards: int, label: String) -> void:
+	if not b.trunks.is_empty():
+		var cyl := CylinderMesh.new()
+		cyl.top_radius = 0.65
+		cyl.bottom_radius = 1.0
+		cyl.height = 1.0
+		cyl.radial_segments = 7
+		cyl.rings = 1
+		cyl.cap_top = false
+		cyl.cap_bottom = false
+		var mm := MultiMesh.new()
+		mm.transform_format = MultiMesh.TRANSFORM_3D
+		mm.use_colors = true
+		mm.mesh = cyl
+		mm.instance_count = b.trunks.size()
+		for i in b.trunks.size():
+			mm.set_instance_transform(i, b.trunks[i])
+			mm.set_instance_color(i, b.trunk_colors[i])
+		var mmi := MultiMeshInstance3D.new()
+		mmi.name = label + "Trunks"
+		mmi.multimesh = mm
+		var bark := ShaderMaterial.new()
+		bark.shader = _load_local("bark.gdshader")
+		mmi.material_override = bark
+		root.add_child(mmi)
+	if b.canopies.is_empty():
+		return
+	var mm2 := MultiMesh.new()
+	mm2.transform_format = MultiMesh.TRANSFORM_3D
+	mm2.use_colors = true
+	mm2.mesh = _canopy_mesh(segs, rings, cards)
+	mm2.instance_count = b.canopies.size()
+	for i in b.canopies.size():
+		mm2.set_instance_transform(i, b.canopies[i])
+		mm2.set_instance_color(i, b.colors[i])
+	var mmi2 := MultiMeshInstance3D.new()
+	mmi2.name = label + "Canopy"
+	mmi2.multimesh = mm2
+	var cm := ShaderMaterial.new()
+	cm.shader = _load_local("canopy.gdshader")
+	mmi2.material_override = cm
+	root.add_child(mmi2)
+
+
+## Unit-radius canopy blob: a sphere core (UV2.x = 0) and leaf cards
+## (UV2.x = 1) scattered over its surface. Every vertex gets a normal pointing
+## out from the centre, so the blob shades as one soft mass.
+func _canopy_mesh(segs: int, rings: int, cards: int) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var sphere := SphereMesh.new()
+	sphere.radius = 0.82
+	sphere.height = 1.64
+	sphere.radial_segments = segs
+	sphere.rings = rings
+	var arrays := sphere.get_mesh_arrays()
+	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var idx: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
+	for i in idx:
+		var v := verts[i]
+		st.set_normal(v.normalized())
+		st.set_uv(Vector2(0.5, 0.5))
+		st.set_uv2(Vector2(0.0, 0.0))
+		st.add_vertex(v)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7 + cards
+	for c in cards:
+		# Even-ish spread over the sphere, more cards towards the top.
+		var y := rng.randf_range(-0.55, 1.0)
+		var a := rng.randf() * TAU
+		var ring := sqrt(1.0 - y * y)
+		var n := Vector3(cos(a) * ring, y, sin(a) * ring)
+		var centre := n * rng.randf_range(0.8, 1.02)
+		var size := rng.randf_range(0.45, 0.7)
+		# Card plane roughly facing outwards, spun randomly about its normal.
+		var tangent := n.cross(Vector3.UP if absf(n.y) < 0.95 else Vector3.RIGHT).normalized()
+		tangent = tangent.rotated(n, rng.randf() * TAU)
+		var bitangent := n.cross(tangent)
+		var tilt := rng.randf_range(-0.5, 0.5)
+		bitangent = (bitangent + n * tilt).normalized()
+		var corners := [Vector2(-1, -1), Vector2(1, -1), Vector2(1, 1), Vector2(-1, 1)]
+		var order := [0, 1, 2, 0, 2, 3]
+		for k in order:
+			var cc: Vector2 = corners[k]
+			var v := centre + (tangent * cc.x + bitangent * cc.y) * size * 0.5
+			st.set_normal(v.normalized())
+			st.set_uv(cc * 0.5 + Vector2(0.5, 0.5))
+			st.set_uv2(Vector2(1.0, rng.randf()))
+			st.add_vertex(v)
+	return st.commit()
+
+
+## Scatters about `count` tufts of long grass over `area` (metres). `density`
+## is called with (x, z) and returns the chance, 0 to 1, of keeping a tuft
+## there. Colours follow `color`, varied a little per tuft.
+func emit_tufts(root: Node3D, rng: RandomNumberGenerator, count: int, area: Rect2, density: Callable, color: Color) -> void:
+	count = int(count * [0.4, 1.0, 1.8][scenery_detail])
+	var xforms: Array[Transform3D] = []
+	var colors: Array[Color] = []
+	for i in count:
+		var x := rng.randf_range(area.position.x, area.end.x)
+		var z := rng.randf_range(area.position.y, area.end.y)
+		if rng.randf() >= float(density.call(x, z)):
+			continue
+		var size := rng.randf_range(0.5, 1.0)
+		var basis := Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(size * 1.1, size * rng.randf_range(0.6, 1.1), size * 1.1))
+		xforms.append(Transform3D(basis, Vector3(x, height_m(x, z) - 0.03, z)))
+		colors.append((color * rng.randf_range(0.85, 1.12)).srgb_to_linear())
+	if xforms.is_empty():
+		return
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_colors = true
+	mm.mesh = _tuft_mesh()
+	mm.instance_count = xforms.size()
+	for i in xforms.size():
+		mm.set_instance_transform(i, xforms[i])
+		mm.set_instance_color(i, colors[i])
+	var mmi := MultiMeshInstance3D.new()
+	mmi.name = "LongGrass"
+	mmi.multimesh = mm
+	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mmi.visibility_range_end = 220.0
+	var mat := ShaderMaterial.new()
+	mat.shader = _load_local("tuft.gdshader")
+	mmi.material_override = mat
+	root.add_child(mmi)
+
+
+## Three crossed 1 m x 0.5 m cards standing on the ground (UV.y 0 at the top).
+func _tuft_mesh() -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for k in 3:
+		var a := k * PI / 3.0
+		var dx := Vector3(cos(a), 0, sin(a)) * 0.5
+		var n := Vector3(-sin(a), 0, cos(a))
+		var quad := [[-dx, Vector2(0, 1)], [dx, Vector2(1, 1)], [dx + Vector3(0, 0.5, 0), Vector2(1, 0)],
+				[-dx + Vector3(0, 0.5, 0), Vector2(0, 0)]]
+		for i in [0, 1, 2, 0, 2, 3]:
+			st.set_normal(n)
+			st.set_uv(quad[i][1])
+			st.add_vertex(quad[i][0])
+	return st.commit()
+
+
+## A house with a pitched roof, chimney and windows on its two long sides
+## (which face +X and -X before `yaw`).
+func add_house(holder: Node3D, rng: RandomNumberGenerator, base: Vector3, yaw: float) -> void:
+	var walls := [Color(0.9, 0.88, 0.82), Color(0.76, 0.72, 0.64), Color(0.66, 0.58, 0.48),
+			Color(0.82, 0.8, 0.76), Color(0.58, 0.52, 0.44)]
+	var roofs := [Color(0.24, 0.25, 0.28), Color(0.3, 0.3, 0.33), Color(0.45, 0.24, 0.18)]
+	var w := rng.randf_range(6.0, 7.5)     # depth, across the ridge
+	var l := rng.randf_range(8.0, 12.0)    # length, along the ridge
+	var h := rng.randf_range(5.0, 6.5)
+	var rh := rng.randf_range(2.4, 3.2)
+	var house := Node3D.new()
+	house.position = base
+	house.rotation.y = yaw
+	holder.add_child(house)
+	var wi := rng.randi() % walls.size()
+	var wall_mat := mat("wall%d" % wi, walls[wi], 0.95)
+	add_box(house, Vector3(w, h + 1.5, l), Vector3(0, (h + 1.5) * 0.5 - 1.5, 0), wall_mat)
+	var ri := rng.randi() % roofs.size()
+	add_roof(house, Vector3(w + 0.6, rh, l + 0.4), Vector3(0, h + rh * 0.5, 0), mat("roof%d" % ri, roofs[ri], 0.85))
+	add_box(house, Vector3(0.7, 1.6, 1.0), Vector3(0, h + rh * 0.6, l * 0.5 - 0.6), wall_mat)
+	var glass := mat("window", Color(0.12, 0.14, 0.17), 0.2)
+	var frame := mat("window_frame", Color(0.95, 0.95, 0.93), 0.8)
+	var n_win := int(l / 3.2)
+	for side in [-1.0, 1.0]:
+		for i in n_win:
+			var wz := (i - (n_win - 1) * 0.5) * 3.0
+			for wy in [1.4, 3.9]:
+				if wy > h - 1.2:
+					continue
+				add_box(house, Vector3(0.08, 1.35, 1.05), Vector3(side * w * 0.5, wy, wz), frame)
+				add_box(house, Vector3(0.1, 1.15, 0.85), Vector3(side * w * 0.5, wy, wz), glass)
+
+
+## Pitched roof whose ridge runs along local Z.
+func add_roof(parent: Node3D, size: Vector3, pos: Vector3, m: Material) -> MeshInstance3D:
+	var roof := MeshInstance3D.new()
+	var pm := PrismMesh.new()
+	pm.size = size
+	roof.mesh = pm
+	roof.material_override = m
+	roof.position = pos
+	parent.add_child(roof)
+	return roof
+
+
+## A parked car; its nose points along +X before `yaw`.
+func add_car(holder: Node3D, rng: RandomNumberGenerator, pos: Vector3, yaw: float) -> void:
+	var paints := [Color(0.93, 0.93, 0.93), Color(0.08, 0.08, 0.09), Color(0.62, 0.64, 0.66),
+			Color(0.1, 0.15, 0.32), Color(0.62, 0.08, 0.08), Color(0.3, 0.31, 0.33)]
+	var idx := rng.randi() % paints.size()
+	var paint := mat("paint%d" % idx, paints[idx], 0.35)
+	var car := Node3D.new()
+	car.position = pos
+	car.rotation.y = yaw + rng.randf_range(-0.05, 0.05)
+	holder.add_child(car)
+	var length := rng.randf_range(4.0, 4.6)
+	add_box(car, Vector3(length, 0.72, 1.8), Vector3(0, 0.66, 0), paint)
+	add_box(car, Vector3(length * 0.52, 0.56, 1.62), Vector3(-length * 0.06, 1.3, 0), mat("car_glass", Color(0.1, 0.12, 0.15), 0.15))
+	add_box(car, Vector3(length * 0.48, 0.07, 1.58), Vector3(-length * 0.06, 1.6, 0), paint)
+	var tyre := mat("tyre", Color(0.06, 0.06, 0.06), 0.9)
+	for sx in [-1.0, 1.0]:
+		for sz in [-1.0, 1.0]:
+			var w := add_cyl(car, Vector3(sx * length * 0.32, 0.33, sz * 0.82), 0.33, 0.24, tyre)
+			w.rotation.x = PI * 0.5
+
+
+func add_van(holder: Node3D, pos: Vector3, yaw: float) -> void:
+	var van := Node3D.new()
+	van.position = pos
+	van.rotation.y = yaw
+	holder.add_child(van)
+	var white := mat("paint0", Color(0.93, 0.93, 0.93), 0.35)
+	add_box(van, Vector3(5.3, 1.95, 2.0), Vector3(-0.3, 1.35, 0), white)
+	add_box(van, Vector3(0.9, 0.8, 1.9), Vector3(2.55, 1.9, 0), mat("car_glass", Color(0.1, 0.12, 0.15), 0.15))
+	add_box(van, Vector3(1.2, 0.9, 2.0), Vector3(2.4, 0.8, 0), white)
+	var tyre := mat("tyre", Color(0.06, 0.06, 0.06), 0.9)
+	for sx in [-1.9, 2.1]:
+		for sz in [-1.0, 1.0]:
+			var w := add_cyl(van, Vector3(sx, 0.36, sz * 0.9), 0.36, 0.26, tyre)
+			w.rotation.x = PI * 0.5
+
+
+## Cars parked side by side along a line from `a` to `b`, noses pointing `yaw`.
+func park_row(holder: Node3D, rng: RandomNumberGenerator, a: Vector3, b: Vector3, yaw: float, fill := 0.7, gap := 2.9) -> void:
+	var n := int(a.distance_to(b) / gap)
+	for i in n + 1:
+		if rng.randf() < fill:
+			add_car(holder, rng, a.lerp(b, float(i) / max(n, 1)), yaw)
+
+
+## Posts every `spacing` metres from `a` to `b` following the ground, plus a
+## see-through mesh panel (a chain-link or ball-stop fence) if `panel` is set.
+func add_fence(root: Node3D, a: Vector2, b: Vector2, height: float, spacing: float, color: Color, panel := true, panel_alpha := 0.3) -> void:
+	var len := a.distance_to(b)
+	var n := int(len / spacing) + 1
+	var posts := MultiMesh.new()
+	posts.transform_format = MultiMesh.TRANSFORM_3D
+	var box := BoxMesh.new()
+	box.size = Vector3(0.08, height, 0.08)
+	posts.mesh = box
+	posts.instance_count = n
+	for i in n:
+		var p := a.lerp(b, float(i) / max(n - 1, 1))
+		posts.set_instance_transform(i, Transform3D(Basis(), Vector3(p.x, height_m(p.x, p.y) + height * 0.5, p.y)))
+	var pmi := MultiMeshInstance3D.new()
+	pmi.multimesh = posts
+	pmi.material_override = mat("fence%s" % color.to_html(), color, 0.6)
+	root.add_child(pmi)
+	if not panel:
+		return
+	var m := StandardMaterial3D.new()
+	m.albedo_color = Color(color.r, color.g, color.b, panel_alpha)
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	var mid := (a + b) * 0.5
+	var mesh := add_box(root, Vector3(len, height * 0.95, 0.02), Vector3(mid.x, height_m(mid.x, mid.y) + height * 0.5, mid.y), m)
+	mesh.rotation.y = -atan2(b.y - a.y, b.x - a.x)
+	mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+
+## Distance from p to the polyline pts (all in the XZ plane).
+static func dist_to_path(p: Vector2, pts: PackedVector2Array) -> float:
+	var best := INF
+	for i in pts.size() - 1:
+		var a := pts[i]
+		var ab := pts[i + 1] - a
+		var t := clampf((p - a).dot(ab) / ab.length_squared(), 0.0, 1.0)
+		best = min(best, p.distance_to(a + ab * t))
+	return best
+
+
+func mat(key: String, color: Color, roughness: float) -> StandardMaterial3D:
 	if _mats.has(key):
 		return _mats[key]
 	var m := StandardMaterial3D.new()
@@ -877,18 +877,18 @@ func _mat(key: String, color: Color, roughness: float) -> StandardMaterial3D:
 	return m
 
 
-func _add_box(parent: Node3D, size: Vector3, pos: Vector3, mat: Material) -> MeshInstance3D:
+func add_box(parent: Node3D, size: Vector3, pos: Vector3, m: Material) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
 	var bm := BoxMesh.new()
 	bm.size = size
 	mi.mesh = bm
-	mi.material_override = mat
+	mi.material_override = m
 	mi.position = pos
 	parent.add_child(mi)
 	return mi
 
 
-func _add_cyl(parent: Node3D, pos: Vector3, radius: float, height: float, mat: Material) -> MeshInstance3D:
+func add_cyl(parent: Node3D, pos: Vector3, radius: float, height: float, m: Material) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
 	var cm := CylinderMesh.new()
 	cm.top_radius = radius
@@ -897,7 +897,11 @@ func _add_cyl(parent: Node3D, pos: Vector3, radius: float, height: float, mat: M
 	cm.radial_segments = 10
 	cm.rings = 1
 	mi.mesh = cm
-	mi.material_override = mat
+	mi.material_override = m
 	mi.position = pos
 	parent.add_child(mi)
 	return mi
+
+
+func _load_local(file: String) -> Resource:
+	return load(get_script().resource_path.get_base_dir().path_join(file))

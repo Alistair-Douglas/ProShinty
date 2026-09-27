@@ -1,77 +1,107 @@
-# Shinty pitch (3D)
+# Shinty grounds (3D)
 
-A reusable Godot 4 pitch scene modelled on Aberdour's ground, built from
-Alistair's three photos (the Google Maps link could not be opened from the
-build environment). Tested in Godot 4.7.
+`pitch/shinty_pitch.tscn` (class `ShintyPitch`) builds a full shinty pitch at
+a real ground. Pick the ground with `venue`; the menu's **Pitch** option sets
+it for a match, and picking a home team moves the match to that team's ground.
 
-## What's in it
+| Venue | Laid out from |
+| --- | --- |
+| Aberdour | Alistair's three photos and a satellite view of the club |
+| Kingussie (The Dell) | A satellite view of the club |
+| Tighnabruaich (Kyles Athletic) | An aerial photo of the ground |
 
-- Pitch at real shinty dimensions: 150 x 75 yards by default (rules allow 140 to
-  170 by 70 to 80), matching the 2D game. Markings: sidelines, bylines,
+## The pitch
+
+- Real shinty dimensions: 150 x 75 yards by default (rules allow 140 to 170 by
+  70 to 80), matching the match simulation. Markings: sidelines, bylines,
   halfway line, 5-yard centre circle and spot, the 10-yard D at each hail,
-  penalty spots at 20 yards with 5-yard arcs, 2-yard corner arcs. Markings are
-  drawn by the ground shader, so they stay sharp and follow any pitch size.
-- Mowing stripes and worn goalmouths, dry summer patches (`grass_wear`).
-- Placeholder hails (12 ft x 10 ft), corner and halfway flags.
-- Scenery, low detail: tree-lined south touchline with cars and a van parked
-  under the trees; the clump of big dark round trees on the north side;
-  long grass, bushes, earthworks, soil heaps, a fence and a timber hut at the
-  foot of the wooded hill (north-east); a car park behind the west hail;
-  cottages on the rise to the west and north-west; beach and the Firth of
-  Forth to the south with the far shore on the horizon.
-- Lighting presets: summer afternoon (photo 1), summer evening (photo 3),
-  overcast. Custom sky with clouds, fog/haze, shadows.
-- A physics floor (StaticBody3D, layer 1).
+  penalty spots at 20 yards with 5-yard arcs, 2-yard corner arcs. The ground
+  shader draws them, so they stay sharp and follow any pitch size.
+- Mowing stripes, worn goalmouths, placeholder hails (12 ft x 10 ft), corner
+  and halfway flags, and a physics floor (StaticBody3D, layer 1).
+- Lighting presets: summer afternoon, summer evening, overcast. Custom sky
+  with sun-lit cumulus and high wisps, blue distance haze, soft four-split
+  shadows, AgX tone mapping and glow.
+- Trees are trunks and limbs with leafy canopies (cut-out leaf cards that sway
+  in the wind); long grass grows in tufts at the pitch edges; the sea and the
+  Spey use a water shader with moving waves and sky reflection.
+- The game runs on the Forward+ renderer, which adds ambient occlusion,
+  indirect light and reflections; machines that can't run it fall back to
+  Compatibility automatically.
 
-## Look at it
+## The grounds
 
-Open this folder's `project.godot` in Godot and press F5. Drag to orbit,
-scroll to zoom, WASD to move. Keys 1 to 5 jump to set views, L cycles the
-lighting. Renders of each view are in `renders/`.
+**Aberdour.** The pitch runs west to east. North: a footpath, long grass and
+earthworks, the fenced railway on a low embankment, then Brachi Woods rising
+to Hawkcraig, with houses to the north-west. South: the avenue of trees along
+the path, with cars parked under it, and Hawkcraig Park's fields and
+hedgerows beyond. East: paths, a timber hut, the walled garden, then
+Silversands beach and the Forth, with the café by the beach, Inchcolm and its
+abbey out in the water and the Lothian shore on the horizon. West: a car park
+behind the hail and the village.
 
-## Plug it into the game
+**Kingussie, The Dell.** The real pitch runs north-west to south-east; in the
+game its long axis is X like every ground, so the west hail is the north-west
+end. A white rail runs round the pitch and the grass is striped lengthways.
+Behind the west hail: the covered stand and a club hut. North side (the far
+side on the match camera): dugouts either side of halfway, a portakabin and a
+container, and the big gravel car park, with young plantations, the track up
+to the town, and Kingussie itself on the slope beyond. South side and east
+end: birch and alder along the River Spey, which curves round the ground,
+and the A9 beyond the bend. Behind the east hail: a tall ball-stop net. Hills
+all round, highest to the east (the Cairngorms).
 
-1. Copy the `pitch/` folder into the game project (any path works, the
-   script finds its shaders next to itself).
-2. In the 3D match scene, instance `pitch/shinty_pitch.tscn` (or add a Node3D
-   with `shinty_pitch.gd`). The pitch is centred on the node: length along X,
-   width along Z, west hail at -X, north touchline at -Z. 1 unit = 1 metre by
-   default; set `units_per_yard = 1.0` to work in yards instead. The 3D match
-   view in shinty-game (`scripts/match_view.gd`) uses 1 unit = 1 yard with the
-   origin on the centre spot, so there: put the pitch at the origin and set
-   `units_per_yard = 1.0`.
-3. Convert the simulation's yard positions (origin in a corner, as in
-   `scripts/match.gd`) with `pitch.sim_to_world(Vector2(x, y), height_yd)` and
-   back with `world_to_sim()`.
-4. Place the real goal models with `pitch.goal_transform(0)` (west) and
-   `goal_transform(1)` (east): origin on the centre of the goal line, the
-   basis's -Z points out of the pitch. Then set `show_placeholder_goals = false`.
-5. If the match scene has its own WorldEnvironment or sun, set
-   `include_environment = false`. Otherwise leave it on.
-6. The camera needs `far` of about 6000 to see the far shore. There is a
-   `Generated/BroadcastCamera` marker above the south touchline as a starting
-   camera position.
+**Tighnabruaich, Kyles Athletic.** The pitch sits on the shore of the Kyles
+of Bute. North (far side): a grassy bank up to the village road with lamp
+posts, then the wooded hillside, with villas above the west end. South: the
+sea wall and a white rail, shingle, the Kyles with moored boats, and Bute
+across the water. East: the car park, the clubhouse, a fenced tennis court and
+a play area. West: a tall ball-stop net and a cottage by the shore.
 
-Useful settings: `length_yd`, `width_yd`, `lighting`, `scenery_detail`
-(LOW/MEDIUM/HIGH, mostly woodland density), `show_scenery`, `show_flags`,
-`grass_wear`, `layout_seed`. `ground_height(p)` gives the land height at a
-point if anything needs placing on the hills.
+## Using it
+
+1. Instance `pitch/shinty_pitch.tscn`. The pitch is centred on the node:
+   length along X, width along Z, west hail at -X, the far touchline at -Z.
+   1 unit = 1 metre by default; `units_per_yard = 1.0` works in yards (the
+   match does this).
+2. Convert simulation positions in yards (origin in a corner) with
+   `sim_to_world(Vector2(x, y), height_yd)` and back with `world_to_sim()`.
+3. Place goal models with `goal_transform(0)` (west) and `goal_transform(1)`
+   (east): origin on the centre of the goal line, -Z pointing out of the
+   pitch. Then set `show_placeholder_goals = false`.
+4. Set `include_environment = false` if the scene has its own sky and sun.
+5. The camera needs `far` of about 6000 to reach the horizon hills.
+
+Settings: `venue`, `length_yd`, `width_yd`, `lighting`, `scenery_detail`
+(LOW/MEDIUM/HIGH, mostly tree density), `show_scenery`, `show_flags`,
+`grass_wear` (-1 uses the ground's own look), `layout_seed`.
+`ground_height(p)` gives the land height at a point.
+
+## Adding a ground
+
+Add a script to `pitch/venues/` with the same functions as `aberdour.gd`
+(`height_m`, `ground_mask`, `ground_look`, `water`, `fog_density`,
+`extra_cloud`, `build`), then add it to `Venue`, `VENUE_NAMES` and the file
+list in `_rebuild()` in `shinty_pitch.gd`. The building blocks in
+`shinty_pitch.gd` (trees, houses, cars, fences, roofs) are there to reuse.
 
 ## Files
 
-- `pitch/shinty_pitch.gd`: builds everything (pitch, scenery, lighting) and the API above.
-- `pitch/ground.gdshader`: grass, markings, earth, gravel and sand.
+- `pitch/shinty_pitch.gd`: the pitch, markings, lighting, public API and
+  shared building blocks.
+- `pitch/venues/aberdour.gd`, `pitch/venues/kingussie.gd`: each ground's land,
+  ground colours and scenery.
+- `pitch/ground.gdshader`: grass, markings, earth, gravel, sand and shingle.
 - `pitch/canopy.gdshader`: lumpy tree canopies.
 - `pitch/sky.gdshader`: sky, sun and clouds.
-- `preview/`: the preview scene and orbit camera.
-- `tests/render_views.gd`: renders the views to `renders/` and checks the
-  coordinate helpers. Run:
+- `preview/`: orbit preview. F6 on `preview.tscn`; 1 to 6 for views (6 is
+  the match camera), L for lighting, V to switch ground.
+- `tests/render_views.gd`: renders every view of both grounds to `renders/`
+  and checks the coordinate helpers:
   `xvfb-run godot --path . --rendering-method gl_compatibility -s tests/render_views.gd`
 
 ## Known gaps
 
-- Layout is from the photos, not a survey: tree positions, the hill and the
-  houses are approximate. A screenshot of the Google Earth view would let it
-  be matched more closely.
-- The renders in `renders/` come from Godot's software Compatibility renderer.
-  On a normal PC with Forward+ you also get ambient occlusion and glow.
+- Layouts come from photos and satellite views, not a survey, so positions
+  are approximate and everything is low detail.
+- The renders come from Godot's software Compatibility renderer.

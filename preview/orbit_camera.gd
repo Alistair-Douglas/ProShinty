@@ -2,8 +2,8 @@ extends Camera3D
 ## Look around the pitch. Drag with the left mouse button to orbit, scroll to
 ## zoom, WASD to move the focus point. Number keys jump to set views:
 ## 1 broadcast, 2 behind the west hail, 3 behind the east hail,
-## 4 from the north side looking at the sea, 5 aerial.
-## L cycles the lighting preset.
+## 4 from the north touchline looking south, 5 aerial, 6 the match camera.
+## L cycles the lighting preset, V switches the ground.
 
 @export var pitch_path: NodePath
 
@@ -25,6 +25,7 @@ func set_view(n: int) -> void:
 		3: _set_cam(Vector3(55, 0, 0), PI * 0.5, -0.12, 40.0)
 		4: _set_cam(Vector3(0, 1.5, -28), PI, -0.08, 8.0)
 		5: _set_cam(Vector3(0, 0, -20), 0.35, -0.75, 330.0)
+		6: _set_cam(Vector3(0, 0, 0), 0.0, -0.61, 33.6)
 	_apply()
 
 
@@ -54,11 +55,14 @@ func _unhandled_input(e: InputEvent) -> void:
 		pitch = clamp(pitch - e.relative.y * 0.005, -1.5, -0.02)
 		_apply()
 	elif e is InputEventKey and e.pressed and not e.echo:
-		if e.keycode >= KEY_1 and e.keycode <= KEY_5:
+		if e.keycode >= KEY_1 and e.keycode <= KEY_6:
 			set_view(e.keycode - KEY_0)
 		elif e.keycode == KEY_L:
 			var p := get_node(pitch_path)
 			p.lighting = (p.lighting + 1) % 3
+		elif e.keycode == KEY_V:
+			var p := get_node(pitch_path)
+			p.venue = (p.venue + 1) % ShintyPitch.VENUE_NAMES.size()
 
 
 func _process(delta: float) -> void:
