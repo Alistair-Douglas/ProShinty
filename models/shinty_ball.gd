@@ -144,32 +144,28 @@ func _build() -> void:
 	_ball = Node3D.new()
 	_ball.set_meta("shinty_generated", true)
 	add_child(_ball)
-	var leather := StandardMaterial3D.new()
-	leather.albedo_color = Color("f4f1e6")
-	leather.roughness = 0.55
+	# Leather with a stitched seam drawn by ShintyMesh's ball shader; the thin
+	# raised ridge gives the seam a silhouette, so spin reads from a distance.
 	var sphere := SphereMesh.new()
 	sphere.radius = r
 	sphere.height = r * 2.0
-	sphere.radial_segments = 20
-	sphere.rings = 12
+	sphere.radial_segments = 32
+	sphere.rings = 16
 	var body := MeshInstance3D.new()
 	body.mesh = sphere
-	body.material_override = leather
+	body.material_override = ShintyMesh.ball_leather()
+	body.rotation = Vector3(0.0, 0.0, 0.35)
 	_ball.add_child(body)
-	# The seam: a raised stitched band round the ball, so spin is visible.
-	var seam := TorusMesh.new()
-	seam.inner_radius = r * 0.97
-	seam.outer_radius = r * 1.06
-	seam.rings = 24
-	seam.ring_segments = 6
-	var seam_mat := StandardMaterial3D.new()
-	seam_mat.albedo_color = Color("b0302a")
-	seam_mat.roughness = 0.7
-	var s1 := MeshInstance3D.new()
-	s1.mesh = seam
-	s1.material_override = seam_mat
-	s1.rotation = Vector3(0.0, 0.0, 0.35)
-	_ball.add_child(s1)
+	var ridge := TorusMesh.new()
+	ridge.inner_radius = r * 0.985
+	ridge.outer_radius = r * 1.025
+	ridge.rings = 32
+	ridge.ring_segments = 6
+	var ridge_mi := MeshInstance3D.new()
+	ridge_mi.mesh = ridge
+	ridge_mi.material_override = ShintyMesh.solid(Color("d9d4c6"), 0.6)
+	ridge_mi.rotation = Vector3(0.0, 0.0, 0.35)
+	_ball.add_child(ridge_mi)
 	_apply_scale()
 
 	_shadow = MeshInstance3D.new()

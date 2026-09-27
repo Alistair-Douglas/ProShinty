@@ -54,6 +54,8 @@ entry to `teams` with an `id`, `name`, `short` and `colors`.
 - `scenes/main_menu.tscn`, `scripts/main_menu.gd`: team and match setup.
 - `scenes/match.tscn`, `scripts/match.gd`: the match rules, ball physics and AI.
   The simulation runs on a flat pitch in yards; nothing in it depends on 3D.
+- `scripts/team_ai.gd`: what computer players do off the ball: support
+  angles, runs in behind, overlaps, coming short, marking and cover.
 - `scripts/match_view.gd`: builds and animates the 3D players, ball, hails and
   broadcast camera from the match state, using the models in `models/`.
 - `pitch/`: the grounds (Aberdour and Kingussie's The Dell) with their
@@ -65,6 +67,8 @@ entry to `teams` with an `id`, `name`, `short` and `colors`.
 - `scripts/team_data.gd`: loads squads and calculates overall ratings.
 - `tests/sim_test.gd`: plays six computer-vs-computer matches headless.
   Run: `godot --headless --path . -s tests/sim_test.gd`
+- `tests/ai_stats.gd`: plays ten matches and prints pass, shot and restart
+  numbers, for tuning the team AI.
 - `tests/play_test.gd`: drives the real game with simulated key presses and
   saves screenshots (needs a display).
 - `tests/menu_test.gd`: clicks through the menu dropdowns and Play button.
