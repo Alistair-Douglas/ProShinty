@@ -105,6 +105,7 @@ var attack_dir := [1, -1]
 var protected_timer := 0.0
 var paused := false
 var charge := -1.0
+var steer := Vector2.ZERO   # smoothed human steering direction
 var message := ""
 var message_timer := 0.0
 var events: Array = []
@@ -620,10 +621,12 @@ func _keeper_of(team: int) -> Player:
 
 func _human_control(dt: float) -> void:
 	var p := human
-	var mv := Input.get_vector("move_left", "move_right", "move_up", "move_down")
+	var raw := Input.get_vector("move_left", "move_right", "move_up", "move_down")
 	var sprint := Input.is_action_pressed("sprint") and p.stamina > 0.05
+	var mv := _smooth_steer(p, raw, dt)
 	if mv.length() > 0.15:
-		p.desired = mv.normalized() * p.top_speed() * (1.0 if sprint else 0.78)
+		# Analogue: a half-pushed stick jogs, a full one runs.
+		p.desired = mv.normalized() * p.top_speed() * (1.0 if sprint else 0.78) * clamp(mv.length(), 0.35, 1.0)
 		p.sprinting = sprint
 	else:
 		p.desired = Vector2.ZERO
@@ -657,6 +660,28 @@ func _human_control(dt: float) -> void:
 			_human_pass(p, aim)
 		elif carrier != null and carrier.team != p.team and p.pos.distance_to(carrier.pos) < REACH + 0.8:
 			_try_tackle(p, carrier)
+
+
+## Turn 8-way keyboard input into a full 360-degree steer: the direction
+## sweeps round towards the keys held at a limited rate (slower with the ball
+## and at speed), so tapping a diagonal key bends the run instead of snapping
+## it. A gamepad stick is already analogue and passes straight through.
+func _smooth_steer(p: Player, raw: Vector2, dt: float) -> Vector2:
+	if raw.length() < 0.15:
+		steer = Vector2.ZERO
+		return raw
+	var digital: bool = abs(raw.x) in [0.0, 1.0] and abs(raw.y) in [0.0, 1.0]
+	if not digital:
+		steer = raw
+		return raw
+	var want := raw.normalized()
+	if steer.length() < 0.1:
+		steer = p.facing if p.vel.length() > 1.0 and p.facing.dot(want) > -0.2 else want
+	var frac: float = clamp(p.vel.length() / p.top_speed(), 0.0, 1.0)
+	var rate: float = lerp(9.0, 4.0, frac) * (0.75 if carrier == p else 1.0)
+	var ang := steer.angle_to(want)
+	steer = steer.rotated(clamp(ang, -rate * dt, rate * dt)).normalized()
+	return steer
 
 
 func _ball_in_reach(p: Player) -> bool:
