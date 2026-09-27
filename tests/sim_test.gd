@@ -24,6 +24,8 @@ func _run() -> void:
 	var totals := [0, 0]
 	var goals := 0
 	var outs := {}
+	var ref_calls := {}
+	var cards := {"yellow": 0, "red": 0}
 	var hits := {}
 	for i in 6:
 		var m = MatchScene.instantiate()
@@ -43,6 +45,11 @@ func _run() -> void:
 				hits[k] = hits.get(k, 0) + 1
 				if abs(e["curve"]) > 4.0:
 					hits["curving"] = hits.get("curving", 0) + 1
+		for c in m.referee.calls:
+			var key: String = c["call"] if c["call"] != "missed" else "missed " + c["kind"]
+			ref_calls[key] = ref_calls.get(key, 0) + 1
+		for c in m.referee.cards:
+			cards[c["colour"]] += 1
 		print("Match %d: %s %d - %d %s   shots %s  (%d steps, full time: %s)" % [i + 1, teams[0]["name"], m.score[0], m.score[1], teams[1]["name"], str(m.shots), steps, m.state == m.State.FULL_TIME])
 		totals[0] += m.score[0]
 		totals[1] += m.score[1]
@@ -50,4 +57,5 @@ func _run() -> void:
 		m.free()
 	print("Totals: ", totals, "  restarts/saves: ", outs)
 	print("Hits: ", hits)
+	print("Referee: ", ref_calls, "  cards: ", cards)
 	quit(0 if goals > 0 else 1)

@@ -86,6 +86,11 @@ crests come from shinty.com and belong to the clubs.
   and how long until it lands.
 - Keepers reach for shots with stick, hands and body and dive for ones going
   wide of them. A save smothers the ball, which drops at the keeper's feet.
+- A referee (in black) runs with play and enforces the rules: free hits,
+  penalty hits from 20 yards for fouls in the D, offside, advantage, no goals
+  straight from a free hit, and yellow and red cards. A shoulder barge is fair;
+  a push in the back is a foul the referee can miss. Keepers may deflect the
+  ball but not catch it. See `docs/rules.md`.
 - Ratings matter: pace sets speed, control decides whether you trap a fast ball
   or keep it in a tackle, passing and shooting set accuracy, keeping sets the
   keeper's reach and save chance.
@@ -107,6 +112,8 @@ crests come from shinty.com and belong to the clubs.
   Condensed fonts (SIL Open Font License, `ui/fonts/OFL.txt`).
 - `scenes/match.tscn`, `scripts/match.gd`: the match rules, ball physics and AI.
   The simulation runs on a flat pitch in yards; nothing in it depends on 3D.
+- `scripts/referee.gd`: the referee. It reads the match's events and
+  calls fouls, cards, offside and set pieces; `docs/rules.md` lists the rules.
 - `scripts/player_physics.gd`: running, body contact, caman reach and keeper
   dives. The AI and controls set where a player wants to go (`desired`); this
   file moves them there.
@@ -123,6 +130,8 @@ crests come from shinty.com and belong to the clubs.
 - `scripts/team_data.gd`: loads squads and calculates overall ratings.
 - `tests/sim_test.gd`: plays six computer-vs-computer matches headless.
   Run: `godot --headless --path . -s tests/sim_test.gd`
+- `tests/referee_test.gd`: staged fouls, offside, penalties and cards.
+  Run: `godot --headless --path . -s tests/referee_test.gd`
 - `tests/ai_stats.gd`: plays ten matches and prints pass, shot and restart
   numbers, for tuning the team AI.
 - `tests/play_test.gd`: drives the real game with simulated key presses and

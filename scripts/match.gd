@@ -7,6 +7,7 @@ extends Node3D
 const TeamData := preload("res://scripts/team_data.gd")
 const MatchView := preload("res://scripts/match_view.gd")
 const Hud := preload("res://scripts/hud.gd")
+const Referee := preload("res://scripts/referee.gd")
 const Body := preload("res://scripts/player_physics.gd")
 const Counters := preload("res://scripts/swing_counters.gd")
 const TeamAI := preload("res://scripts/team_ai.gd")
@@ -22,7 +23,10 @@ const REACH_HEIGHT := 2.3
 const KEEPER_REACH_HEIGHT := 3.2
 const GOAL_PAUSE := 3.0
 const HALF_TIME_PAUSE := 3.0
+const PENALTY_SPOT := 20.0   # penalty hit, yards from the goal line
+const FREE_HIT_BACK := 5.0   # opponents stand this far off a set piece
 const OVERSWING_MAX := 1.35  # hit meter past full power
+const CARRY_CATCH_UP := 6.0  # yd/s: how fast a gathered ball settles onto the stick
 const SHY_TOSS := 6.5        # yd/s: how hard a shy is thrown up
 const SHY_ARM := 0.8         # the shy is tossed an arm's length in front
 const SHY_ATTEMPTS := 3      # tries at a clean strike before the shy goes over
@@ -118,6 +122,8 @@ var ball_vz := 0.0
 var ball_sim := ShintyMatchAdapter.BallSim.new(PITCH, GOAL_W, CROSSBAR)
 var carrier: Player = null
 var last_team := -1
+var referee := Referee.new()
+var penalty_taker: Player = null
 var gather_keeper: Player = null   # a saved ball dropping to the keeper
 var foul_pending = null            # [offender, fouled] seen by the referee
 var gather_t := 0.0
@@ -169,6 +175,7 @@ func _setup() -> void:
 	# Clash check: if both teams wear similar colours, the away side switches.
 	if _color_close(colors[0][0], colors[1][0]):
 		colors[1] = [colors[1][1], colors[1][0]]
+	referee.setup(self)
 	_start_throw_up()
 	if human_side >= 0:
 		human = _nearest_outfield(human_side, ball_pos, null)
@@ -197,6 +204,8 @@ func _physics_process(delta: float) -> void:
 
 func step(dt: float) -> void:
 	message_timer = max(0.0, message_timer - dt)
+	if state != State.PLAY and state != State.FULL_TIME:
+		referee.step(dt)
 	match state:
 		State.THROW_UP:
 			state_timer -= dt
@@ -208,7 +217,9 @@ func step(dt: float) -> void:
 			if shy_taker() == null:
 				clock += dt   # the clock stops while a shy is taken
 			_update_players(dt)
+			_take_penalty()
 			_update_ball(dt)
+			referee.step(dt)
 			_check_ball_out()
 			if clock >= half_seconds and state == State.PLAY:
 				_end_half()
@@ -264,6 +275,7 @@ func _start_throw_up() -> void:
 		p.stick = Body.rest_spot(p)
 	gather_keeper = null
 	_say("Throw-up", 1.2)
+	events.append({"type": "throw_up"})
 
 
 func _end_half() -> void:
@@ -856,6 +868,8 @@ func _contact(p: Player) -> void:
 	p.touch_block = 0.35
 	last_team = p.team
 	events.append({"type": "hit", "team": p.team, "kind": res["kind"], "curve": res["curve"], "shy": shy})
+	if p == penalty_taker:
+		penalty_taker = null
 	events.append({"type": "strike", "by": p, "at": ball_pos})
 	if p == human or (p.team == human_side and shy):
 		var note := {"thin": "Topped it", "fat": "Skied it", "heel": "Off the heel", "toe": "Off the toe"}
@@ -936,12 +950,17 @@ func _try_tackle(t: Player, o: Player) -> void:
 		o.touch_block = 0.5
 		o.cooldown = 0.4
 		o.swing_t = -1.0
+		last_team = t.team
+		# The ball never jumps between sticks: the poke knocks it loose and it
+		# rolls. Usually the tackler hooks it back towards their own caman to
+		# collect; sometimes it's poked away into space.
 		if randf() < 0.6:
-			_take_control(t)
+			var to_stick := Vector2(t.stick.x, t.stick.y) - ball_pos
+			ball_vel = to_stick.normalized() * clamp(to_stick.length() * 3.0, 2.0, 5.0) + t.vel * 0.5
+			t.touch_block = 0.0
 		else:
-			# Poked away from the tackler.
 			ball_vel = (ball_pos - t.pos).normalized().rotated(randf_range(-0.7, 0.7)) * randf_range(4.0, 8.0)
-			last_team = t.team
+		ball_vz = 0.0
 	else:
 		t.cooldown = 0.7
 
@@ -967,8 +986,10 @@ func anim(p: Player, name: String, power: float = 1.0, from_charge: float = 0.0)
 
 func _update_ball(dt: float) -> void:
 	if carrier != null:
-		# The ball rides on the carrier's caman.
-		ball_pos = Vector2(carrier.stick.x, carrier.stick.y)
+		# The ball rides on the carrier's caman. When a player has just
+		# gathered it, it runs onto the stick rather than jumping there.
+		var on_stick := Vector2(carrier.stick.x, carrier.stick.y)
+		ball_pos = ball_pos.move_toward(on_stick, (carrier.vel.length() + CARRY_CATCH_UP) * dt)
 		if protected_timer > 0.0 or carrier.shy_ready:
 			# Lining up a restart: the ball stays in play.
 			ball_pos = Vector2(clamp(ball_pos.x, 0.3, PITCH.x - 0.3), clamp(ball_pos.y, 0.3, PITCH.y - 0.3))
@@ -1093,13 +1114,18 @@ func _check_ball_out() -> void:
 		var end_x := 0.0 if ball_pos.x < 0.0 else PITCH.x
 		var defending := 0 if own_goal(0).x == end_x else 1
 		if abs(ball_pos.y - PITCH.y / 2.0) < GOAL_W / 2.0 and ball_z < CROSSBAR:
-			_goal(1 - defending)
+			if referee.goal_stands(1 - defending):
+				_goal(1 - defending)
+			else:
+				_restart(defending, Vector2(abs(end_x - D_RADIUS), PITCH.y / 2.0), "Hit-out")
+				_say("No goal: a free hit can't go straight in", 2.0)
 		elif last_team == defending:
 			var cy := 0.0 if ball_pos.y < PITCH.y / 2.0 else PITCH.y
 			_restart(1 - defending, Vector2(abs(end_x - 1.0), abs(cy - 1.0)), "Corner")
 		else:
-			var gx: float = abs(end_x - 4.0)
-			_restart(defending, Vector2(gx, PITCH.y / 2.0 + randf_range(-6.0, 6.0)), "Hit-out")
+			# Goal hit from the edge of the D.
+			var gx: float = abs(end_x - D_RADIUS)
+			_restart(defending, Vector2(gx, PITCH.y / 2.0 + randf_range(-4.0, 4.0)), "Hit-out")
 	elif ball_pos.y < 0.0 or ball_pos.y > PITCH.y:
 		var spot := Vector2(clamp(ball_pos.x, 1.0, PITCH.x - 1.0), clamp(ball_pos.y, 0.5, PITCH.y - 0.5))
 		_restart(1 - last_team if last_team >= 0 else 0, spot, "Shy")
@@ -1129,7 +1155,88 @@ func _restart(team: int, spot: Vector2, label: String) -> void:
 	taker.think = 0.9
 	protected_timer = 1.5
 	_say(label, 1.2)
-	events.append({"type": label, "team": team})
+	events.append({"type": label, "team": team, "taker": taker})
+
+
+# ---------------------------------------------------------------- referee hooks
+
+## A free hit where a foul happened. Opponents are held 5 yards off while the
+## taker lines up. Free hits are indirect: the referee disallows a goal
+## straight from one.
+func award_free_hit(team: int, spot: Vector2, text: String) -> void:
+	spot = Vector2(clamp(spot.x, 1.0, PITCH.x - 1.0), clamp(spot.y, 1.0, PITCH.y - 1.0))
+	var taker := _nearest_outfield(team, spot, null)
+	if taker == null:
+		return
+	var toward := (target_goal(team) - spot).normalized()
+	penalty_taker = null
+	_place_taker(taker, spot, toward)
+	_say(text, 2.2)
+	events.append({"type": "Free hit", "team": team, "taker": taker})
+
+
+## A penalty hit, 20 yards straight out from the goal. Everyone but the taker
+## and the keeper goes back behind the ball.
+func award_penalty(team: int, text: String) -> void:
+	var goal := target_goal(team)
+	var spot := goal - Vector2(attack_dir[team] * PENALTY_SPOT, 0)
+	var taker: Player = null
+	for p in squads[team]:
+		if not p.is_keeper() and (taker == null or p.r("shooting") > taker.r("shooting")):
+			taker = p
+	if taker == null:
+		return
+	var keeper := _keeper_of(1 - team)
+	for p in players:
+		if p == taker or p == keeper:
+			continue
+		var ahead: float = (p.pos.x - spot.x) * attack_dir[team]
+		if ahead > -FREE_HIT_BACK:
+			p.pos.x = spot.x - attack_dir[team] * (FREE_HIT_BACK + randf() * 4.0)
+			p.vel = Vector2.ZERO
+	if keeper != null:
+		keeper.pos = Vector2(goal.x - attack_dir[team] * 0.8, goal.y)
+		keeper.vel = Vector2.ZERO
+	_place_taker(taker, spot, (goal - spot).normalized())
+	penalty_taker = taker
+	_say(text, 2.2)
+	events.append({"type": "Penalty hit", "team": team, "taker": taker})
+
+
+func _place_taker(taker: Player, spot: Vector2, toward: Vector2) -> void:
+	taker.pos = spot - toward * (PLAYER_R + 0.55)
+	taker.vel = Vector2.ZERO
+	taker.facing = toward
+	ball_pos = spot
+	ball_z = 0.0
+	ball_vel = Vector2.ZERO
+	ball_vz = 0.0
+	charge = -1.0
+	_take_control(taker)
+	taker.think = 1.8
+	protected_timer = 2.0
+
+
+## The computer strikes its penalty hits at goal once players have stood back.
+func _take_penalty() -> void:
+	if penalty_taker == null:
+		return
+	if carrier != penalty_taker:
+		penalty_taker = null
+	elif penalty_taker != human and protected_timer <= 0.2:
+		_ai_shoot(penalty_taker)
+
+
+## Sent off by the referee: the team plays on a player short.
+func send_off(p: Player) -> void:
+	squads[p.team].erase(p)
+	players.erase(p)
+	if carrier == p:
+		carrier = null
+	if penalty_taker == p:
+		penalty_taker = null
+	if human == p:
+		human = _nearest_outfield(human_side, ball_pos, null)
 
 
 func _goal(team: int) -> void:
