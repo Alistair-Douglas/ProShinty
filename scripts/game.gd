@@ -9,6 +9,7 @@ var away_index := 1
 var human_side := 0  # 0 = you play the home team, 1 = the away team
 var difficulty := 1  # 0 easy, 1 normal, 2 hard
 var half_minutes := 3  # real minutes per half
+var venue := -1  # ShintyPitch.Venue; -1 until picked = the home team's ground
 var last_result := {}
 
 
@@ -26,6 +27,7 @@ func match_config() -> Dictionary:
 		"human_side": human_side,
 		"difficulty": difficulty,
 		"half_seconds": half_minutes * 60.0,
+		"venue": max(venue, 0),
 	}
 
 
