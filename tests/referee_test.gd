@@ -22,6 +22,7 @@ func _process(_delta: float) -> bool:
 		_test_no_goal_direct_from_free_hit()
 		_test_keeper_hands_outside_d()
 		_test_advantage()
+		_test_keeper_catch()
 		print("Referee tests: %s" % ("all passed" if _failures == 0 else "%d failed" % _failures))
 		quit(0 if _failures == 0 else 1)
 	return false
@@ -40,7 +41,6 @@ func _new_match():
 	m.config = {"home": _teams[0], "away": _teams[1], "human_side": -1, "difficulty": 1, "half_seconds": 600.0, "seed": 7}
 	root.add_child(m)
 	m.referee.always_sees = true
-	m.referee.infer_tackle_fouls = false
 	m.state = m.State.PLAY
 	m.ball_pos = m.PITCH / 2.0
 	m.ball_vel = Vector2.ZERO
@@ -142,7 +142,7 @@ func _test_offside() -> void:
 	passer.pos = goal - Vector2(m.attack_dir[0] * 30.0, 0)
 	m.carrier = passer
 	m.ball_pos = passer.pos
-	m._pass_to(passer, fwd)
+	m.events.append({"type": "strike", "by": passer, "at": passer.pos})  # the pass
 	m.referee.step(0.0)
 	m.events.append({"type": "touch", "by": fwd, "at": fwd.pos, "hands": false})
 	m.referee.step(0.0)
@@ -156,7 +156,7 @@ func _test_offside() -> void:
 	passer.pos = goal - Vector2(m2.attack_dir[0] * 30.0, 0)
 	m2.carrier = passer
 	m2.ball_pos = passer.pos
-	m2._pass_to(passer, fwd)
+	m2.events.append({"type": "strike", "by": passer, "at": passer.pos})  # the pass
 	m2.referee.step(0.0)
 	m2.events.append({"type": "touch", "by": fwd, "at": goal - Vector2(m2.attack_dir[0] * 5.0, 0), "hands": false})
 	m2.referee.step(0.0)
@@ -221,3 +221,25 @@ func _test_advantage() -> void:
 	_check(_last_call(m) == "free hit", "brought back when the ball is lost")
 	_check(m.carrier.team == 1, "fouled team gets the free hit")
 	m.free()
+
+
+func _test_keeper_catch() -> void:
+	print("Keeper catches the ball")
+	var m = _new_match()
+	var k = m._keeper_of(1)
+	var at: Vector2 = m.own_goal(1) - Vector2(m.attack_dir[1] * -3.0, 0)
+	m.carrier = k
+	m.events.append({"type": "touch", "by": k, "at": at, "hands": true})
+	m.referee.step(0.0)
+	_check(_last_call(m) == "penalty", "a catch in the D is a penalty hit")
+	# A save that drops the ball at the keeper's feet, gathered with the caman.
+	var m2 = _new_match()
+	k = m2._keeper_of(1)
+	m2.events.append({"type": "touch", "by": k, "at": at, "hands": true})
+	m2.events.append({"type": "save", "team": 1, "by": k})
+	m2.referee.step(0.0)
+	m2.carrier = k
+	m2.referee.step(0.1)
+	_check(m2.referee.calls.is_empty(), "a deflected save is fine")
+	m.free()
+	m2.free()

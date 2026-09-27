@@ -11,15 +11,12 @@ extends RefCounted
 ##   strike  {by, at}              a player hit the ball
 ##   touch   {by, at, hands}       a player got a touch on a loose ball
 ##                                 (hands = a keeper stopping it with the hands)
-##   tackle  {by, on, won, at}     a tackle on the ball carrier
 ##   foul    {kind, by, on, at, severity}
-##                                 a foul the physics saw happen, for example
-##                                 kind "push" (in the back), "hack", "stick",
-##                                 "trip", "head", "kick", "hands", "obstruction".
-##                                 kind "barge" (shoulder to shoulder) is legal.
+##                                 contact the physics saw happen: "push" (in
+##                                 the back), "hack", "stick" (caman on the man),
+##                                 or "trip", "head", "kick", "hands". "barge"
+##                                 (shoulder to shoulder) is legal.
 ##   save, goal, Shy, Corner, Hit-out, Free hit, Penalty hit, half_end
-## When the physics sends its own "foul" events, the referee stops guessing
-## fouls from tackles (see infer_tackle_fouls).
 
 const FREE_HIT_YARDS := 5.0       ## opponents stand back this far
 const PENALTY_YARDS := 20.0       ## penalty hit, from the goal line
@@ -28,7 +25,7 @@ const RUN_SPEED := 7.0
 const FOUL_NAMES := {
 	"push": "push in the back", "hack": "hacking", "stick": "caman on the man",
 	"trip": "trip", "head": "ball played with the head", "kick": "ball kicked",
-	"hands": "handball", "obstruction": "obstruction", "keeper_hands": "keeper handled outside the D",
+	"hands": "handball", "keeper_catch": "keeper caught the ball", "obstruction": "obstruction", "keeper_hands": "keeper handled outside the D",
 }
 
 var m: Node                       ## the match
@@ -36,11 +33,10 @@ var pos := Vector2.ZERO           ## where the referee stands, in yards
 var vel := Vector2.ZERO
 var facing := Vector2.DOWN
 
-## Guess fouls from tackles until the match sends real "foul" events.
-var infer_tackle_fouls := true
-## Wikipedia: the keeper may only use an open palm and may not catch. The game
-## lets keepers hold the ball for now, so this is off by default.
-var penalise_keeper_catch := false
+## Keepers may deflect the ball (open palm, stick or body) but not catch it.
+## A save that drops the ball at their feet is fine; taking hold of it with
+## the hands is a foul.
+var penalise_keeper_catch := true
 ## Tests set this so every foul is seen.
 var always_sees := false
 
@@ -98,10 +94,7 @@ func _read_events() -> void:
 				_on_strike(e["by"], e["at"])
 			"touch":
 				_on_touch(e["by"], e["at"], e.get("hands", false))
-			"tackle":
-				_on_tackle(e)
 			"foul":
-				infer_tackle_fouls = false
 				_on_foul(e)
 			"save":
 				if e.has("by"):
@@ -109,7 +102,12 @@ func _read_events() -> void:
 			"Free hit":
 				_clear()
 				_free_hit_taker = e.get("taker")
-			"Shy", "Corner", "Hit-out", "Penalty hit", "goal", "half_end", "throw_up":
+			"throw_up":
+				_clear()
+				# The referee throws the ball up at the centre spot.
+				pos = m.ball_pos + Vector2(0, -1.4)
+				vel = Vector2.ZERO
+			"Shy", "Corner", "Hit-out", "Penalty hit", "goal", "half_end":
 				_clear()
 
 
@@ -159,7 +157,7 @@ func _on_touch(p, at: Vector2, hands: bool) -> void:
 		if d > m.D_RADIUS + 0.5:
 			_on_foul({"kind": "keeper_hands", "by": p, "on": null, "at": at, "severity": 0.2})
 		elif penalise_keeper_catch and m.carrier == p:
-			_on_foul({"kind": "hands", "by": p, "on": null, "at": at, "severity": 0.1})
+			_on_foul({"kind": "keeper_catch", "by": p, "on": null, "at": at, "severity": 0.1})
 
 
 func _in_offside_position(p, ball_at: Vector2) -> bool:
@@ -167,27 +165,6 @@ func _in_offside_position(p, ball_at: Vector2) -> bool:
 	if p.pos.distance_to(goal) >= m.D_RADIUS:
 		return false
 	return abs(goal.x - p.pos.x) < abs(goal.x - ball_at.x)
-
-
-## Until the physics reports fouls itself, judge each tackle: a clumsy or
-## tired tackler, or one coming through the back of the carrier, may push,
-## hack the carrier's caman or catch the man instead of the ball.
-func _on_tackle(e: Dictionary) -> void:
-	if not infer_tackle_fouls:
-		return
-	var t = e["by"]
-	var o = e["on"]
-	var off: Vector2 = t.pos - o.pos
-	var behind := 0.0
-	if off.length() > 0.01 and o.facing.length() > 0.01:
-		behind = max(0.0, -o.facing.normalized().dot(off.normalized()))
-	var chance: float = 0.03 + (1.0 - t.r("tackling") / 100.0) * 0.1 + behind * 0.22 \
-		+ (1.0 - t.stamina) * 0.06 + (0.03 if not e.get("won", false) else 0.0)
-	if randf() >= chance:
-		return
-	var kind := "push" if behind > 0.55 else ("hack" if randf() < 0.65 else "stick")
-	var severity: float = randf() * 0.7 + behind * 0.2 + clamp(t.vel.length() / 9.0, 0.0, 1.0) * 0.15
-	_on_foul({"kind": kind, "by": t, "on": o, "at": e.get("at", o.pos), "severity": severity})
 
 
 func _on_foul(e: Dictionary) -> void:

@@ -26,18 +26,25 @@ func _run() -> void:
 	var outs := {}
 	var ref_calls := {}
 	var cards := {"yellow": 0, "red": 0}
+	var hits := {}
 	for i in 6:
 		var m = MatchScene.instantiate()
 		m.manual_step = true
 		m.config = {"home": teams[0], "away": teams[1], "human_side": -1, "difficulty": 1, "half_seconds": 180.0, "seed": 100 + i}
 		root.add_child(m)
 		var steps := 0
-		while m.state != m.State.FULL_TIME and steps < 60 * 400:
+		while m.state != m.State.FULL_TIME and steps < 60 * 600:
 			m.step(1.0 / 60.0)
 			steps += 1
 		for e in m.events:
-			if e["type"] in ["Shy", "Corner", "Hit-out", "save"]:
-				outs[e["type"]] = outs.get(e["type"], 0) + 1
+			if e["type"] in ["Shy", "Corner", "Hit-out", "save", "knockdown", "spill", "block", "one_hand_block", "clash", "cleek", "stick_block", "late_block", "barge", "beat_to_it", "Free hit", "foul"]:
+				var key: String = e["type"] + (" " + e["kind"] if e["type"] == "foul" else "")
+				outs[key] = outs.get(key, 0) + 1
+			elif e["type"] == "hit":
+				var k: String = ("shy " if e["shy"] else "") + e["kind"]
+				hits[k] = hits.get(k, 0) + 1
+				if abs(e["curve"]) > 4.0:
+					hits["curving"] = hits.get("curving", 0) + 1
 		for c in m.referee.calls:
 			var key: String = c["call"] if c["call"] != "missed" else "missed " + c["kind"]
 			ref_calls[key] = ref_calls.get(key, 0) + 1
@@ -49,5 +56,6 @@ func _run() -> void:
 		goals += m.score[0] + m.score[1]
 		m.free()
 	print("Totals: ", totals, "  restarts/saves: ", outs)
+	print("Hits: ", hits)
 	print("Referee: ", ref_calls, "  cards: ", cards)
 	quit(0 if goals > 0 else 1)

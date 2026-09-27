@@ -19,7 +19,7 @@ marked below.
 | Striking an opponent with the caman is a foul | Enforced |
 | Body contact must be shoulder to shoulder | A shoulder barge is legal; a push in the back is a foul, and it's easier for the referee to miss |
 | Ball played with the head is a foul | Enforced when the match reports it |
-| Only the keeper may use hands, open palm only, no catching | Keeper handling outside the D is a free hit. Catching is still allowed for now (see below) |
+| Only the keeper may use hands, open palm only, no catching | Keepers deflect the ball down to their feet; handling outside the D, or catching it, is a foul |
 | Foul: free hit where it happened (indirect) | Yes; opponents held 5 yards off (distance not from Wikipedia) |
 | Foul inside the D: penalty hit from 20 yards | Yes; everyone but the taker and keeper goes behind the ball |
 | Yellow and red cards; two yellows is a red; sent-off players aren't replaced | Yes; bad fouls and every third foul by a player earn a yellow, very bad fouls a red |

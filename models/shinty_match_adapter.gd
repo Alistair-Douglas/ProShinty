@@ -92,6 +92,31 @@ static func strike_like_match(player_data: Dictionary, dir: Vector2, speed: floa
 	return strike(data, dir, power, loft, "pass" if skill_key == "passing" else "shot", ball_vel, ball_vz, 0.0, rng)
 
 
+## Like strike_like_match(), but runs ShintyStrike.compute_swing(), so the
+## ball can curve and be miss-hit (thin, fat, heel, toe or a fresh-air miss).
+## `difficulty` (0..1) is the extra error from the situation (running flat
+## out, off balance, under pressure, an overswing); `contact_offset_yards` is
+## how far the ball was from the bas when the swing arrived.
+## Returns strike_like_match()'s keys plus kind, curve and side_spin.
+static func swing_like_match(player_data: Dictionary, dir: Vector2, speed: float, vz: float,
+		skill_key: String, ball_vel: Vector2 = Vector2.ZERO, ball_vz: float = 0.0,
+		skill_bonus: float = 0.0, difficulty: float = 0.0, contact_offset_yards: float = 0.0,
+		rng: RandomNumberGenerator = null) -> Dictionary:
+	var skill := clampf(float(player_data.get(skill_key, 60)) + skill_bonus * 100.0, 1.0, 99.0)
+	var res := ShintyStrike.compute_swing({
+		"aim": Vector3(dir.x, 0.0, dir.y),
+		"power": ShintyStrike.power_for_speed(speed * YARD, skill),
+		"loft": ShintyStrike.loft_for_angle(rad_to_deg(atan2(vz, maxf(speed, 0.1)))),
+		"skill": skill, "control": clampf(float(player_data.get("control", 60)) + skill_bonus * 100.0, 1.0, 99.0),
+		"ball_velocity": Vector3(ball_vel.x, ball_vz, ball_vel.y) * YARD,
+		"difficulty": difficulty, "contact_offset": contact_offset_yards * YARD, "rng": rng,
+	})
+	var v: Vector3 = res["velocity"] * TO_YARDS
+	return {"ball_vel": Vector2(v.x, v.z), "ball_vz": v.y, "spin": res["spin"],
+		"miss": res["miss"], "mishit": res["mishit"], "quality": res["quality"],
+		"kind": res["kind"], "curve": res["curve"], "side_spin": res["side_spin"]}
+
+
 ## Ball physics running on the match's variables. Create one per match:
 ##   var sim := ShintyMatchAdapter.BallSim.new(PITCH, GOAL_W, CROSSBAR)
 ## then each tick replace the ball integration with
