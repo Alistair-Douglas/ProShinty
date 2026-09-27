@@ -52,6 +52,35 @@ All models use metres, stand on y = 0 and face -Z.
   contact frame. `time_to_contact()` says how long after `play_action` that is.
   `get_strike_spot()` is where the ball should sit for a ground hit.
 
+### How players look
+
+`models/shinty_player_look.gd` (`ShintyPlayerLook`) hangs every mesh on the
+skeleton; `models/shinty_mesh.gd` (`ShintyMesh`) has the mesh and material
+helpers. The skeleton, bones, `Caman` node and animation code in
+`shinty_player.gd` are unchanged, so the look can change without touching
+animation or physics.
+
+- **Bodies** are smooth swept shapes rather than capsules: shoulders slope
+  into the arms, thighs and calves have muscle shape, hands grip the caman
+  with a thumb, and build changes girth and shoulder width.
+- **Faces** have a jaw, cheekbones, nose, brow, lips, eyes (whites, iris,
+  pupil), eyebrows and ears. Hair colour and eye colour vary per player, and
+  about a third of players have a beard. Skin uses a shader with a slight warm
+  edge.
+- **Kit** uses a fabric shader with a fine knit and soft folds, a chest band
+  and cuffs in the trim colour, a collar, a crest on the left breast, a small
+  number on the front, and the number and surname on the back (surnames show
+  once squads have real names). Socks have trim hoops. A team can set
+  `colors.pattern` to `"hoops"` or `"stripes"`.
+- **Boots** have a shaped upper, a coloured sole, studs and laces, with a few
+  colourways across the squad.
+- **Helmet**: rounded glossy shell with a peak, vents, padding at the rim, a
+  curved steel face guard and a chin strap.
+- **Caman**: ash grain, an oval shaft that flares into a curved bas, grip
+  tape spiralled round the handle, a knob at the end and tape on the bas.
+- **Ball**: leather with a stitched seam drawn by a shader, and a raised ridge
+  so spin reads from a distance.
+
 ### Ball and hitting
 
 - `ShintyStrike.compute({...})` returns the ball's velocity and spin after a
@@ -125,8 +154,8 @@ launch on the model's `strike` signal.
 
 ## Performance
 
-Each player is about 75 small meshes (24 players is roughly 1,800 draw calls,
-with shared materials). `low_detail = true` drops that to about 40 by removing
-the face guard bars, eyes, ears and number; use it for distant players.
-Merging each player into one mesh is the next step if the frame rate suffers
-on low-end PCs.
+Each player is about 8,000 triangles in 46 meshes: meshes under the same bone
+that share a material are merged, so 24 players come to roughly 1,100 draw
+calls. `low_detail = true` drops a player to 36 meshes by leaving out the face
+details, face guard bars, studs, laces, names and numbers; use it for
+distant players.
