@@ -123,8 +123,8 @@ func _build_trees(root: Node3D, rng: RandomNumberGenerator) -> void:
 		var west := i % 2 == 0
 		var px := (-hl - rng.randf_range(12.0, 70.0)) if west else (hl + rng.randf_range(48.0, 110.0))
 		var pz := rng.randf_range(road_z + 4.0, hw + 2.0)
-		if west and absf(pz) < 12.0:
-			pz = 12.0 * signf(pz + 0.001) + pz  # leave the view along the pitch open
+		if west and absf(pz) < 25.0:
+			continue  # leave the view along the pitch open
 		p.add_broadleaf(near, rng, Vector3(px, p.height_m(px, pz), pz), rng.randf_range(0.7, 1.0))
 	# Bushes along the top of the bank.
 	var x := -hl - 20.0

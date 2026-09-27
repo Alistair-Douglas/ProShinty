@@ -441,15 +441,16 @@ func _build_environment() -> void:
 	env.adjustment_enabled = true
 	env.adjustment_contrast = 1.06
 	env.adjustment_saturation = 1.1
-	# Forward+ only; the Compatibility renderer ignores these.
-	env.ssao_enabled = true
-	env.ssao_radius = 1.2
-	env.ssao_intensity = 1.6
-	env.ssao_light_affect = 0.2
-	env.ssil_enabled = true
-	env.ssil_radius = 4.0
-	env.ssr_enabled = true
-	env.ssr_max_steps = 48
+	# Forward+ only (the Compatibility renderer warns about them).
+	if RenderingServer.get_current_rendering_method() == "forward_plus":
+		env.ssao_enabled = true
+		env.ssao_radius = 1.2
+		env.ssao_intensity = 1.6
+		env.ssao_light_affect = 0.2
+		env.ssil_enabled = true
+		env.ssil_radius = 4.0
+		env.ssr_enabled = true
+		env.ssr_max_steps = 48
 	var we := WorldEnvironment.new()
 	we.name = "WorldEnvironment"
 	we.environment = env
