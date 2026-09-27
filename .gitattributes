@@ -1,0 +1,8 @@
+# Normalise line endings so Windows and Linux checkouts match
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.wav binary
+*.ogg binary
+*.glb binary

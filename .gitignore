@@ -1,0 +1,15 @@
+# Godot 4
+.godot/
+/android/
+export/
+export_presets.cfg.bak
+*.tmp
+*.translation
+
+# Test output
+/renders/tmp/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
