@@ -68,7 +68,24 @@ func _update_player(p, f: Dictionary, delta: float) -> void:
 	if dir.length() > 0.01:
 		var target := atan2(-dir.x, -dir.z)
 		root.rotation.y = lerp_angle(root.rotation.y, target, min(1.0, delta * 14.0))
-	ShintyMatchAdapter.update_player(f, p.vel, p.swing, false, w(m.ball_pos, m.ball_z))
+	var model: ShintyPlayerModel = f["model"]
+	model.set_locomotion(Vector3(p.vel.x, 0.0, p.vel.y) * ShintyMatchAdapter.YARD)
+	model.look_at_point(w(m.ball_pos, m.ball_z))
+	# One-off actions the match asked for (hits, shies, pokes, stumbles, saves).
+	if p.anim_seq != f["anim_seq"]:
+		f["anim_seq"] = p.anim_seq
+		var a: Dictionary = p.anim
+		var name := StringName(a["name"])
+		if name == &"swing" and a["charge"] > 0.0 and model.is_busy():
+			model.release_swing(a["power"])
+		else:
+			model.play_action(name, a["power"], m.ball_z * ShintyMatchAdapter.YARD)
+	elif p == m.human and m.charge >= 0.0 and p.swing_t < 0.0 and not model.is_busy():
+		model.charge_swing()   # the backswing while the hit button is held
+	elif model.is_charging() and (p != m.human or m.charge < 0.0):
+		model.cancel_charge()
+	# The caman head goes where the match's stick physics put it.
+	model.set_reach(w(Vector2(p.stick.x, p.stick.y), p.stick.z) if p.reach > 0.05 else null, p.reach, p.one_hand)
 	f["ring"].visible = p == m.human
 	f["arrow"].visible = p == m.human
 	f["tag"].visible = p == m.human or p.is_keeper()
@@ -124,7 +141,7 @@ func _build_player(p) -> Dictionary:
 	tag.position = Vector3(0, 2.25, 0)
 	root.add_child(tag)
 	root.position = w(p.pos)
-	f.merge({"ring": ring, "arrow": arrow, "tag": tag, "phase": 0.0})
+	f.merge({"ring": ring, "arrow": arrow, "tag": tag, "phase": 0.0, "anim_seq": 0})
 	return f
 
 

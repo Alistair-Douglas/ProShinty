@@ -16,6 +16,8 @@ const BOUNCE_FRICTION := 0.82     ## share of horizontal speed kept on a bounce
 const ROLL_DECEL := 1.3           ## m/s^2 of grass resistance
 const ROLL_DRAG := 0.22           ## extra slowing per second, proportional to speed
 const SPIN_DECAY := 0.5
+const ROLL_CURVE := 0.012         ## m/s^2 of sideways pull per rad/s of sidespin while rolling
+const ROLL_SPIN_DECAY := 1.4      ## sidespin dies faster once the ball grips the grass
 
 const _AREA := PI * RADIUS * RADIUS
 const K_DRAG := 0.5 * AIR_DENSITY * DRAG_CD * _AREA / MASS
@@ -134,7 +136,9 @@ func _integrate(h: float, events: Array) -> void:
 			if vy > 1.2:
 				events.append({"type": "bounce", "position": position, "speed": vy})
 				velocity = flat * BOUNCE_FRICTION + Vector3(0, vy * GROUND_RESTITUTION, 0)
+				var side := spin.y
 				spin = spin.lerp(Vector3.UP.cross(velocity) / RADIUS, 0.5)
+				spin.y = side * 0.7  # sidespin survives the bounce, so it kicks on
 			else:
 				events.append({"type": "landed", "position": position})
 				velocity = flat * BOUNCE_FRICTION
@@ -142,10 +146,16 @@ func _integrate(h: float, events: Array) -> void:
 		position.y = floor_y
 		velocity.y = 0.0
 		var s := velocity.length()
+		var side := spin.y * exp(-ROLL_SPIN_DECAY * h)
 		if s > 0.0:
 			var ns := maxf(0.0, s - (ROLL_DECEL + ROLL_DRAG * s) * h)
 			velocity *= ns / s
+			# A ball rolling with sidespin drifts the way it is spinning.
+			if ns > 0.5 and absf(side) > 0.5:
+				var sideways := Vector3.UP.cross(velocity / ns)
+				velocity += sideways * (side * ROLL_CURVE * h)
+				velocity = velocity.normalized() * ns
 			if ns < 0.05:
 				velocity = Vector3.ZERO
 		position += velocity * h
-		spin = Vector3.UP.cross(velocity) / RADIUS
+		spin = Vector3.UP.cross(velocity) / RADIUS + Vector3.UP * side

@@ -15,14 +15,19 @@ a full 12-a-side match against the computer.
 | --- | --- | --- |
 | Move | WASD / arrow keys | Left stick |
 | Sprint | Shift | RB |
-| Hit (hold for more power), or tackle the ball carrier | Space | X / Square |
+| Hit (hold for more power, release to swing), or poke at the carrier's ball | Space | X / Square |
 | Pass to the team-mate you're facing | E | A / Cross |
 | Switch player | Q | LB |
 | Pause (M to quit while paused) | Esc | Start |
 
-Shots aimed roughly at the hail get a little aim assist. The ball can be in the
+Shots aimed roughly at the goal get a little aim assist. The ball can be in the
 air: a lofted hit sails over players, and the keeper can reach higher than
 outfield players.
+
+The hit meter works like a golf game's: it fills to full power, then carries on
+into a red overswing. Overswinging adds no power, only more chance of a
+miss-hit or a hit that bends. You can swing before the ball reaches you to hit
+it first time; if it isn't there when the caman comes through, that's fresh air.
 
 ## Squads and ratings
 
@@ -40,10 +45,29 @@ entry to `teams` with an `id`, `name`, `short` and `colors`.
 
 ## How it plays
 
-- 12-a-side, 150 x 75 yard pitch, hails 12 ft wide and 10 ft high.
-- Matches start (and restart after every hail) with a throw-up.
-- Ball over the sideline: a shy to the other side. Over the byline: a hit-out,
-  or a corner if a defender put it there.
+- 12-a-side, 150 x 75 yard pitch, goals 12 ft wide and 10 ft high.
+- Matches start (and restart after every goal) with a throw-up.
+- Ball over the sideline: a shy to the other side. The taker tosses the ball
+  straight up an arm's length in front and, as it drops, brings the caman over
+  their head with both hands like a hammer and strikes it with the back of the
+  stick. They get three attempts at a clean strike; miss all three and the shy
+  goes to the other side. Over the byline: a hit-out, or a corner if a
+  defender put it there.
+- Players have weight (`scripts/player_physics.gd`). They accelerate like
+  footballers (quick first steps, a slower build to top speed), take a stride
+  or two to stop, and turn wider the faster they run. Bodies collide like ice
+  hockey: heavier, faster players knock others off balance, and a hard enough
+  hit on the ball carrier knocks the ball loose.
+- Every player's caman is tracked. It reaches out for a loose ball, pokes at an
+  opponent's ball hockey-style, and only touches the ball where the stick head
+  actually gets to it. A ball can also hit a player's body and deflect.
+- Hits are swings, not instant: the caman takes time to come through, so a
+  carrier can be tackled mid-swing. How cleanly it meets the ball decides the
+  hit, golf-style: the face and swing path set the direction and any curve,
+  and a thin, fat, heel or toe contact is a miss-hit. Better players, lighter
+  swings and standing still mean cleaner hits.
+- Keepers reach for shots with stick, hands and body and dive for ones going
+  wide of them. A save smothers the ball, which drops at the keeper's feet.
 - Ratings matter: pace sets speed, control decides whether you trap a fast ball
   or keep it in a tackle, passing and shooting set accuracy, keeping sets the
   keeper's reach and save chance.
@@ -54,7 +78,10 @@ entry to `teams` with an `id`, `name`, `short` and `colors`.
 - `scenes/main_menu.tscn`, `scripts/main_menu.gd`: team and match setup.
 - `scenes/match.tscn`, `scripts/match.gd`: the match rules, ball physics and AI.
   The simulation runs on a flat pitch in yards; nothing in it depends on 3D.
-- `scripts/match_view.gd`: builds and animates the 3D players, ball, hails and
+- `scripts/player_physics.gd`: running, body contact, caman reach and keeper
+  dives. The AI and controls set where a player wants to go (`desired`); this
+  file moves them there.
+- `scripts/match_view.gd`: builds and animates the 3D players, ball, goals and
   broadcast camera from the match state, using the models in `models/`.
 - `pitch/`: the Aberdour pitch, scenery, sky and lighting (from the separate
   shinty-pitch project; see `docs/pitch.md`). The match uses it in yards
