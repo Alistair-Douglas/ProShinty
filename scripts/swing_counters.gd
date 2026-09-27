@@ -12,6 +12,13 @@ extends RefCounted
 ##  4. Cleek. Raise the stick under the arc of their swing so it comes down on
 ##     your caman and glances off: they miss, and the ball is there for you.
 ##
+## Contact goes into match.events for the referee as
+##   {type: "foul", kind, by, on, at, severity}
+## kind "barge" (legal shoulder barge), "push" (in the back), "stick" (a swing
+## caught a late blocker), "hack" (a poke through the carrier's body; from
+## match.gd). player_physics.gd also reports knock-downs from behind as "push".
+## The match emits "strike", "touch" and "tackle" events alongside.
+##
 ## Units are the match's (yards, seconds).
 
 const Body := preload("res://scripts/player_physics.gd")
@@ -85,7 +92,11 @@ static func barge_contact(m, barger, victim) -> float:
 	var push: Vector2 = (victim.pos - barger.pos).normalized()
 	var in_the_back: bool = victim.facing.dot(push) > 0.5
 	m.events.append({"type": "barge", "team": barger.team, "in_the_back": in_the_back})
-	if in_the_back and randf() < REF_SEES:
+	# For the referee: a shoulder barge is legal ("barge"), a push in the back
+	# is a foul ("push"). Without a referee in the match, judge it here.
+	m.events.append({"type": "foul", "kind": "push" if in_the_back else "barge", "by": barger,
+		"on": victim, "at": victim.pos, "severity": 0.4 if in_the_back else 0.0})
+	if in_the_back and not ("referee" in m) and randf() < REF_SEES:
 		m.foul_pending = [barger, victim]
 	return BARGE_BRACE
 
@@ -113,6 +124,9 @@ static func intercept(m, p) -> bool:
 				q.stagger = 0.6
 				m.anim(q, "stumble")
 				m.events.append({"type": "late_block", "team": q.team})
+				# The swing caught the blocker: caman on the man, though the
+				# blocker put themselves there, so it's the mildest kind.
+				m.events.append({"type": "foul", "kind": "stick", "by": p, "on": q, "at": q.pos, "severity": 0.2})
 				if randf() < 0.4:
 					return false   # and the ball still gets through
 			_blocked(m, p, q)

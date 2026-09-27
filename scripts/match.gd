@@ -856,6 +856,7 @@ func _contact(p: Player) -> void:
 	p.touch_block = 0.35
 	last_team = p.team
 	events.append({"type": "hit", "team": p.team, "kind": res["kind"], "curve": res["curve"], "shy": shy})
+	events.append({"type": "strike", "by": p, "at": ball_pos})
 	if p == human or (p.team == human_side and shy):
 		var note := {"thin": "Topped it", "fat": "Skied it", "heel": "Off the heel", "toe": "Off the toe"}
 		if note.has(res["kind"]):
@@ -921,10 +922,16 @@ func _try_tackle(t: Player, o: Player) -> void:
 		t.cooldown = 0.35
 		return
 	var chance: float = clamp(0.4 + (t.r("tackling") - o.r("control")) / 100.0 * 0.8 + _skill_mod(t.team) - _skill_mod(o.team), 0.12, 0.85)
-	if _dist_to_segment(o.pos, t.pos, ball_pos) < Body.BODY_R * 1.2:
+	var shielded := _dist_to_segment(o.pos, t.pos, ball_pos) < Body.BODY_R * 1.2
+	if shielded:
 		chance *= 0.45   # the ball is on the far side of the carrier's body
 	chance *= lerp(1.0, 0.6, clamp((d - 1.2) / 1.0, 0.0, 1.0))
-	if randf() < chance:
+	var won := randf() < chance
+	events.append({"type": "tackle", "by": t, "on": o, "won": won, "at": o.pos})
+	if not won and shielded and randf() < 0.06:
+		# Reaching through the carrier's body for the ball: caman on the man.
+		events.append({"type": "foul", "kind": "hack", "by": t, "on": o, "at": o.pos, "severity": 0.3})
+	if won:
 		carrier = null
 		o.touch_block = 0.5
 		o.cooldown = 0.4
@@ -1024,6 +1031,7 @@ func _ball_touches(before: Vector3) -> void:
 		return
 	var p := best
 	p.touch_block = 0.25
+	events.append({"type": "touch", "by": p, "at": ball_pos, "hands": best_keeper and p.pos.distance_to(ball_pos) > Body.CONTACT_R})
 	# One-handed at full stretch you can stop or tap a ball, rarely control it.
 	var grip: float = 0.55 if p.one_hand and not best_keeper else 1.0
 	if sp < (8.0 + p.r("control") * 0.08) * grip and not best_keeper:
@@ -1076,7 +1084,7 @@ func _keeper_save(k: Player) -> void:
 	for o in players:
 		if o != k:
 			o.touch_block = max(o.touch_block, gather_t + 0.1)
-	events.append({"type": "save", "team": k.team})
+	events.append({"type": "save", "team": k.team, "by": k})
 	_say("Save!", 1.0)
 
 
