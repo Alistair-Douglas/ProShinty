@@ -79,8 +79,8 @@ static func move(m, p, dt: float) -> void:
 	if p.desired.length() > 0.3 and p.desired.normalized().dot(p.facing) < -0.3:
 		top *= 0.6
 	var want: Vector2 = p.desired.limit_length(top)
-	if p.shy_toss:
-		want = Vector2.ZERO   # feet planted under the toss
+	if p.shy_toss or (p.shy_ready and p == m.carrier):
+		want = Vector2.ZERO   # standing at the line for the shy (turning still aims it)
 	var old: Vector2 = p.vel
 	var speed := old.length()
 	var u: Vector2

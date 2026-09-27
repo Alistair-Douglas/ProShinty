@@ -14,6 +14,9 @@ var ball_shadow: MeshInstance3D
 var figures := {}  # Player -> Dictionary of nodes
 var cam_x := 0.0
 var cam_zoom := 1.0
+var shy_blend := 0.0      # 0 = broadcast camera, 1 = shy camera
+var shy_look := Vector3.ZERO
+var shy_eye := Vector3.ZERO
 
 const SKIN := Color(0.93, 0.76, 0.62)
 const WOOD := Color(0.55, 0.36, 0.18)
@@ -96,8 +99,22 @@ func _update_camera(delta: float) -> void:
 	cam_x = lerp(cam_x, target_x, min(1.0, delta * 2.5))
 	var depth: float = m.ball_pos.y - m.PITCH.y / 2.0
 	var look := Vector3(cam_x, 0.0, clamp(depth * 0.55, -14.0, 14.0))
-	camera.position = look + Vector3(0, 21.0 * cam_zoom, 30.0 * cam_zoom)
-	camera.look_at(look, Vector3.UP)
+	var eye := look + Vector3(0, 21.0 * cam_zoom, 30.0 * cam_zoom)
+	# Shy: play stops and the camera comes down behind the taker's shoulder,
+	# looking where they'll send it. It eases back once the ball is struck.
+	var taker = m.shy_taker()
+	if taker != null:
+		var f := Vector3(taker.facing.x, 0.0, taker.facing.y)
+		var side := Vector3(-f.z, 0.0, f.x)
+		var at := w(taker.pos)
+		shy_eye = at - f * 5.0 - side * 2.2 + Vector3(0, 2.4, 0)
+		shy_look = at + f * 9.0 + Vector3(0, 1.4, 0)
+		shy_blend = move_toward(shy_blend, 1.0, delta * 1.5)
+	else:
+		shy_blend = move_toward(shy_blend, 0.0, delta * 0.8)
+	var k := shy_blend * shy_blend * (3.0 - 2.0 * shy_blend)
+	camera.position = eye.lerp(shy_eye, k)
+	camera.look_at(look.lerp(shy_look, k), Vector3.UP)
 
 
 ## Screen position of a pitch point, for the HUD.

@@ -50,7 +50,8 @@ entry to `teams` with an `id`, `name`, `short` and `colors`.
 
 - 12-a-side, 150 x 75 yard pitch, goals 12 ft wide and 10 ft high.
 - Matches start (and restart after every goal) with a throw-up.
-- Ball over the sideline: a shy to the other side. The taker tosses the ball
+- Ball over the sideline: play and the clock stop, the camera comes down behind
+  the taker's shoulder, and the other side takes a shy. The taker tosses the ball
   straight up an arm's length in front and, as it drops, brings the caman over
   their head with both hands like a hammer and strikes it with the back of the
   stick. They get three attempts at a clean strike; miss all three and the shy

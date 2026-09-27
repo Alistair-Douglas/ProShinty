@@ -201,7 +201,8 @@ func step(dt: float) -> void:
 				ball_vz = 9.0
 				state = State.PLAY
 		State.PLAY:
-			clock += dt
+			if shy_taker() == null:
+				clock += dt   # the clock stops while a shy is taken
 			_update_players(dt)
 			_update_ball(dt)
 			_check_ball_out()
@@ -398,7 +399,7 @@ func _update_players(dt: float) -> void:
 	for p in players:
 		if p.shy_toss:
 			guarded = p   # opponents stand off while a shy is taken
-	if (protected_timer > 0.0 and carrier != null) or (guarded != null and guarded.shy_toss):
+	if (protected_timer > 0.0 and carrier != null) or (guarded != null and (guarded.shy_toss or guarded.shy_ready)):
 		for o in squads[1 - guarded.team]:
 			var off: Vector2 = o.pos - guarded.pos
 			if off.length() < 5.0:
@@ -477,6 +478,12 @@ func _ai_chase(p: Player, dt: float) -> void:
 func _ai_carrier(p: Player, dt: float) -> void:
 	if p.swing_t >= 0.0:
 		return   # mid-swing: committed
+	if p.shy_ready:
+		# A shy has to be taken: pass it to someone open or hit it long.
+		p.think -= dt
+		if p.think <= 0.0 and protected_timer <= 0.0 and not _ai_pass(p, false):
+			_hit_long(p)
+		return
 	var goal := target_goal(p.team)
 	var to_goal := goal - p.pos
 	var d := to_goal.length()
@@ -823,6 +830,14 @@ func _contact(p: Player) -> void:
 			_say(note[res["kind"]], 1.0)
 		elif abs(res["curve"]) > 5.0 and req["speed"] > 22.0:
 			_say("Bending it " + ("left" if res["curve"] > 0.0 else "right"), 1.0)
+
+
+## The player taking a shy (lining it up or with the ball in the air), or null.
+func shy_taker() -> Player:
+	for p in players:
+		if p.shy_toss or (p.shy_ready and carrier == p):
+			return p
+	return null
 
 
 func _fresh_air(p: Player, keeps_ball: bool, shy: bool = false) -> void:
