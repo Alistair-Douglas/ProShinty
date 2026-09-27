@@ -1,10 +1,12 @@
 extends Control
-## Title screen: pick teams, which side you control, difficulty and match length.
+## Title screen: pick teams, the pitch, which side you control, difficulty and
+## match length.
 
 const TeamData := preload("res://scripts/team_data.gd")
 
 var home_pick: OptionButton
 var away_pick: OptionButton
+var pitch_pick: OptionButton
 var side_pick: OptionButton
 var diff_pick: OptionButton
 var length_pick: OptionButton
@@ -51,10 +53,15 @@ func _ready() -> void:
 		names.append("%s  (OVR %d)" % [t["name"], t["overall"]])
 	home_pick = _option(left, "Home team", names, Game.home_index)
 	away_pick = _option(left, "Away team", names, Game.away_index)
+	pitch_pick = _option(left, "Pitch", ShintyPitch.VENUE_NAMES, Game.venue)
+	if Game.venue < 0:
+		_pick_home_ground()
 	side_pick = _option(left, "You control", ["Home team", "Away team"], Game.human_side)
 	diff_pick = _option(left, "Difficulty", ["Easy", "Normal", "Hard"], Game.difficulty)
 	length_pick = _option(left, "Half length", ["2 minutes", "3 minutes", "5 minutes", "10 minutes"], [2, 3, 5, 10].find(Game.half_minutes))
-	home_pick.item_selected.connect(func(_i): _refresh_squads())
+	home_pick.item_selected.connect(func(_i):
+		_refresh_squads()
+		_pick_home_ground())
 	away_pick.item_selected.connect(func(_i): _refresh_squads())
 
 	start_button = Button.new()
@@ -87,6 +94,16 @@ func _ready() -> void:
 		note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		note.modulate = Color(1, 0.8, 0.4)
 		left.add_child(note)
+
+
+## Picking a home team moves the match to its ground, if it has one.
+func _pick_home_ground() -> void:
+	var team_name: String = Game.teams[home_pick.selected]["name"]
+	for i in ShintyPitch.VENUE_NAMES.size():
+		var ground: String = ShintyPitch.VENUE_NAMES[i].get_slice(" ", 0)
+		if team_name.containsn(ground):
+			pitch_pick.select(i)
+			return
 
 
 ## Shown instead of the match setup when the squads file can't be used.
@@ -140,6 +157,7 @@ func _start() -> void:
 		away_pick.select((home_pick.selected + 1) % Game.teams.size())
 	Game.home_index = home_pick.selected
 	Game.away_index = away_pick.selected
+	Game.venue = pitch_pick.selected
 	Game.human_side = side_pick.selected
 	Game.difficulty = diff_pick.selected
 	Game.half_minutes = [2, 3, 5, 10][length_pick.selected]

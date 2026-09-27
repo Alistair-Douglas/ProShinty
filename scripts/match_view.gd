@@ -1,5 +1,5 @@
 extends Node3D
-## Draws the match in 3D: the Aberdour pitch and scenery (pitch/shinty_pitch.tscn),
+## Draws the match in 3D: the chosen ground and its scenery (pitch/shinty_pitch.tscn),
 ## hails, players with camans, the ball and a broadcast-style camera. It only
 ## reads the match state, never changes it. One world unit is one yard; the
 ## centre spot is the origin.
@@ -22,6 +22,7 @@ const WOOD := Color(0.55, 0.36, 0.18)
 func _ready() -> void:
 	m = get_parent()
 	pitch = PitchScene.instantiate()
+	pitch.venue = int(m.config.get("venue", 0))
 	pitch.units_per_yard = 1.0
 	pitch.length_yd = m.PITCH.x
 	pitch.width_yd = m.PITCH.y

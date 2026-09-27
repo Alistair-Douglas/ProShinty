@@ -15,6 +15,7 @@ uniform float spot_arc_radius = 5.0;          // centre circle and penalty arcs
 uniform float corner_arc_radius = 2.0;
 uniform float stripe_width = 6.0;             // yards per mowing stripe
 uniform float stripe_strength = 0.06;
+uniform bool stripe_along_length = false;  // lengthwise bands instead of across
 uniform float wear = 0.55;                    // 0 = lush, 1 = dry summer park
 
 uniform vec3 grass_color : source_color = vec3(0.33, 0.45, 0.19);
@@ -107,7 +108,7 @@ void fragment() {
 	col *= 0.9 + 0.2 * n_fine;
 
 	float on_pitch = step(abs(p.x), h.x + 2.0) * step(abs(p.y), h.y + 2.0);
-	float stripe = mod(floor(p.x / stripe_width), 2.0);
+	float stripe = mod(floor((stripe_along_length ? p.y : p.x) / stripe_width), 2.0);
 	col *= 1.0 + (stripe - 0.5) * 2.0 * stripe_strength * on_pitch;
 
 	// Worn patches in the goalmouths and around the centre, where play is busiest.

@@ -1,6 +1,6 @@
 extends SceneTree
-## Renders the preview from each set view (and each lighting preset from the
-## broadcast view) to renders/. Needs a display:
+## Renders the preview of each ground from each set view (and Aberdour in each
+## lighting preset) to renders/. Needs a display:
 ##   xvfb-run godot --path . --rendering-method gl_compatibility -s tests/render_views.gd
 
 func _initialize() -> void:
@@ -13,17 +13,28 @@ func _run(scene: Node3D) -> void:
 	DirAccess.make_dir_recursive_absolute("res://renders")
 	var cam: Camera3D = scene.get_node("Camera")
 	var pitch: Node3D = scene.get_node("ShintyPitch")
-	var shots := [[1, 0, "broadcast_afternoon"], [2, 0, "west_end"], [3, 0, "east_end"],
-			[4, 0, "looking_south"], [5, 0, "aerial"], [1, 1, "broadcast_evening"], [1, 2, "broadcast_overcast"]]
+	var views := [[1, "broadcast"], [6, "match_camera"], [2, "west_end"], [3, "east_end"],
+			[4, "looking_south"], [5, "aerial"]]
+	var shots := []
+	for v in ShintyPitch.VENUE_NAMES.size():
+		for view in views:
+			shots.append([v, view[0], 0, view[1]])
+	shots.append([0, 1, 1, "broadcast_evening"])
+	shots.append([0, 1, 2, "broadcast_overcast"])
 	for s in shots:
-		if pitch.lighting != s[1]:
-			pitch.lighting = s[1]
-		cam.set_view(s[0])
+		if pitch.venue != s[0]:
+			pitch.venue = s[0]
+		if pitch.lighting != s[2]:
+			pitch.lighting = s[2]
+		cam.set_view(s[1])
 		for i in 12:
 			await process_frame
-		var img := root.get_viewport().get_texture().get_image()
-		img.save_png("res://renders/%s.png" % s[2])
-		print("saved ", s[2])
+		var name: String = ["aberdour", "kingussie"][s[0]] + "_" + s[3]
+		root.get_viewport().get_texture().get_image().save_png("res://renders/%s.png" % name)
+		print("saved ", name)
+	pitch.venue = 0
+	pitch.lighting = 0
+	await process_frame
 	# Sanity checks on the API.
 	var p: ShintyPitch = pitch
 	assert(p.sim_to_world(Vector2(75, 37.5)).is_equal_approx(Vector3.ZERO))
