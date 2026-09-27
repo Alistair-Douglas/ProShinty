@@ -1,0 +1,316 @@
+{
+  "version": 1,
+  "note": "Placeholder players with made-up ratings. Replace names and numbers with real squads; ratings run 1-99.",
+  "teams": [
+    {
+      "id": "kingussie",
+      "name": "Kingussie",
+      "short": "KIN",
+      "colors": {
+        "primary": "#b3122e",
+        "secondary": "#f2f2f2"
+      },
+      "players": [
+        {
+          "number": 1,
+          "name": "Player 1",
+          "position": "GK",
+          "pace": 50,
+          "control": 60,
+          "passing": 69,
+          "shooting": 46,
+          "tackling": 38,
+          "keeping": 80,
+          "stamina": 68
+        },
+        {
+          "number": 2,
+          "name": "Player 2",
+          "position": "FB",
+          "pace": 76,
+          "control": 71,
+          "passing": 64,
+          "shooting": 43,
+          "tackling": 71,
+          "keeping": 20,
+          "stamina": 70
+        },
+        {
+          "number": 3,
+          "name": "Player 3",
+          "position": "LHB",
+          "pace": 75,
+          "control": 57,
+          "passing": 72,
+          "shooting": 53,
+          "tackling": 75,
+          "keeping": 20,
+          "stamina": 78
+        },
+        {
+          "number": 4,
+          "name": "Player 4",
+          "position": "CHB",
+          "pace": 72,
+          "control": 69,
+          "passing": 73,
+          "shooting": 45,
+          "tackling": 79,
+          "keeping": 20,
+          "stamina": 76
+        },
+        {
+          "number": 5,
+          "name": "Player 5",
+          "position": "RHB",
+          "pace": 70,
+          "control": 71,
+          "passing": 61,
+          "shooting": 52,
+          "tackling": 69,
+          "keeping": 20,
+          "stamina": 81
+        },
+        {
+          "number": 6,
+          "name": "Player 6",
+          "position": "LM",
+          "pace": 78,
+          "control": 67,
+          "passing": 79,
+          "shooting": 70,
+          "tackling": 62,
+          "keeping": 20,
+          "stamina": 88
+        },
+        {
+          "number": 7,
+          "name": "Player 7",
+          "position": "RM",
+          "pace": 77,
+          "control": 81,
+          "passing": 75,
+          "shooting": 68,
+          "tackling": 74,
+          "keeping": 20,
+          "stamina": 73
+        },
+        {
+          "number": 8,
+          "name": "Player 8",
+          "position": "LHF",
+          "pace": 76,
+          "control": 71,
+          "passing": 60,
+          "shooting": 85,
+          "tackling": 46,
+          "keeping": 20,
+          "stamina": 69
+        },
+        {
+          "number": 9,
+          "name": "Player 9",
+          "position": "CHF",
+          "pace": 84,
+          "control": 74,
+          "passing": 62,
+          "shooting": 83,
+          "tackling": 58,
+          "keeping": 20,
+          "stamina": 77
+        },
+        {
+          "number": 10,
+          "name": "Player 10",
+          "position": "RHF",
+          "pace": 78,
+          "control": 83,
+          "passing": 74,
+          "shooting": 81,
+          "tackling": 56,
+          "keeping": 20,
+          "stamina": 73
+        },
+        {
+          "number": 11,
+          "name": "Player 11",
+          "position": "CF",
+          "pace": 69,
+          "control": 68,
+          "passing": 63,
+          "shooting": 83,
+          "tackling": 59,
+          "keeping": 20,
+          "stamina": 71
+        },
+        {
+          "number": 12,
+          "name": "Player 12",
+          "position": "FF",
+          "pace": 77,
+          "control": 82,
+          "passing": 73,
+          "shooting": 85,
+          "tackling": 58,
+          "keeping": 20,
+          "stamina": 66
+        }
+      ]
+    },
+    {
+      "id": "aberdour",
+      "name": "Aberdour",
+      "short": "ABD",
+      "colors": {
+        "primary": "#1f4fa3",
+        "secondary": "#ffd23f"
+      },
+      "players": [
+        {
+          "number": 1,
+          "name": "Player 1",
+          "position": "GK",
+          "pace": 51,
+          "control": 55,
+          "passing": 62,
+          "shooting": 28,
+          "tackling": 44,
+          "keeping": 84,
+          "stamina": 58
+        },
+        {
+          "number": 2,
+          "name": "Player 2",
+          "position": "FB",
+          "pace": 70,
+          "control": 57,
+          "passing": 65,
+          "shooting": 53,
+          "tackling": 66,
+          "keeping": 20,
+          "stamina": 73
+        },
+        {
+          "number": 3,
+          "name": "Player 3",
+          "position": "LHB",
+          "pace": 59,
+          "control": 58,
+          "passing": 65,
+          "shooting": 42,
+          "tackling": 78,
+          "keeping": 20,
+          "stamina": 62
+        },
+        {
+          "number": 4,
+          "name": "Player 4",
+          "position": "CHB",
+          "pace": 70,
+          "control": 54,
+          "passing": 58,
+          "shooting": 45,
+          "tackling": 67,
+          "keeping": 22,
+          "stamina": 70
+        },
+        {
+          "number": 5,
+          "name": "Player 5",
+          "position": "RHB",
+          "pace": 67,
+          "control": 56,
+          "passing": 52,
+          "shooting": 48,
+          "tackling": 79,
+          "keeping": 20,
+          "stamina": 69
+        },
+        {
+          "number": 6,
+          "name": "Player 6",
+          "position": "LM",
+          "pace": 75,
+          "control": 64,
+          "passing": 78,
+          "shooting": 59,
+          "tackling": 56,
+          "keeping": 20,
+          "stamina": 73
+        },
+        {
+          "number": 7,
+          "name": "Player 7",
+          "position": "RM",
+          "pace": 64,
+          "control": 69,
+          "passing": 78,
+          "shooting": 63,
+          "tackling": 66,
+          "keeping": 20,
+          "stamina": 74
+        },
+        {
+          "number": 8,
+          "name": "Player 8",
+          "position": "LHF",
+          "pace": 76,
+          "control": 62,
+          "passing": 57,
+          "shooting": 76,
+          "tackling": 40,
+          "keeping": 20,
+          "stamina": 71
+        },
+        {
+          "number": 9,
+          "name": "Player 9",
+          "position": "CHF",
+          "pace": 75,
+          "control": 62,
+          "passing": 54,
+          "shooting": 80,
+          "tackling": 53,
+          "keeping": 20,
+          "stamina": 69
+        },
+        {
+          "number": 10,
+          "name": "Player 10",
+          "position": "RHF",
+          "pace": 78,
+          "control": 72,
+          "passing": 57,
+          "shooting": 79,
+          "tackling": 52,
+          "keeping": 20,
+          "stamina": 76
+        },
+        {
+          "number": 11,
+          "name": "Player 11",
+          "position": "CF",
+          "pace": 70,
+          "control": 75,
+          "passing": 64,
+          "shooting": 78,
+          "tackling": 45,
+          "keeping": 20,
+          "stamina": 72
+        },
+        {
+          "number": 12,
+          "name": "Player 12",
+          "position": "FF",
+          "pace": 65,
+          "control": 68,
+          "passing": 59,
+          "shooting": 65,
+          "tackling": 39,
+          "keeping": 20,
+          "stamina": 66
+        }
+      ]
+    }
+  ]
+}
