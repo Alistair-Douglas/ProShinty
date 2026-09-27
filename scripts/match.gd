@@ -23,6 +23,7 @@ const KEEPER_REACH_HEIGHT := 3.2
 const GOAL_PAUSE := 3.0
 const HALF_TIME_PAUSE := 3.0
 const OVERSWING_MAX := 1.35  # hit meter past full power
+const CARRY_CATCH_UP := 6.0  # yd/s: how fast a gathered ball settles onto the stick
 const SHY_TOSS := 6.5        # yd/s: how hard a shy is thrown up
 const SHY_ARM := 0.8         # the shy is tossed an arm's length in front
 const SHY_ATTEMPTS := 3      # tries at a clean strike before the shy goes over
@@ -936,12 +937,17 @@ func _try_tackle(t: Player, o: Player) -> void:
 		o.touch_block = 0.5
 		o.cooldown = 0.4
 		o.swing_t = -1.0
+		last_team = t.team
+		# The ball never jumps between sticks: the poke knocks it loose and it
+		# rolls. Usually the tackler hooks it back towards their own caman to
+		# collect; sometimes it's poked away into space.
 		if randf() < 0.6:
-			_take_control(t)
+			var to_stick := Vector2(t.stick.x, t.stick.y) - ball_pos
+			ball_vel = to_stick.normalized() * clamp(to_stick.length() * 3.0, 2.0, 5.0) + t.vel * 0.5
+			t.touch_block = 0.0
 		else:
-			# Poked away from the tackler.
 			ball_vel = (ball_pos - t.pos).normalized().rotated(randf_range(-0.7, 0.7)) * randf_range(4.0, 8.0)
-			last_team = t.team
+		ball_vz = 0.0
 	else:
 		t.cooldown = 0.7
 
@@ -967,8 +973,10 @@ func anim(p: Player, name: String, power: float = 1.0, from_charge: float = 0.0)
 
 func _update_ball(dt: float) -> void:
 	if carrier != null:
-		# The ball rides on the carrier's caman.
-		ball_pos = Vector2(carrier.stick.x, carrier.stick.y)
+		# The ball rides on the carrier's caman. When a player has just
+		# gathered it, it runs onto the stick rather than jumping there.
+		var on_stick := Vector2(carrier.stick.x, carrier.stick.y)
+		ball_pos = ball_pos.move_toward(on_stick, (carrier.vel.length() + CARRY_CATCH_UP) * dt)
 		if protected_timer > 0.0 or carrier.shy_ready:
 			# Lining up a restart: the ball stays in play.
 			ball_pos = Vector2(clamp(ball_pos.x, 0.3, PITCH.x - 0.3), clamp(ball_pos.y, 0.3, PITCH.y - 0.3))
