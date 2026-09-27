@@ -328,9 +328,8 @@ func _teams_changed() -> void:
 ## Picking a home team moves the match to its ground, if it has one.
 func _pick_home_ground() -> void:
 	var team_name: String = Game.teams[home_pick.selected]["name"]
-	for i in ShintyPitch.VENUE_NAMES.size():
-		var ground: String = ShintyPitch.VENUE_NAMES[i].get_slice(" ", 0)
-		if team_name.containsn(ground):
+	for i in ShintyPitch.VENUE_CLUBS.size():
+		if team_name.containsn(ShintyPitch.VENUE_CLUBS[i]):
 			pitch_pick.select(i)
 			backdrop.set_venue(i)
 			return

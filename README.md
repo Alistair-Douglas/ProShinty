@@ -1,7 +1,7 @@
 # Shinty (working title)
 
 A 3D shinty match game built in Godot 4.7. Pick Kingussie or Aberdour, pick
-their ground to play at, and play a full 12-a-side match against the computer.
+where to play (Aberdour, Kingussie or Tighnabruaich), and play a full 12-a-side match against the computer.
 
 ## Run it
 
@@ -114,7 +114,7 @@ crests come from shinty.com and belong to the clubs.
   angles, runs in behind, overlaps, coming short, marking and cover.
 - `scripts/match_view.gd`: builds and animates the 3D players, ball, goals and
   broadcast camera from the match state, using the models in `models/`.
-- `pitch/`: the grounds (Aberdour and Kingussie's The Dell) with their
+- `pitch/`: the grounds (Aberdour, Kingussie's The Dell and Tighnabruaich) with their
   scenery, sky and lighting; each ground's layout is in `pitch/venues/`. See
   `docs/pitch.md`. The match uses it in yards (`units_per_yard = 1`) with its
   own placeholder goals turned off, at the ground picked in the menu.

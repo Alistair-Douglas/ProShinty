@@ -113,6 +113,7 @@ func ground_mask(x: float, z: float, h: float) -> Color:
 
 func build(root: Node3D, rng: RandomNumberGenerator) -> void:
 	_build_trees(root, rng)
+	_build_long_grass(root, rng)
 	_build_buildings(root, rng)
 	_build_cars(root, rng)
 	_build_railway(root)
@@ -196,8 +197,20 @@ func _build_trees(root: Node3D, rng: RandomNumberGenerator) -> void:
 			gx += spacing
 		gz += spacing
 
-	p.emit_trees(root, big, 18, 9, "TreesNear")
-	p.emit_trees(root, small, 10, 6, "Woodland")
+	p.emit_trees(root, big, 12, 7, 64, "TreesNear")
+	p.emit_trees(root, small, 8, 5, 22, "Woodland")
+
+
+## Long grass in the strip in front of the earthworks and in the rough round
+## the edge of the park.
+func _build_long_grass(root: Node3D, rng: RandomNumberGenerator) -> void:
+	p.emit_tufts(root, rng, 2600, Rect2(-hl * 0.15, -hw - 14.5, hl * 1.15 + 20.0, 5.0),
+			func(_x, _z): return 1.0, Color(0.45, 0.5, 0.26))
+	var rough := func(x: float, z: float) -> float:
+		var c := ground_mask(x, z, p.height_m(x, z))
+		return c.g * (1.0 - c.b) * (1.0 - c.r) * (1.0 - c.a) * 0.8
+	p.emit_tufts(root, rng, 9000, Rect2(-hl - 70.0, -hw - 50.0, hl * 2.0 + 140.0, hw * 2.0 + 110.0),
+			rough, Color(0.34, 0.42, 0.19))
 
 
 func _build_buildings(root: Node3D, rng: RandomNumberGenerator) -> void:

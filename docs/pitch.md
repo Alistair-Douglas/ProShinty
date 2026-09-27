@@ -8,6 +8,7 @@ it for a match, and picking a home team moves the match to that team's ground.
 | --- | --- |
 | Aberdour | Alistair's three photos and a satellite view of the club |
 | Kingussie (The Dell) | A satellite view of the club |
+| Tighnabruaich (Kyles Athletic) | An aerial photo of the ground |
 
 ## The pitch
 
@@ -19,7 +20,14 @@ it for a match, and picking a home team moves the match to that team's ground.
 - Mowing stripes, worn goalmouths, placeholder hails (12 ft x 10 ft), corner
   and halfway flags, and a physics floor (StaticBody3D, layer 1).
 - Lighting presets: summer afternoon, summer evening, overcast. Custom sky
-  with clouds, haze and shadows.
+  with sun-lit cumulus and high wisps, blue distance haze, soft four-split
+  shadows, AgX tone mapping and glow.
+- Trees are trunks and limbs with leafy canopies (cut-out leaf cards that sway
+  in the wind); long grass grows in tufts at the pitch edges; the sea and the
+  Spey use a water shader with moving waves and sky reflection.
+- The game runs on the Forward+ renderer, which adds ambient occlusion,
+  indirect light and reflections; machines that can't run it fall back to
+  Compatibility automatically.
 
 ## The grounds
 
@@ -42,6 +50,13 @@ to the town, and Kingussie itself on the slope beyond. South side and east
 end: birch and alder along the River Spey, which curves round the ground,
 and the A9 beyond the bend. Behind the east hail: a tall ball-stop net. Hills
 all round, highest to the east (the Cairngorms).
+
+**Tighnabruaich, Kyles Athletic.** The pitch sits on the shore of the Kyles
+of Bute. North (far side): a grassy bank up to the village road with lamp
+posts, then the wooded hillside, with villas above the west end. South: the
+sea wall and a white rail, shingle, the Kyles with moored boats, and Bute
+across the water. East: the car park, the clubhouse, a fenced tennis court and
+a play area. West: a tall ball-stop net and a cottage by the shore.
 
 ## Using it
 
