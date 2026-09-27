@@ -9,7 +9,7 @@ const PitchScene := preload("res://pitch/shinty_pitch.tscn")
 var m: Node  # the match (parent)
 var pitch: Node3D
 var camera: Camera3D
-var ball: MeshInstance3D
+var ball: Node3D
 var ball_shadow: MeshInstance3D
 var figures := {}  # Player -> Dictionary of nodes
 var cam_x := 0.0
@@ -30,10 +30,13 @@ func _ready() -> void:
 	_build_hails()
 	for p in m.players:
 		figures[p] = _build_player(p)
-	ball = _mesh(_sphere(0.22), _mat(Color(0.98, 0.97, 0.9)))
+	var bm := ShintyBallModel.new()
+	bm.simulate = false
+	bm.auto_find_hails = false
+	bm.scale = Vector3.ONE * ShintyMatchAdapter.TO_YARDS
+	bm.display_scale = 4.0
+	ball = bm
 	add_child(ball)
-	ball_shadow = _mesh(_cylinder(0.22, 0.01), _mat(Color(0, 0, 0, 0.35)))
-	add_child(ball_shadow)
 	camera = Camera3D.new()
 	camera.fov = 45.0
 	camera.far = 6000.0  # the far shore of the Forth
@@ -52,9 +55,7 @@ func w(v: Vector2, height: float = 0.0) -> Vector3:
 func _process(delta: float) -> void:
 	for p in m.players:
 		_update_player(p, figures[p], delta)
-	var b := w(m.ball_pos, m.ball_z + 0.22)
-	ball.position = b
-	ball_shadow.position = Vector3(b.x, 0.03, b.z)
+	ball.position = w(m.ball_pos, m.ball_z + ShintyBallPhysics.RADIUS * ShintyMatchAdapter.TO_YARDS)
 	_update_camera(delta)
 
 
@@ -62,26 +63,12 @@ func _update_player(p, f: Dictionary, delta: float) -> void:
 	var root: Node3D = f["root"]
 	var speed: float = p.vel.length()
 	f["phase"] += delta * speed * 1.6
-	var bob: float = abs(sin(f["phase"])) * 0.12 * min(speed / 5.0, 1.0)
-	root.position = w(p.pos, bob)
+	root.position = w(p.pos)
 	var dir := Vector3(p.facing.x, 0, p.facing.y)
 	if dir.length() > 0.01:
 		var target := atan2(-dir.x, -dir.z)
 		root.rotation.y = lerp_angle(root.rotation.y, target, min(1.0, delta * 14.0))
-	# Legs swing while running.
-	var stride: float = sin(f["phase"]) * 0.6 * min(speed / 4.0, 1.0)
-	f["leg_l"].rotation.x = stride
-	f["leg_r"].rotation.x = -stride
-	# Caman: carried low in front, swung back and through when hitting.
-	var arm: Node3D = f["caman"]
-	var t: float = 1.0 - p.swing / 0.3
-	if p.swing <= 0.0:
-		arm.rotation.x = 0.6
-	elif t < 0.4:
-		arm.rotation.x = lerp(0.6, -1.6, t / 0.4)
-	else:
-		arm.rotation.x = lerp(-1.6, 1.8, (t - 0.4) / 0.6)
-	arm.rotation.z = -0.25
+	ShintyMatchAdapter.update_player(f, p.vel, p.swing, false, w(m.ball_pos, m.ball_z))
 	f["ring"].visible = p == m.human
 	f["arrow"].visible = p == m.human
 	f["tag"].visible = p == m.human or p.is_keeper()
@@ -106,68 +93,20 @@ func screen_pos(v: Vector2, height: float = 0.0) -> Vector2:
 ## Hail models: swap point for proper goal models. Each hail is built in the
 ## pitch's goal frame (origin on the goal line, +X across, -Z out of the pitch).
 func _build_hails() -> void:
-	var post_mat := _mat(Color.WHITE)
-	var net_mat := _mat(Color(1, 1, 1, 0.22))
-	net_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	for end in 2:
-		var hail := Node3D.new()
+		var hail := ShintyHailModel.new()
 		hail.name = "Hail%d" % end
-		hail.transform = pitch.goal_transform(end)
+		hail.width = m.GOAL_W * ShintyMatchAdapter.YARD
+		hail.height = m.CROSSBAR * ShintyMatchAdapter.YARD
+		# The pitch's goal frame has the net towards -Z; the model's is +Z.
+		hail.transform = pitch.goal_transform(end) * Transform3D(
+			Basis(Vector3.UP, PI).scaled(Vector3.ONE * ShintyMatchAdapter.TO_YARDS), Vector3.ZERO)
 		add_child(hail)
-		var half: float = m.GOAL_W / 2.0
-		for sx in [-half, half]:
-			var post := _mesh(_cylinder(0.08, m.CROSSBAR), post_mat)
-			post.position = Vector3(sx, m.CROSSBAR / 2.0, 0)
-			hail.add_child(post)
-		var bar := _mesh(_box(Vector3(m.GOAL_W, 0.14, 0.14)), post_mat)
-		bar.position = Vector3(0, m.CROSSBAR, 0)
-		hail.add_child(bar)
-		var net := _mesh(_box(Vector3(m.GOAL_W, m.CROSSBAR, 2.0)), net_mat)
-		net.position = Vector3(0, m.CROSSBAR / 2.0, -1.0)
-		hail.add_child(net)
 
 
 func _build_player(p) -> Dictionary:
-	var prim: Color = m.colors[p.team][0]
-	var sec: Color = m.colors[p.team][1]
-	if p.is_keeper():
-		prim = Color(0.12, 0.12, 0.12) if p.team == 0 else Color(0.3, 0.75, 0.3)
-	var root := Node3D.new()
-	add_child(root)
-	var shirt := _mat(prim)
-	var shorts := _mat(sec.darkened(0.2) if sec.get_luminance() > 0.5 else sec)
-	var leg_mat := _mat(Color(0.12, 0.12, 0.14))
-	var legs := []
-	for side in [-1.0, 1.0]:
-		var hip := Node3D.new()
-		hip.position = Vector3(0.14 * side, 0.85, 0)
-		root.add_child(hip)
-		var leg := _mesh(_capsule(0.1, 0.85), leg_mat)
-		leg.position = Vector3(0, -0.42, 0)
-		hip.add_child(leg)
-		legs.append(hip)
-	var hips := _mesh(_box(Vector3(0.45, 0.25, 0.28)), shorts)
-	hips.position = Vector3(0, 0.9, 0)
-	root.add_child(hips)
-	var body := _mesh(_capsule(0.26, 0.8), shirt)
-	body.position = Vector3(0, 1.3, 0)
-	root.add_child(body)
-	var stripe := _mesh(_box(Vector3(0.5, 0.1, 0.5)), _mat(sec))
-	stripe.position = Vector3(0, 1.35, 0)
-	root.add_child(stripe)
-	var head := _mesh(_sphere(0.16), _mat(SKIN))
-	head.position = Vector3(0, 1.85, 0)
-	root.add_child(head)
-	# Caman pivots at the hands; the stick hangs down and forward.
-	var hands := Node3D.new()
-	hands.position = Vector3(0.28, 1.15, -0.1)
-	root.add_child(hands)
-	var stick := _mesh(_cylinder(0.035, 1.1), _mat(WOOD))
-	stick.position = Vector3(0, -0.55, 0)
-	hands.add_child(stick)
-	var bas := _mesh(_box(Vector3(0.1, 0.1, 0.28)), _mat(WOOD.darkened(0.2)))
-	bas.position = Vector3(0, -1.1, -0.1)
-	hands.add_child(bas)
+	var f := ShintyMatchAdapter.build_player(self, p.data, ShintyMatchAdapter.team_from_colors(m.colors[p.team][0], m.colors[p.team][1]))
+	var root: Node3D = f["root"]
 	var ring := _mesh(_torus(0.75, 0.95), _mat(Color(1, 0.92, 0.2), true))
 	ring.position = Vector3(0, 0.04, 0)
 	root.add_child(ring)
@@ -185,8 +124,8 @@ func _build_player(p) -> Dictionary:
 	tag.position = Vector3(0, 2.25, 0)
 	root.add_child(tag)
 	root.position = w(p.pos)
-	return {"root": root, "leg_l": legs[0], "leg_r": legs[1], "caman": hands,
-		"ring": ring, "arrow": arrow, "tag": tag, "phase": randf() * TAU}
+	f.merge({"ring": ring, "arrow": arrow, "tag": tag, "phase": 0.0})
+	return f
 
 
 # ---------------------------------------------------------------- mesh helpers

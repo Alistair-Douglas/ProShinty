@@ -55,8 +55,7 @@ entry to `teams` with an `id`, `name`, `short` and `colors`.
 - `scenes/match.tscn`, `scripts/match.gd`: the match rules, ball physics and AI.
   The simulation runs on a flat pitch in yards; nothing in it depends on 3D.
 - `scripts/match_view.gd`: builds and animates the 3D players, ball, hails and
-  broadcast camera from the match state. `_build_player()` and `_build_hails()`
-  are the places to swap in proper models.
+  broadcast camera from the match state, using the models in `models/`.
 - `pitch/`: the Aberdour pitch, scenery, sky and lighting (from the separate
   shinty-pitch project; see `docs/pitch.md`). The match uses it in yards
   (`units_per_yard = 1`) with its own placeholder goals turned off.

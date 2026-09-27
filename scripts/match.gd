@@ -80,6 +80,7 @@ var ball_pos := Vector2.ZERO
 var ball_z := 0.0
 var ball_vel := Vector2.ZERO
 var ball_vz := 0.0
+var ball_sim := ShintyMatchAdapter.BallSim.new(PITCH, GOAL_W, CROSSBAR)
 var carrier: Player = null
 var last_team := -1
 
@@ -650,14 +651,14 @@ func _strike(p: Player, dir: Vector2, power: float, loft: float, skill_key: Stri
 
 
 func _strike_speed(p: Player, dir: Vector2, speed: float, loft: float, skill_key: String, power: float = 0.5) -> void:
-	var skill: float = clamp(p.r(skill_key) / 100.0 + _skill_mod(p.team), 0.05, 1.0)
-	var err := (1.0 - skill) * 0.25 * (0.6 + power * 0.6) * randf_range(-1.0, 1.0)
-	dir = dir.normalized().rotated(err)
 	carrier = null
-	ball_pos = p.pos + dir * (PLAYER_R + 0.6)
-	ball_vel = dir * speed
-	ball_vz = loft
+	ball_pos = p.pos + dir.normalized() * (PLAYER_R + 0.6)
+	var res := ShintyMatchAdapter.strike_like_match(p.data, dir, speed, loft, skill_key, ball_vel, ball_vz, _skill_mod(p.team))
+	ball_vel = res["ball_vel"]
+	ball_vz = res["ball_vz"]
+	ball_sim.set_spin(res["spin"])
 	ball_z = max(ball_z, 0.2)
+	dir = ball_vel.normalized() if ball_vel.length() > 0.1 else dir
 	p.touch_block = 0.35
 	p.swing = 0.3
 	p.facing = dir
@@ -703,21 +704,7 @@ func _update_ball(dt: float) -> void:
 		ball_z = 0.0
 		ball_vz = 0.0
 		return
-	ball_pos += ball_vel * dt
-	if ball_z > 0.0 or ball_vz > 0.0:
-		ball_vz -= GRAVITY * dt
-		ball_z += ball_vz * dt
-		if ball_z <= 0.0:
-			ball_z = 0.0
-			if ball_vz < -2.5:
-				ball_vz = -ball_vz * 0.45
-				ball_vel *= 0.8
-			else:
-				ball_vz = 0.0
-	else:
-		var sp := ball_vel.length()
-		if sp > 0.0:
-			ball_vel = ball_vel.move_toward(Vector2.ZERO, (3.0 + sp * 0.35) * dt)
+	ball_sim.step(self, dt)
 	if state == State.PLAY:
 		_ball_touches()
 
