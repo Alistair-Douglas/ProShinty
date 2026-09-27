@@ -17,6 +17,9 @@ a full 12-a-side match against the computer.
 | Sprint | Shift | RB |
 | Hit (hold for more power, release to swing), or poke at the carrier's ball | Space | X / Square |
 | Pass to the team-mate you're facing | E | A / Cross |
+| Block (back of the stick over their ball) | F | Y / Triangle |
+| Cleek (stick up under their swing) | C | B / Circle |
+| Shoulder barge | R | Left stick click |
 | Switch player | Q | LB |
 | Pause (M to quit while paused) | Esc | Start |
 
@@ -66,6 +69,15 @@ entry to `teams` with an `id`, `name`, `short` and `colors`.
   hit, golf-style: the face and swing path set the direction and any curve,
   and a thin, fat, heel or toe contact is a miss-hit. Better players, lighter
   swings and standing still mean cleaner hits.
+- Four ways to stop an opponent's swing (`scripts/swing_counters.gd`):
+  swing at their ball too (get there first and it's yours, arrive late and
+  it's theirs, arrive together and the camans clash and the ball goes
+  anywhere); shoulder barge them (legal, but barge someone in the back and
+  it's a free hit the other way if the referee sees it); block by getting the
+  back of your stick over the ball (block too late and you get hit); or cleek
+  by raising your stick under their swing so it glances off. The computer
+  players read each swing once and pick a counter from how close they are
+  and how long until it lands.
 - Keepers reach for shots with stick, hands and body and dive for ones going
   wide of them. A save smothers the ball, which drops at the keeper's feet.
 - Ratings matter: pace sets speed, control decides whether you trap a fast ball

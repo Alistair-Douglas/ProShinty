@@ -45,7 +45,7 @@ func _draw() -> void:
 			if m.charge > 1.0:
 				# Overswing: no extra power, just more chance of a miss-hit.
 				draw_rect(Rect2(c + Vector2(40, 0), Vector2(40 * (m.charge - 1.0), 6)), Color(0.9, 0.1, 0.1))
-	var help := "Move WASD/Arrows   Sprint Shift   Hit Space (hold for power) / Poke   Pass E   Switch Q   Pause Esc"
+	var help := "Move WASD/Arrows   Sprint Shift   Hit Space (hold)   Pass/Poke E   Block F   Cleek C   Barge R   Switch Q   Pause Esc"
 	draw_rect(Rect2(Vector2(0, screen.y - 24), Vector2(w, 24)), Color(0, 0, 0, 0.45))
 	draw_string(font, Vector2(0, screen.y - 7), help, HORIZONTAL_ALIGNMENT_CENTER, w, 13, Color(1, 1, 1, 0.8))
 	var centre_text := ""

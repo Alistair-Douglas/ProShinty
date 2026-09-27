@@ -36,7 +36,7 @@ const SKIN_TONES := [
 const ACTIONS := {
 	"swing": 0.78, "pass": 0.55, "volley": 0.62, "tackle": 0.55, "trap": 0.4,
 	"save_left": 0.9, "save_right": 0.9, "celebrate": 1.6,
-	"shy": 1.5, "stumble": 0.7, "poke": 0.35,
+	"shy": 1.5, "stumble": 0.7, "poke": 0.35, "block": 0.6, "cleek": 0.45, "barge": 0.4,
 }
 
 @export_group("Body")
@@ -762,7 +762,7 @@ func _pose(_delta: float) -> void:
 			hips_off += r[3]
 
 	# Reaching: bend and lunge towards the target (hockey-style reach).
-	var reaching := _reach > 0.01 and _reach_target != null and (_action == &"" or _action == &"poke")
+	var reaching := _reach > 0.01 and _reach_target != null and (_action == &"" or _action == &"poke" or _action == &"block")
 	if reaching:
 		var loc: Vector3 = global_transform.affine_inverse() * (_reach_target as Vector3)
 		var flat := Vector2(loc.x, loc.z).length()
@@ -815,7 +815,9 @@ func _pose(_delta: float) -> void:
 	var p_sk: Vector3 = hips_g.origin + yaw_b * cam_p
 	var d_sk: Vector3 = (yaw_b * cam_d).normalized()
 	# A shy is struck with the back of the bas, so the face is turned round.
-	var face_dir := Vector3(0.0, 0.3, 1.0) if _action == &"shy" else Vector3(0.0, -0.3, -1.0)
+	# So is a block: the stick is turned so its back sits over the ball.
+	var back_face := _action == &"shy" or _action == &"block"
+	var face_dir := Vector3(0.0, 0.3, 1.0) if back_face else Vector3(0.0, -0.3, -1.0)
 	var cb := _caman_basis(d_sk, yaw_b * face_dir)
 	var ct := Transform3D(cb, p_sk)
 	var top_side := "Right" if left_handed else "Left"
@@ -842,7 +844,7 @@ func _pose(_delta: float) -> void:
 			var rd := tgt - anchor
 			if rd.length() > 0.05:
 				var dn := rd.normalized()
-				var rt := Transform3D(_caman_basis(dn, yaw_b * Vector3(0.0, -0.3, -1.0)), tgt - dn * head_len)
+				var rt := Transform3D(_caman_basis(dn, yaw_b * face_dir), tgt - dn * head_len)
 				ct = ct.interpolate_with(rt, _reach)
 	# Keep both grips within arm's reach: slide the caman towards the shoulders.
 	for iter in 3:
@@ -1035,6 +1037,27 @@ func _action_pose(rot: Dictionary) -> Array:
 			rot["LeftLowerLeg"] += Vector3(-0.5 * k, 0, 0)
 			rot["RightUpperLeg"] += Vector3(-0.35 * k, 0, 0)
 			return []
+		&"block":
+			# Get low behind the stick; set_reach() puts its back over the ball.
+			var k := sin(minf(1.0, t / (_action_len * 0.3)) * PI * 0.5)
+			_crouch(rot, 0.8 * k)
+			rot["Spine"] += Vector3(-0.25 * k, 0, 0)
+			return []
+		&"cleek":
+			# Caman up at an angle in front, under the arc of the other swing.
+			var u := clampf(t / _action_len, 0.0, 1.0)
+			var k := sin(minf(1.0, u * 2.5) * PI * 0.5) * (1.0 - _ease(maxf(0.0, (u - 0.75) / 0.25)))
+			_crouch(rot, 0.3 * k)
+			var p8 := ready_p.lerp(Vector3(0.1, 0.3, -0.35), k)
+			var d8 := ready_d.slerp(Vector3(-0.35, 0.8, -0.5).normalized(), k)
+			return [p8, d8, 0.15 * k, hips_off]
+		&"barge":
+			# Shoulder first: drop and turn the shoulder into them.
+			var k := sin(clampf(t / _action_len, 0.0, 1.0) * PI)
+			_crouch(rot, 0.35 * k)
+			rot["Spine"] += Vector3(-0.2 * k, 0, 0.25 * k)
+			rot["Chest"] += Vector3(0, 0.35 * k, 0)
+			return [ready_p, ready_d, -0.3 * k, hips_off]
 		&"celebrate":
 			var u := clampf(t / _action_len, 0.0, 1.0)
 			var k := sin(minf(1.0, u * 3.0) * PI * 0.5) * (1.0 - _ease(maxf(0.0, (u - 0.75) / 0.25)))

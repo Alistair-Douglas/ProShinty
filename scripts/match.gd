@@ -8,6 +8,7 @@ const TeamData := preload("res://scripts/team_data.gd")
 const MatchView := preload("res://scripts/match_view.gd")
 const Hud := preload("res://scripts/hud.gd")
 const Body := preload("res://scripts/player_physics.gd")
+const Counters := preload("res://scripts/swing_counters.gd")
 
 const PITCH := Vector2(150, 75)
 const GOAL_W := 4.0          # 12 ft between the posts
@@ -64,6 +65,13 @@ class Player:
 	var anim := {}           # latest one-off animation, for the view
 	var anim_seq := 0
 	var charged := 0.0       # human: how much of the backswing was held
+	# Countering a swing (see swing_counters.gd)
+	var block_t := 0.0
+	var cleek_t := 0.0
+	var barge_t := 0.0
+	var barge_hit := false
+	var counter_age := 0.0
+	var read_swing := -1     # AI: the opponent swing already reacted to
 	var overswing := 0.0     # human: 0..1 past full power
 
 	func r(key: String) -> float:
@@ -109,6 +117,7 @@ var ball_sim := ShintyMatchAdapter.BallSim.new(PITCH, GOAL_W, CROSSBAR)
 var carrier: Player = null
 var last_team := -1
 var gather_keeper: Player = null   # a saved ball dropping to the keeper
+var foul_pending = null            # [offender, fouled] seen by the referee
 var gather_t := 0.0
 
 
@@ -358,6 +367,7 @@ func _update_players(dt: float) -> void:
 		p.swing = max(0.0, p.swing - dt)
 		p.stagger = max(0.0, p.stagger - dt)
 		p.lunge = max(0.0, p.lunge - dt)
+		Counters.tick(p, dt)
 		p.sprinting = false
 	if human != null and human.is_keeper() and carrier != human:
 		human = _nearest_outfield(human_side, ball_pos, null)
@@ -372,6 +382,12 @@ func _update_players(dt: float) -> void:
 			Body.keeper_reflex(self, p, dt)
 		_move(p, dt)
 	_separate()
+	if foul_pending != null:
+		var fouled: Player = foul_pending[1]
+		foul_pending = null
+		_restart(fouled.team, fouled.pos, "Free hit")
+		_say("Foul: push in the back", 1.5)
+		return
 	for p in players:
 		Body.update_stick(self, p, dt)
 		if p.swing_t >= 0.0:
@@ -450,6 +466,8 @@ func _ai_chase(p: Player, dt: float) -> void:
 	_steer_to(p, _ball_intercept_point(), true)
 	if carrier != null and carrier.team != p.team:
 		_steer_to(p, carrier.pos, true)
+		if Counters.ai_counter(self, p):
+			return
 		p.think -= dt
 		if p.think <= 0.0 and p.pos.distance_to(carrier.pos) < REACH + 0.5:
 			p.think = _reaction(p.team)
@@ -610,10 +628,14 @@ func _human_control(dt: float) -> void:
 			return
 	var aim := mv.normalized() if mv.length() > 0.15 else p.facing
 	if Input.is_action_just_pressed("shoot"):
-		if carrier != null and carrier.team != p.team and p.pos.distance_to(carrier.pos) < REACH + 0.8:
-			_try_tackle(p, carrier)
-		else:
-			charge = 0.0
+		# Also how you swing at an opponent's ball: beat their swing to it.
+		charge = 0.0
+	if Input.is_action_just_pressed("block"):
+		Counters.start_block(self, p)
+	if Input.is_action_just_pressed("cleek"):
+		Counters.start_cleek(self, p)
+	if Input.is_action_just_pressed("barge"):
+		Counters.start_barge(self, p)
 	if charge >= 0.0:
 		# Golf-style meter: it fills to full power, then keeps going into an
 		# overswing that adds power error (miss-hits and curve) but no power.
@@ -737,6 +759,8 @@ func _contact(p: Player) -> void:
 	var req: Dictionary = p.swing_req
 	var shy: bool = p.shy_toss
 	p.shy_toss = false
+	if not shy and Counters.intercept(self, p):
+		return
 	var offset := 0.0
 	if shy:
 		# How far the ball has drifted from where the overhead swing comes through.
@@ -745,14 +769,22 @@ func _contact(p: Player) -> void:
 		offset = max(0.0, spot.distance_to(Vector3(ball_pos.x, ball_pos.y, ball_z)) - 0.5)
 	elif carrier == p:
 		offset = 0.0
-	elif carrier == null:
+		# An opponent swinging at the same ball at the same moment: a clash.
+		for q in squads[1 - p.team]:
+			if q.swing_t >= 0.0 and q.swing_t < Counters.CLASH_WINDOW and q.pos.distance_to(ball_pos) < Body.max_reach(q) + 0.3:
+				Counters.clash(self, p, q)
+				return
+	elif carrier == null or carrier.team != p.team:
+		if carrier != null and carrier.swing_t >= 0.0 and carrier.swing_t < Counters.CLASH_WINDOW:
+			Counters.clash(self, p, carrier)
+			return
 		# First-time hit: how far the ball is from where the caman comes through.
 		var spot := Body.rest_spot(p) + Vector3(p.facing.x, p.facing.y, 0.0) * 0.1
 		offset = max(0.0, spot.distance_to(Vector3(ball_pos.x, ball_pos.y, ball_z)) - Body.CONTACT_R)
 		if ball_z > REACH_HEIGHT or offset > 0.7:
 			offset = 99.0
 	else:
-		offset = 99.0   # someone took it off you mid-swing
+		offset = 99.0   # a team-mate has it
 	var mine := carrier == p
 	if offset > 5.0:
 		_fresh_air(p, mine, shy)
@@ -769,6 +801,11 @@ func _contact(p: Player) -> void:
 	if res["miss"]:
 		_fresh_air(p, mine, shy)
 		return
+	if carrier != null and carrier != p:
+		# Got there first and hit it off their stick.
+		carrier.swing_t = -1.0
+		carrier.touch_block = 0.3
+		events.append({"type": "beat_to_it", "team": p.team})
 	carrier = null
 	if not shy:
 		var at: Vector3 = p.stick if mine else Body.rest_spot(p)
@@ -956,7 +993,7 @@ func _ball_touches(before: Vector3) -> void:
 	var stretch: float = clamp((p.pos.distance_to(ball_pos) - 1.0) / 1.2, 0.0, 1.0)
 	var chance: float
 	if best_keeper:
-		chance = clamp(0.42 + p.r("keeping") / 100.0 * 0.5 - (sp - 20.0) * 0.012 - stretch * 0.3 + _skill_mod(p.team), 0.2, 0.95)
+		chance = clamp(0.36 + p.r("keeping") / 100.0 * 0.5 - (sp - 20.0) * 0.012 - stretch * 0.3 + _skill_mod(p.team), 0.2, 0.95)
 	else:
 		chance = clamp(p.r("control") / 100.0 * (18.0 / sp) * lerp(1.0, 0.7, stretch) * grip + _skill_mod(p.team), 0.05, 0.9)
 		if p.team == last_team:

@@ -149,6 +149,8 @@ static func collide(m) -> void:
 			if closing >= 0.0:
 				continue
 			var impulse: float = -(1.0 + RESTITUTION) * closing / (inv_a + inv_b)
+			if a.team != b.team:
+				impulse *= maxf(m.Counters.barge_contact(m, a, b), m.Counters.barge_contact(m, b, a))
 			a.vel -= nrm * impulse * inv_a
 			b.vel += nrm * impulse * inv_b
 			if a.team != b.team:
@@ -190,7 +192,9 @@ static func update_stick(m, p, dt: float) -> void:
 		var ball := Vector3(m.ball_pos.x, m.ball_pos.y, m.ball_z)
 		var ahead := ball + Vector3(m.ball_vel.x, m.ball_vel.y, m.ball_vz) * 0.1
 		var near: float = p.pos.distance_to(m.ball_pos)
-		if p.is_keeper() and p.save_point != null:
+		if p.block_t > 0.0:
+			p.stick_target = Vector3(ball.x, ball.y, 0.0)   # back of the stick over the ball
+		elif p.is_keeper() and p.save_point != null:
 			p.stick_target = p.save_point
 		elif m.carrier == null and near < REACT_RADIUS + (1.5 if keeper_area else 0.0):
 			p.stick_target = ahead

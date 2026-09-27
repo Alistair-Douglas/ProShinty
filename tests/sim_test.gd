@@ -35,7 +35,7 @@ func _run() -> void:
 			m.step(1.0 / 60.0)
 			steps += 1
 		for e in m.events:
-			if e["type"] in ["Shy", "Corner", "Hit-out", "save", "knockdown", "spill", "block", "one_hand_block"]:
+			if e["type"] in ["Shy", "Corner", "Hit-out", "save", "knockdown", "spill", "block", "one_hand_block", "clash", "cleek", "stick_block", "late_block", "barge", "beat_to_it", "Free hit"]:
 				outs[e["type"]] = outs.get(e["type"], 0) + 1
 			elif e["type"] == "hit":
 				var k: String = ("shy " if e["shy"] else "") + e["kind"]
