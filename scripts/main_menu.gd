@@ -47,10 +47,12 @@ func _ready() -> void:
 		return
 
 	var names := []
+	var logos := []
 	for t in Game.teams:
 		names.append("%s  (OVR %d)" % [t["name"], t["overall"]])
-	home_pick = _option(left, "Home team", names, Game.home_index)
-	away_pick = _option(left, "Away team", names, Game.away_index)
+		logos.append(TeamData.logo(t))
+	home_pick = _option(left, "Home team", names, Game.home_index, logos)
+	away_pick = _option(left, "Away team", names, Game.away_index, logos)
 	side_pick = _option(left, "You control", ["Home team", "Away team"], Game.human_side)
 	diff_pick = _option(left, "Difficulty", ["Easy", "Normal", "Hard"], Game.difficulty)
 	length_pick = _option(left, "Half length", ["2 minutes", "3 minutes", "5 minutes", "10 minutes"], [2, 3, 5, 10].find(Game.half_minutes))
@@ -104,7 +106,7 @@ func _show_problem(parent: Control) -> void:
 	quit.grab_focus()
 
 
-func _option(parent: Control, label: String, items: Array, selected: int) -> OptionButton:
+func _option(parent: Control, label: String, items: Array, selected: int, icons: Array = []) -> OptionButton:
 	var row := HBoxContainer.new()
 	var l := Label.new()
 	l.text = label
@@ -112,8 +114,13 @@ func _option(parent: Control, label: String, items: Array, selected: int) -> Opt
 	row.add_child(l)
 	var o := OptionButton.new()
 	o.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	for it in items:
-		o.add_item(it)
+	o.add_theme_constant_override("icon_max_width", 24)
+	o.get_popup().add_theme_constant_override("icon_max_width", 24)
+	for i in items.size():
+		if i < icons.size() and icons[i] != null:
+			o.add_icon_item(icons[i], items[i])
+		else:
+			o.add_item(items[i])
 	o.select(max(selected, 0))
 	row.add_child(o)
 	parent.add_child(row)
@@ -124,6 +131,9 @@ func _refresh_squads() -> void:
 	var text := ""
 	for idx in [home_pick.selected, away_pick.selected]:
 		var team: Dictionary = Game.teams[idx]
+		var crest := TeamData.logo_path(team)
+		if crest != "":
+			text += "[img=48x48]%s[/img]  " % crest
 		text += "[b]%s[/b]  team overall %d\n" % [team["name"], team["overall"]]
 		text += "[table=9]"
 		for h in ["#", "Name", "Pos", "OVR", "PAC", "CTL", "PAS", "SHT", "TKL"]:

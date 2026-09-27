@@ -9,6 +9,7 @@ const MatchView := preload("res://scripts/match_view.gd")
 const Hud := preload("res://scripts/hud.gd")
 const Body := preload("res://scripts/player_physics.gd")
 const Counters := preload("res://scripts/swing_counters.gd")
+const TeamAI := preload("res://scripts/team_ai.gd")
 
 const PITCH := Vector2(150, 75)
 const GOAL_W := 4.0          # 12 ft between the posts
@@ -120,6 +121,7 @@ var last_team := -1
 var gather_keeper: Player = null   # a saved ball dropping to the keeper
 var foul_pending = null            # [offender, fouled] seen by the referee
 var gather_t := 0.0
+var team_ai: TeamAI
 
 
 
@@ -143,6 +145,7 @@ func _ready() -> void:
 
 func _setup() -> void:
 	teams = [config["home"], config["away"]]
+	team_ai = TeamAI.new(self)
 	human_side = int(config.get("human_side", 0))
 	difficulty = int(config.get("difficulty", 1))
 	half_seconds = float(config.get("half_seconds", 180.0))
@@ -447,6 +450,8 @@ func _ai_team(t: int, dt: float) -> void:
 		if t != human_side and (difficulty == 2 or own_frac(t, ball_pos.x) < 0.35):
 			n = 2
 		chasers = ranked.slice(0, n)
+	if state == State.PLAY:
+		team_ai.begin_team(t, dt, chasers)
 	for p in squads[t]:
 		if p == human:
 			continue
@@ -460,8 +465,7 @@ func _ai_team(t: int, dt: float) -> void:
 		elif p in chasers:
 			_ai_chase(p, dt)
 		else:
-			var h := home_world(p)
-			_steer_to(p, h, h.distance_to(p.pos) > 12.0)
+			team_ai.off_ball(p, dt)
 
 
 func _ai_chase(p: Player, dt: float) -> void:
@@ -536,15 +540,18 @@ func _ai_pass(p: Player, forward_only: bool) -> bool:
 	for m in squads[p.team]:
 		if m == p or m.is_keeper():
 			continue
-		var d: float = p.pos.distance_to(m.pos)
+		# Judge a runner by where they'll be when the ball arrives.
+		var spot: Vector2 = m.pos + m.vel * 0.6
+		var d: float = p.pos.distance_to(spot)
 		if d < 6.0 or d > 50.0:
 			continue
-		var fwd: float = (m.pos.x - p.pos.x) * attack_dir[p.team]
+		var fwd: float = (spot.x - p.pos.x) * attack_dir[p.team]
 		if forward_only and fwd < 4.0:
 			continue
-		var open_space: float = min(_nearest_opponent_dist(m), 10.0)
-		var lane: float = min(_lane_clearance(p.team, p.pos, m.pos), 5.0)
-		var s: float = fwd * 0.5 + open_space * 1.5 + lane * 2.0 - d * 0.15
+		var open_space: float = min(team_ai._space_at(1 - p.team, spot), 10.0)
+		var lane: float = min(_lane_clearance(p.team, p.pos, spot), 5.0)
+		var s: float = fwd * 0.5 + open_space * 1.5 + lane * 2.0 - d * 0.15 \
+			- max(0.0, 8.0 - team_ai._edge_dist(spot)) * 0.8
 		if s > best_score:
 			best_score = s
 			best = m

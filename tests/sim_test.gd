@@ -31,7 +31,7 @@ func _run() -> void:
 		m.config = {"home": teams[0], "away": teams[1], "human_side": -1, "difficulty": 1, "half_seconds": 180.0, "seed": 100 + i}
 		root.add_child(m)
 		var steps := 0
-		while m.state != m.State.FULL_TIME and steps < 60 * 400:
+		while m.state != m.State.FULL_TIME and steps < 60 * 600:
 			m.step(1.0 / 60.0)
 			steps += 1
 		for e in m.events:

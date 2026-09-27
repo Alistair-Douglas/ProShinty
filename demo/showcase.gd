@@ -243,6 +243,10 @@ func _update_camera(_delta: float) -> void:
 		4:
 			camera.position = Vector3(6.5, 2.2, -16)
 			camera.look_at(Vector3(-0.5, 1.1, -23.5))
+		6:
+			var q := Vector3(-3.25, 0, 6)
+			camera.position = q + Vector3(0.45, 1.72, 1.25)
+			camera.look_at(q + Vector3(0, 1.5, 0))
 		5:
 			camera.position = striker.position + Vector3(2.6, 1.3, 0.4)
 			camera.look_at(striker.position + Vector3(0, 0.9, -0.4))
@@ -254,6 +258,9 @@ func _run_shot() -> void:
 	match _shot:
 		"lineup":
 			cam_mode = 1
+			await _frames(30)
+		"portrait":
+			cam_mode = 6
 			await _frames(30)
 		"closeup":
 			cam_mode = 2

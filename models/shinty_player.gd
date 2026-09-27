@@ -110,8 +110,6 @@ var _free_hand = null             # skeleton-space target for a hand off the cam
 var _free_low = null              # the same for the lower hand (one-handed reach)
 var _one_hand := false
 
-static var _materials := {}
-
 
 # --- Public API -------------------------------------------------------------
 
@@ -136,6 +134,7 @@ func setup(player: Dictionary, team: Dictionary = {}) -> void:
 	shorts_color = kit["shorts"]
 	socks_color = kit["socks"]
 	helmet_color = kit["helmet"]
+	set_meta("kit_pattern", str(team.get("colors", {}).get("pattern", "")))
 	rebuild()
 
 
@@ -396,7 +395,6 @@ func _build() -> void:
 	_rest_origin.clear()
 
 	var s := height_cm / 100.0 / BASE_HEIGHT
-	var w := lerpf(0.86, 1.22, build)       # girth multiplier for meshes
 	var sw := lerpf(0.94, 1.1, build)       # shoulder/hip width multiplier
 
 	_skel = Skeleton3D.new()
@@ -436,220 +434,10 @@ func _build() -> void:
 		_rest_origin[d[0]] = d[2]
 	_hips_rest_y = 0.98
 
-	var skin := _mat(skin_color, 0.7)
-	var shirt := _mat(shirt_color, 0.8)
-	var trim := _mat(trim_color, 0.8)
-	var shorts := _mat(shorts_color, 0.8)
-	var socks := _mat(socks_color, 0.85)
-	var boot := _mat(Color("16161a"), 0.45)
-
-	# Torso
-	var hips := _attach("Hips")
-	_part(hips, _cyl(0.155 * w, 0.165 * w, 0.24), shorts, Vector3(0, -0.02, 0), Vector3(1, 1, 0.72))
-	var spine := _attach("Spine")
-	_part(spine, _cyl(0.15 * w, 0.145 * w, 0.17), shirt, Vector3(0, 0.07, 0), Vector3(1, 1, 0.68))
-	var chest := _attach("Chest")
-	_part(chest, _cyl(0.17 * w, 0.15 * w, 0.17), shirt, Vector3(0, 0.07, 0), Vector3(1, 1, 0.66))
-	var upper := _attach("UpperChest")
-	_part(upper, _cyl(0.175 * w * sw, 0.17 * w, 0.14), shirt, Vector3(0, 0.05, 0), Vector3(1, 1, 0.64))
-	var shoulders := _part(upper, _capsule(0.075 * w, 0.44 * sw), shirt, Vector3(0, 0.085, 0.0), Vector3(1, 1, 0.9))
-	shoulders.rotation = Vector3(0, 0, PI / 2)
-	# Collar
-	_part(upper, _cyl(0.068, 0.078, 0.035), trim, Vector3(0, 0.135, 0))
-	# Chest band in the trim colour so teams read at a distance
-	_part(chest, _cyl(0.172 * w, 0.168 * w, 0.035), trim, Vector3(0, 0.13, 0), Vector3(1, 1, 0.66))
-	if shirt_number > 0 and not low_detail:
-		var back := Label3D.new()
-		back.text = str(shirt_number)
-		back.font_size = 96
-		back.pixel_size = 0.0022
-		back.outline_size = 14
-		back.modulate = trim_color
-		back.outline_modulate = shirt_color.darkened(0.45)
-		back.position = Vector3(0, 0.0, 0.123 * w)
-		back.double_sided = false
-		upper.add_child(back)
-
-	# Head and neck
-	var neck := _attach("Neck")
-	_part(neck, _cyl(0.052, 0.058, 0.11), skin, Vector3(0, 0.03, 0))
-	var head := _attach("Head")
-	_part(head, _sphere(0.112), skin, Vector3(0, 0.11, 0), Vector3(0.9, 1.05, 1.0))
-	_part(head, _sphere(0.02), skin, Vector3(0, 0.09, -0.112))  # nose
-	if not low_detail:
-		var eye := _mat(Color("1d1d22"), 0.3)
-		_part(head, _sphere(0.012), eye, Vector3(-0.037, 0.125, -0.098))
-		_part(head, _sphere(0.012), eye, Vector3(0.037, 0.125, -0.098))
-		_part(head, _sphere(0.02), skin, Vector3(-0.1, 0.11, 0.0), Vector3(0.5, 1, 0.8))  # ears
-		_part(head, _sphere(0.02), skin, Vector3(0.1, 0.11, 0.0), Vector3(0.5, 1, 0.8))
-	if wear_helmet:
-		_build_helmet(head)
-	else:
-		var hair := _mat(skin_color.darkened(0.7), 0.9)
-		var cap := _part(head, _hemi(0.118), hair, Vector3(0, 0.125, 0.008), Vector3(0.93, 1.0, 1.0))
-		cap.rotation.x = -0.25
-
-	# Arms
-	for side in ["Left", "Right"]:
-		var ua := _attach(side + "UpperArm")
-		_part(ua, _capsule(0.052 * w, 0.31), shirt, Vector3(0, -0.14, 0))
-		_part(ua, _cyl(0.054 * w, 0.054 * w, 0.03), trim, Vector3(0, -0.255, 0))
-		var la := _attach(side + "LowerArm")
-		_part(la, _capsule(0.042 * w, 0.29), skin, Vector3(0, -0.135, 0))
-		var hand := _attach(side + "Hand")
-		_part(hand, _sphere(0.045), skin, Vector3(0, -0.05, 0), Vector3(0.85, 1.25, 0.95))
-
-	# Legs
-	for side in ["Left", "Right"]:
-		var ul := _attach(side + "UpperLeg")
-		_part(ul, _capsule(0.07 * w, 0.46), skin, Vector3(0, -0.22, 0))
-		_part(ul, _cyl(0.092 * w, 0.086 * w, 0.2), shorts, Vector3(0, -0.07, 0))
-		var ll := _attach(side + "LowerLeg")
-		_part(ll, _capsule(0.056 * w, 0.44), skin, Vector3(0, -0.2, 0))
-		_part(ll, _cyl(0.061 * w, 0.046 * w, 0.33), socks, Vector3(0, -0.25, 0))
-		_part(ll, _cyl(0.063 * w, 0.063 * w, 0.03), trim, Vector3(0, -0.1, 0))
-		var foot := _attach(side + "Foot")
-		_part(foot, _box(Vector3(0.1, 0.075, 0.27)), boot, Vector3(0, -0.02, -0.06))
-
-	_build_caman()
+	# Meshes, materials and the caman live in ShintyPlayerLook.
+	_caman = ShintyPlayerLook.dress(self, _skel)
 	_pose(0.0)
 	_head_prev = get_caman_head_position()
-
-
-func _build_helmet(head: Node3D) -> void:
-	var shell := _mat(helmet_color, 0.35, 0.1)
-	var metal := _mat(Color("b8bcc2"), 0.3, 0.8)
-	var black := _mat(Color("1b1b1f"), 0.6)
-	var c := Vector3(0, 0.115, 0.004)
-	# Shell: dome plus a band round the back of the head
-	var dome := _part(head, _hemi(0.132), shell, c + Vector3(0, 0.005, 0), Vector3(0.92, 1.0, 1.02))
-	dome.rotation.x = -0.12
-	var band := _part(head, _cyl(0.13, 0.126, 0.07), shell, c + Vector3(0, -0.02, 0.012), Vector3(0.92, 1, 1.0))
-	band.rotation.x = -0.05
-	# Rim over the brow
-	_part(head, _box(Vector3(0.2, 0.022, 0.03)), shell, c + Vector3(0, 0.035, -0.118))
-	if low_detail:
-		_part(head, _box(Vector3(0.17, 0.14, 0.012)), metal, c + Vector3(0, -0.05, -0.137))
-		return
-	# Face guard: vertical bars on an arc in front of the face
-	var r := 0.138
-	for deg in [-50.0, -25.0, 0.0, 25.0, 50.0]:
-		var a := deg_to_rad(deg)
-		var p := c + Vector3(sin(a) * r * 0.92, -0.045, -cos(a) * r)
-		_part(head, _cyl(0.0055, 0.0055, 0.15), metal, p)
-	# Horizontal bars (built from short segments round the arc)
-	for y in [-0.005, -0.075, -0.115]:
-		var prev := Vector3.ZERO
-		for i in 9:
-			var a2 := deg_to_rad(lerpf(-62.0, 62.0, i / 8.0))
-			var p2 := c + Vector3(sin(a2) * r * 0.92, y, -cos(a2) * r)
-			if i > 0:
-				_segment(head, prev, p2, 0.0055, metal)
-			prev = p2
-	# Chin strap
-	_part(head, _box(Vector3(0.012, 0.11, 0.012)), black, c + Vector3(-0.104, -0.075, -0.02))
-	_part(head, _box(Vector3(0.012, 0.11, 0.012)), black, c + Vector3(0.104, -0.075, -0.02))
-
-
-func _build_caman() -> void:
-	_caman = Node3D.new()
-	_caman.name = "Caman"
-	_skel.add_child(_caman)
-	var wood := _mat(Color("b98a52"), 0.55)
-	var head_wood := _mat(Color("a8763f"), 0.5)
-	var tape := _mat(Color("202024"), 0.8)
-	# Shaft from the butt (origin) down -Y
-	_part(_caman, _cyl(0.015, 0.018, CAMAN_LENGTH - 0.12), wood, Vector3(0, -(CAMAN_LENGTH - 0.12) / 2.0, 0))
-	_part(_caman, _cyl(0.019, 0.019, 0.3), tape, Vector3(0, -0.15, 0))
-	_part(_caman, _cyl(0.022, 0.022, 0.02), tape, Vector3(0, -0.005, 0))
-	# The bas (head): a wedge that curves forward (-Z); both faces can strike.
-	var segs := [
-		[Vector3(0, -CAMAN_LENGTH + 0.1, 0.004), 0.06, 0.0],
-		[Vector3(0, -CAMAN_LENGTH + 0.05, -0.012), 0.06, 0.35],
-		[Vector3(0, -CAMAN_LENGTH + 0.018, -0.045), 0.065, 0.95],
-		[Vector3(0, -CAMAN_LENGTH + 0.008, -0.09), 0.055, 1.4],
-	]
-	for sgm in segs:
-		var m := _part(_caman, _box(Vector3(0.036, sgm[1], 0.05)), head_wood, sgm[0])
-		m.rotation.x = sgm[2]
-
-
-func _attach(bone_name: String) -> BoneAttachment3D:
-	var a := BoneAttachment3D.new()
-	a.name = bone_name + "Attach"
-	a.bone_name = bone_name
-	_skel.add_child(a)
-	return a
-
-
-func _part(parent: Node3D, mesh: Mesh, mat: Material, pos: Vector3, scl: Vector3 = Vector3.ONE) -> MeshInstance3D:
-	var mi := MeshInstance3D.new()
-	mi.mesh = mesh
-	mi.material_override = mat
-	mi.position = pos
-	mi.scale = scl
-	parent.add_child(mi)
-	return mi
-
-
-func _segment(parent: Node3D, a: Vector3, b: Vector3, radius: float, mat: Material) -> void:
-	var mi := _part(parent, _cyl(radius, radius, a.distance_to(b)), mat, (a + b) / 2.0)
-	var y := (b - a).normalized()
-	var x := y.cross(Vector3.FORWARD if absf(y.z) < 0.9 else Vector3.RIGHT).normalized()
-	mi.basis = Basis(x, y, x.cross(y))
-
-
-func _cyl(top: float, bottom: float, h: float) -> CylinderMesh:
-	var m := CylinderMesh.new()
-	m.top_radius = top
-	m.bottom_radius = bottom
-	m.height = h
-	m.radial_segments = 10 if low_detail else 16
-	m.rings = 1
-	return m
-
-
-func _capsule(r: float, h: float) -> CapsuleMesh:
-	var m := CapsuleMesh.new()
-	m.radius = r
-	m.height = maxf(h, r * 2.0)
-	m.radial_segments = 10 if low_detail else 16
-	m.rings = 4
-	return m
-
-
-func _sphere(r: float) -> SphereMesh:
-	var m := SphereMesh.new()
-	m.radius = r
-	m.height = r * 2.0
-	m.radial_segments = 10 if low_detail else 18
-	m.rings = 6 if low_detail else 10
-	return m
-
-
-func _hemi(r: float) -> SphereMesh:
-	var m := _sphere(r)
-	m.is_hemisphere = true
-	m.height = r
-	return m
-
-
-func _box(size: Vector3) -> BoxMesh:
-	var m := BoxMesh.new()
-	m.size = size
-	return m
-
-
-static func _mat(color: Color, roughness: float, metallic: float = 0.0) -> StandardMaterial3D:
-	var key := "%s/%.2f/%.2f" % [color.to_html(), roughness, metallic]
-	if _materials.has(key):
-		return _materials[key]
-	var m := StandardMaterial3D.new()
-	m.albedo_color = color
-	m.roughness = roughness
-	m.metallic = metallic
-	_materials[key] = m
-	return m
 
 
 static func _contrasting_keeper(primary: Color, secondary: Color) -> Color:

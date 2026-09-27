@@ -46,6 +46,11 @@ tackling, keeping, stamina`. Overall ratings are calculated from these,
 weighted by position (see `scripts/team_data.gd`). To add a club, add another
 entry to `teams` with an `id`, `name`, `short` and `colors`.
 
+Club crests are in `data/logos/`, one 256×256 PNG per club named by its `id`
+(for example `data/logos/kingussie.png`). They show on the team select screen
+and the scoreboard. A club without a crest file just shows no crest. The
+crests come from shinty.com and belong to the clubs.
+
 ## How it plays
 
 - 12-a-side, 150 x 75 yard pitch, goals 12 ft wide and 10 ft high.
@@ -94,6 +99,8 @@ entry to `teams` with an `id`, `name`, `short` and `colors`.
 - `scripts/player_physics.gd`: running, body contact, caman reach and keeper
   dives. The AI and controls set where a player wants to go (`desired`); this
   file moves them there.
+- `scripts/team_ai.gd`: what computer players do off the ball: support
+  angles, runs in behind, overlaps, coming short, marking and cover.
 - `scripts/match_view.gd`: builds and animates the 3D players, ball, goals and
   broadcast camera from the match state, using the models in `models/`.
 - `pitch/`: the Aberdour pitch, scenery, sky and lighting (from the separate
@@ -104,6 +111,8 @@ entry to `teams` with an `id`, `name`, `short` and `colors`.
 - `scripts/team_data.gd`: loads squads and calculates overall ratings.
 - `tests/sim_test.gd`: plays six computer-vs-computer matches headless.
   Run: `godot --headless --path . -s tests/sim_test.gd`
+- `tests/ai_stats.gd`: plays ten matches and prints pass, shot and restart
+  numbers, for tuning the team AI.
 - `tests/play_test.gd`: drives the real game with simulated key presses and
   saves screenshots (needs a display).
 - `tests/menu_test.gd`: clicks through the menu dropdowns and Play button.

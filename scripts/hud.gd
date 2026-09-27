@@ -1,9 +1,12 @@
 extends Control
 ## Scoreboard, controlled-player info, power bar and messages over the 3D match.
 
+const TeamData := preload("res://scripts/team_data.gd")
+
 var match_node: Node
 var view: Node
 var font: Font
+var crests: Array = []
 
 
 func _ready() -> void:
@@ -20,12 +23,19 @@ func _draw() -> void:
 	var m := match_node
 	var teams: Array = m.teams
 	var colors: Array = m.colors
+	if crests.is_empty():
+		crests = [TeamData.logo(teams[0]), TeamData.logo(teams[1])]
 	var screen := get_viewport_rect().size
 	var w := screen.x
 	var bar := Rect2(Vector2(w / 2.0 - 260, 12), Vector2(520, 44))
 	draw_rect(bar, Color(0, 0, 0, 0.6))
 	draw_rect(Rect2(bar.position, Vector2(10, 44)), colors[0][0])
 	draw_rect(Rect2(bar.end - Vector2(10, 44), Vector2(10, 44)), colors[1][0])
+	# Crests sit just outside each end of the scoreboard.
+	for side in 2:
+		if crests[side] != null:
+			var x := bar.position.x - 52 if side == 0 else bar.end.x + 4
+			draw_texture_rect(crests[side], Rect2(Vector2(x, bar.position.y - 2), Vector2(48, 48)), false)
 	var line := "%s  %d - %d  %s" % [teams[0]["name"].to_upper(), m.score[0], m.score[1], teams[1]["name"].to_upper()]
 	draw_string(font, bar.position + Vector2(0, 30), line, HORIZONTAL_ALIGNMENT_CENTER, 440, 22, Color.WHITE)
 	draw_string(font, bar.position + Vector2(440, 30), "%d'" % m.match_minute(), HORIZONTAL_ALIGNMENT_CENTER, 70, 20, Color(1, 0.9, 0.4))
