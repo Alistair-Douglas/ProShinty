@@ -36,6 +36,7 @@ const SKIN_TONES := [
 const ACTIONS := {
 	"swing": 0.78, "pass": 0.55, "volley": 0.62, "tackle": 0.55, "trap": 0.4,
 	"save_left": 0.9, "save_right": 0.9, "celebrate": 1.6,
+	"shy": 1.5, "stumble": 0.7, "poke": 0.35, "block": 0.6, "cleek": 0.45, "barge": 0.4,
 }
 
 @export_group("Body")
@@ -100,8 +101,14 @@ var _charge := 0.0
 var _look_target = null
 var _head_prev := Vector3.ZERO
 var _head_velocity := Vector3.ZERO
-
-static var _materials := {}
+var _prev_velocity := Vector3.ZERO
+var _accel := Vector3.ZERO        # smoothed, world space, for leaning
+var _reach_target = null          # world point the caman head reaches for
+var _reach_want := 0.0
+var _reach := 0.0                 # smoothed 0..1
+var _free_hand = null             # skeleton-space target for a hand off the caman
+var _free_low = null              # the same for the lower hand (one-handed reach)
+var _one_hand := false
 
 
 # --- Public API -------------------------------------------------------------
@@ -127,6 +134,7 @@ func setup(player: Dictionary, team: Dictionary = {}) -> void:
 	shorts_color = kit["shorts"]
 	socks_color = kit["socks"]
 	helmet_color = kit["helmet"]
+	set_meta("kit_pattern", str(team.get("colors", {}).get("pattern", "")))
 	rebuild()
 
 
@@ -186,6 +194,30 @@ func set_locomotion(velocity: Vector3) -> void:
 	_velocity = Vector3(velocity.x, 0.0, velocity.z)
 
 
+## Reach the caman head towards a world point (a loose ball, an opponent's
+## ball, a shot flying past a keeper). `amount` 0..1 is how far into the
+## reach to go: the body leans and lunges, the arms extend, and the stick head
+## goes as close to the point as arms and caman allow. Pass null to stop.
+## `one_handed`: let go with the lower hand and reach with the top hand at the
+## end of the handle, arm straight, the free arm out for balance. It reaches
+## further but with less control (a poke, a block or a tap).
+func set_reach(target, amount: float = 1.0, one_handed: bool = false) -> void:
+	_reach_target = target
+	_reach_want = clampf(amount, 0.0, 1.0) if target != null else 0.0
+	_one_hand = one_handed and target != null
+
+
+## Seconds from starting `action` at `power` to the caman meeting the ball.
+## `from_charge` is how much of the backswing was already held (release_swing).
+## Match logic without a model (headless) uses this to time its hits.
+static func contact_delay(action: String, power: float = 1.0, from_charge: float = 0.0) -> float:
+	var l: float = ACTIONS.get(action, 0.78)
+	if action == "swing" or action == "pass":
+		l *= lerpf(0.75, 1.0, clampf(power, 0.0, 1.0))
+	var times := _times_for(StringName(action), l)
+	return times[1] - times[0] * clampf(from_charge, 0.0, 1.0)
+
+
 ## Play a one-shot action: swing, pass, volley, tackle, trap, save_left,
 ## save_right, celebrate. `power` (0..1) scales swings. `contact_height` is the
 ## ball height in metres for "volley" (0 = ground, up to about 1.6).
@@ -241,6 +273,15 @@ func release_swing(power: float) -> void:
 	# Skip the part of the backswing already done while charging.
 	_action_t = _swing_times()[0] * from_charge
 	_charge = 0.0
+
+
+## Let go of a held backswing without hitting.
+func cancel_charge() -> void:
+	_charging = false
+
+
+func is_charging() -> bool:
+	return _charging
 
 
 func is_busy() -> bool:
@@ -311,6 +352,12 @@ func advance(delta: float) -> void:
 		rebuild()
 	_time += delta
 	_speed = _velocity.length()
+	if delta > 0.0:
+		var a := (_velocity - _prev_velocity) / delta
+		_accel = _accel.lerp(a, clampf(delta * 8.0, 0.0, 1.0))
+		_prev_velocity = _velocity
+	var reach_goal := _reach_want if _reach_target != null else 0.0
+	_reach = move_toward(_reach, reach_goal, delta * (6.0 if reach_goal > _reach else 3.0))
 	if auto_face and _speed > 0.3:
 		var target_yaw := atan2(-_velocity.x, -_velocity.z)
 		rotation.y = lerp_angle(rotation.y, target_yaw, clampf(delta * 10.0, 0.0, 1.0))
@@ -348,7 +395,6 @@ func _build() -> void:
 	_rest_origin.clear()
 
 	var s := height_cm / 100.0 / BASE_HEIGHT
-	var w := lerpf(0.86, 1.22, build)       # girth multiplier for meshes
 	var sw := lerpf(0.94, 1.1, build)       # shoulder/hip width multiplier
 
 	_skel = Skeleton3D.new()
@@ -388,220 +434,10 @@ func _build() -> void:
 		_rest_origin[d[0]] = d[2]
 	_hips_rest_y = 0.98
 
-	var skin := _mat(skin_color, 0.7)
-	var shirt := _mat(shirt_color, 0.8)
-	var trim := _mat(trim_color, 0.8)
-	var shorts := _mat(shorts_color, 0.8)
-	var socks := _mat(socks_color, 0.85)
-	var boot := _mat(Color("16161a"), 0.45)
-
-	# Torso
-	var hips := _attach("Hips")
-	_part(hips, _cyl(0.155 * w, 0.165 * w, 0.24), shorts, Vector3(0, -0.02, 0), Vector3(1, 1, 0.72))
-	var spine := _attach("Spine")
-	_part(spine, _cyl(0.15 * w, 0.145 * w, 0.17), shirt, Vector3(0, 0.07, 0), Vector3(1, 1, 0.68))
-	var chest := _attach("Chest")
-	_part(chest, _cyl(0.17 * w, 0.15 * w, 0.17), shirt, Vector3(0, 0.07, 0), Vector3(1, 1, 0.66))
-	var upper := _attach("UpperChest")
-	_part(upper, _cyl(0.175 * w * sw, 0.17 * w, 0.14), shirt, Vector3(0, 0.05, 0), Vector3(1, 1, 0.64))
-	var shoulders := _part(upper, _capsule(0.075 * w, 0.44 * sw), shirt, Vector3(0, 0.085, 0.0), Vector3(1, 1, 0.9))
-	shoulders.rotation = Vector3(0, 0, PI / 2)
-	# Collar
-	_part(upper, _cyl(0.068, 0.078, 0.035), trim, Vector3(0, 0.135, 0))
-	# Chest band in the trim colour so teams read at a distance
-	_part(chest, _cyl(0.172 * w, 0.168 * w, 0.035), trim, Vector3(0, 0.13, 0), Vector3(1, 1, 0.66))
-	if shirt_number > 0 and not low_detail:
-		var back := Label3D.new()
-		back.text = str(shirt_number)
-		back.font_size = 96
-		back.pixel_size = 0.0022
-		back.outline_size = 14
-		back.modulate = trim_color
-		back.outline_modulate = shirt_color.darkened(0.45)
-		back.position = Vector3(0, 0.0, 0.123 * w)
-		back.double_sided = false
-		upper.add_child(back)
-
-	# Head and neck
-	var neck := _attach("Neck")
-	_part(neck, _cyl(0.052, 0.058, 0.11), skin, Vector3(0, 0.03, 0))
-	var head := _attach("Head")
-	_part(head, _sphere(0.112), skin, Vector3(0, 0.11, 0), Vector3(0.9, 1.05, 1.0))
-	_part(head, _sphere(0.02), skin, Vector3(0, 0.09, -0.112))  # nose
-	if not low_detail:
-		var eye := _mat(Color("1d1d22"), 0.3)
-		_part(head, _sphere(0.012), eye, Vector3(-0.037, 0.125, -0.098))
-		_part(head, _sphere(0.012), eye, Vector3(0.037, 0.125, -0.098))
-		_part(head, _sphere(0.02), skin, Vector3(-0.1, 0.11, 0.0), Vector3(0.5, 1, 0.8))  # ears
-		_part(head, _sphere(0.02), skin, Vector3(0.1, 0.11, 0.0), Vector3(0.5, 1, 0.8))
-	if wear_helmet:
-		_build_helmet(head)
-	else:
-		var hair := _mat(skin_color.darkened(0.7), 0.9)
-		var cap := _part(head, _hemi(0.118), hair, Vector3(0, 0.125, 0.008), Vector3(0.93, 1.0, 1.0))
-		cap.rotation.x = -0.25
-
-	# Arms
-	for side in ["Left", "Right"]:
-		var ua := _attach(side + "UpperArm")
-		_part(ua, _capsule(0.052 * w, 0.31), shirt, Vector3(0, -0.14, 0))
-		_part(ua, _cyl(0.054 * w, 0.054 * w, 0.03), trim, Vector3(0, -0.255, 0))
-		var la := _attach(side + "LowerArm")
-		_part(la, _capsule(0.042 * w, 0.29), skin, Vector3(0, -0.135, 0))
-		var hand := _attach(side + "Hand")
-		_part(hand, _sphere(0.045), skin, Vector3(0, -0.05, 0), Vector3(0.85, 1.25, 0.95))
-
-	# Legs
-	for side in ["Left", "Right"]:
-		var ul := _attach(side + "UpperLeg")
-		_part(ul, _capsule(0.07 * w, 0.46), skin, Vector3(0, -0.22, 0))
-		_part(ul, _cyl(0.092 * w, 0.086 * w, 0.2), shorts, Vector3(0, -0.07, 0))
-		var ll := _attach(side + "LowerLeg")
-		_part(ll, _capsule(0.056 * w, 0.44), skin, Vector3(0, -0.2, 0))
-		_part(ll, _cyl(0.061 * w, 0.046 * w, 0.33), socks, Vector3(0, -0.25, 0))
-		_part(ll, _cyl(0.063 * w, 0.063 * w, 0.03), trim, Vector3(0, -0.1, 0))
-		var foot := _attach(side + "Foot")
-		_part(foot, _box(Vector3(0.1, 0.075, 0.27)), boot, Vector3(0, -0.02, -0.06))
-
-	_build_caman()
+	# Meshes, materials and the caman live in ShintyPlayerLook.
+	_caman = ShintyPlayerLook.dress(self, _skel)
 	_pose(0.0)
 	_head_prev = get_caman_head_position()
-
-
-func _build_helmet(head: Node3D) -> void:
-	var shell := _mat(helmet_color, 0.35, 0.1)
-	var metal := _mat(Color("b8bcc2"), 0.3, 0.8)
-	var black := _mat(Color("1b1b1f"), 0.6)
-	var c := Vector3(0, 0.115, 0.004)
-	# Shell: dome plus a band round the back of the head
-	var dome := _part(head, _hemi(0.132), shell, c + Vector3(0, 0.005, 0), Vector3(0.92, 1.0, 1.02))
-	dome.rotation.x = -0.12
-	var band := _part(head, _cyl(0.13, 0.126, 0.07), shell, c + Vector3(0, -0.02, 0.012), Vector3(0.92, 1, 1.0))
-	band.rotation.x = -0.05
-	# Rim over the brow
-	_part(head, _box(Vector3(0.2, 0.022, 0.03)), shell, c + Vector3(0, 0.035, -0.118))
-	if low_detail:
-		_part(head, _box(Vector3(0.17, 0.14, 0.012)), metal, c + Vector3(0, -0.05, -0.137))
-		return
-	# Face guard: vertical bars on an arc in front of the face
-	var r := 0.138
-	for deg in [-50.0, -25.0, 0.0, 25.0, 50.0]:
-		var a := deg_to_rad(deg)
-		var p := c + Vector3(sin(a) * r * 0.92, -0.045, -cos(a) * r)
-		_part(head, _cyl(0.0055, 0.0055, 0.15), metal, p)
-	# Horizontal bars (built from short segments round the arc)
-	for y in [-0.005, -0.075, -0.115]:
-		var prev := Vector3.ZERO
-		for i in 9:
-			var a2 := deg_to_rad(lerpf(-62.0, 62.0, i / 8.0))
-			var p2 := c + Vector3(sin(a2) * r * 0.92, y, -cos(a2) * r)
-			if i > 0:
-				_segment(head, prev, p2, 0.0055, metal)
-			prev = p2
-	# Chin strap
-	_part(head, _box(Vector3(0.012, 0.11, 0.012)), black, c + Vector3(-0.104, -0.075, -0.02))
-	_part(head, _box(Vector3(0.012, 0.11, 0.012)), black, c + Vector3(0.104, -0.075, -0.02))
-
-
-func _build_caman() -> void:
-	_caman = Node3D.new()
-	_caman.name = "Caman"
-	_skel.add_child(_caman)
-	var wood := _mat(Color("b98a52"), 0.55)
-	var head_wood := _mat(Color("a8763f"), 0.5)
-	var tape := _mat(Color("202024"), 0.8)
-	# Shaft from the butt (origin) down -Y
-	_part(_caman, _cyl(0.015, 0.018, CAMAN_LENGTH - 0.12), wood, Vector3(0, -(CAMAN_LENGTH - 0.12) / 2.0, 0))
-	_part(_caman, _cyl(0.019, 0.019, 0.3), tape, Vector3(0, -0.15, 0))
-	_part(_caman, _cyl(0.022, 0.022, 0.02), tape, Vector3(0, -0.005, 0))
-	# The bas (head): a wedge that curves forward (-Z); both faces can strike.
-	var segs := [
-		[Vector3(0, -CAMAN_LENGTH + 0.1, 0.004), 0.06, 0.0],
-		[Vector3(0, -CAMAN_LENGTH + 0.05, -0.012), 0.06, 0.35],
-		[Vector3(0, -CAMAN_LENGTH + 0.018, -0.045), 0.065, 0.95],
-		[Vector3(0, -CAMAN_LENGTH + 0.008, -0.09), 0.055, 1.4],
-	]
-	for sgm in segs:
-		var m := _part(_caman, _box(Vector3(0.036, sgm[1], 0.05)), head_wood, sgm[0])
-		m.rotation.x = sgm[2]
-
-
-func _attach(bone_name: String) -> BoneAttachment3D:
-	var a := BoneAttachment3D.new()
-	a.name = bone_name + "Attach"
-	a.bone_name = bone_name
-	_skel.add_child(a)
-	return a
-
-
-func _part(parent: Node3D, mesh: Mesh, mat: Material, pos: Vector3, scl: Vector3 = Vector3.ONE) -> MeshInstance3D:
-	var mi := MeshInstance3D.new()
-	mi.mesh = mesh
-	mi.material_override = mat
-	mi.position = pos
-	mi.scale = scl
-	parent.add_child(mi)
-	return mi
-
-
-func _segment(parent: Node3D, a: Vector3, b: Vector3, radius: float, mat: Material) -> void:
-	var mi := _part(parent, _cyl(radius, radius, a.distance_to(b)), mat, (a + b) / 2.0)
-	var y := (b - a).normalized()
-	var x := y.cross(Vector3.FORWARD if absf(y.z) < 0.9 else Vector3.RIGHT).normalized()
-	mi.basis = Basis(x, y, x.cross(y))
-
-
-func _cyl(top: float, bottom: float, h: float) -> CylinderMesh:
-	var m := CylinderMesh.new()
-	m.top_radius = top
-	m.bottom_radius = bottom
-	m.height = h
-	m.radial_segments = 10 if low_detail else 16
-	m.rings = 1
-	return m
-
-
-func _capsule(r: float, h: float) -> CapsuleMesh:
-	var m := CapsuleMesh.new()
-	m.radius = r
-	m.height = maxf(h, r * 2.0)
-	m.radial_segments = 10 if low_detail else 16
-	m.rings = 4
-	return m
-
-
-func _sphere(r: float) -> SphereMesh:
-	var m := SphereMesh.new()
-	m.radius = r
-	m.height = r * 2.0
-	m.radial_segments = 10 if low_detail else 18
-	m.rings = 6 if low_detail else 10
-	return m
-
-
-func _hemi(r: float) -> SphereMesh:
-	var m := _sphere(r)
-	m.is_hemisphere = true
-	m.height = r
-	return m
-
-
-func _box(size: Vector3) -> BoxMesh:
-	var m := BoxMesh.new()
-	m.size = size
-	return m
-
-
-static func _mat(color: Color, roughness: float, metallic: float = 0.0) -> StandardMaterial3D:
-	var key := "%s/%.2f/%.2f" % [color.to_html(), roughness, metallic]
-	if _materials.has(key):
-		return _materials[key]
-	var m := StandardMaterial3D.new()
-	m.albedo_color = color
-	m.roughness = roughness
-	m.metallic = metallic
-	_materials[key] = m
-	return m
 
 
 static func _contrasting_keeper(primary: Color, secondary: Color) -> Color:
@@ -627,14 +463,19 @@ static func _seed_of(p: Dictionary) -> int:
 # --- Animation ---------------------------------------------------------------
 
 func _is_hit_action(a: StringName) -> bool:
-	return a == &"swing" or a == &"pass" or a == &"volley"
+	return a == &"swing" or a == &"pass" or a == &"volley" or a == &"shy"
 
 
 ## [backswing end, contact, follow-through end] as times in seconds.
 func _swing_times() -> Array:
-	var l := _action_len
-	if _action == &"volley":
+	return _times_for(_action, _action_len)
+
+
+static func _times_for(action: StringName, l: float) -> Array:
+	if action == &"volley":
 		return [l * 0.3, l * 0.42, l * 0.65]
+	if action == &"shy":
+		return [l * 0.5, l * 0.66, l * 0.85]
 	return [l * 0.36, l * 0.47, l * 0.7]
 
 
@@ -679,6 +520,13 @@ func _pose(_delta: float) -> void:
 	rot["Hips"] = Vector3(0, sin(ph) * 0.12 * run, 0)
 	rot["Chest"] += Vector3(0, -sin(ph) * 0.1 * run, 0)
 
+	# Football running: lean into acceleration, sit back when braking, bank
+	# into turns. Acceleration is turned into the model's own frame.
+	var acc_l := global_transform.basis.orthonormalized().inverse() * _accel
+	var side_sign := -1.0 if left_handed else 1.0  # undone by the mirror below
+	rot["Spine"] += Vector3(-clampf(-acc_l.z * 0.035, -0.18, 0.28), 0, -clampf(acc_l.x * 0.03, -0.22, 0.22) * side_sign)
+	_free_hand = null
+
 	# Caman carry pose (in hips-relative skeleton space, right-handed)
 	var cam_p := _lerp3(Vector3(0.13, -0.08, -0.28), Vector3(0.2, -0.02, -0.22), run)
 	var cam_d := _lerp3(Vector3(0.25, -0.85, -0.45), Vector3(0.25, -0.62, -0.72), run).normalized()
@@ -700,6 +548,23 @@ func _pose(_delta: float) -> void:
 			cam_d = r[1]
 			twist = r[2]
 			hips_off += r[3]
+
+	# Reaching: bend and lunge towards the target (hockey-style reach).
+	var reaching := _reach > 0.01 and _reach_target != null and (_action == &"" or _action == &"poke" or _action == &"block")
+	if reaching:
+		var loc: Vector3 = global_transform.affine_inverse() * (_reach_target as Vector3)
+		var flat := Vector2(loc.x, loc.z).length()
+		var lean := clampf((flat - 0.5) / 1.1, 0.0, 1.0) * _reach
+		var low := clampf((0.6 - loc.y) / 0.6, 0.0, 1.0)
+		var high := clampf((loc.y - 1.6) / 0.8, 0.0, 1.0) * _reach
+		rot["Spine"] += Vector3(-0.45 * lean * (0.4 + 0.6 * low) + 0.25 * high, 0,
+			-clampf(loc.x / 1.2, -1.0, 1.0) * 0.35 * lean * side_sign)
+		_crouch(rot, 0.6 * lean * low)
+		# Lunge: the leg on the reaching side strides out.
+		var lead := "Left" if (loc.x < 0.0) != left_handed else "Right"
+		rot[lead + "UpperLeg"] += Vector3(0.55 * lean, 0, 0)
+		rot[lead + "LowerLeg"] += Vector3(-0.35 * lean, 0, 0)
+		twist += clampf(-loc.x * 0.4, -0.5, 0.5) * lean * side_sign
 
 	# Torso twist through the swing
 	rot["Spine"] += Vector3(0, twist * 0.35, 0)
@@ -737,13 +602,46 @@ func _pose(_delta: float) -> void:
 		yaw_b = Basis(Vector3.UP, -twist * 0.5 - rot["Hips"].y)
 	var p_sk: Vector3 = hips_g.origin + yaw_b * cam_p
 	var d_sk: Vector3 = (yaw_b * cam_d).normalized()
-	var cb := _caman_basis(d_sk, yaw_b * Vector3(0.0, -0.3, -1.0))
+	# A shy is struck with the back of the bas, so the face is turned round.
+	# So is a block: the stick is turned so its back sits over the ball.
+	var back_face := _action == &"shy" or _action == &"block"
+	var face_dir := Vector3(0.0, 0.3, 1.0) if back_face else Vector3(0.0, -0.3, -1.0)
+	var cb := _caman_basis(d_sk, yaw_b * face_dir)
 	var ct := Transform3D(cb, p_sk)
 	var top_side := "Right" if left_handed else "Left"
 	var low_side := "Left" if left_handed else "Right"
+	_free_low = null
+	if reaching:
+		# Point the caman from the hands to the target, head on the target.
+		var tgt: Vector3 = _skel.global_transform.affine_inverse() * (_reach_target as Vector3)
+		var head_len := HEAD_LOCAL.length()
+		if _one_hand:
+			# Top hand at the very end of the handle, arm straight at the target.
+			var sh := _shoulder(top_side)
+			var to_t := tgt - sh
+			var arm := _arm_reach(top_side) * 0.97
+			var butt := sh + to_t.normalized() * minf(arm, maxf(0.1, to_t.length() - head_len * 0.5))
+			var dn := (tgt - butt).normalized()
+			var rt := Transform3D(_caman_basis(dn, yaw_b * Vector3(0.0, -0.3, -1.0)), butt - dn * GRIP_TOP)
+			ct = ct.interpolate_with(rt, _reach)
+			# The free arm swings out the other way for balance.
+			var out := -1.0 if top_side == "Right" else 1.0
+			_free_low = hips_g.origin + yaw_b * Vector3(out * 0.5, 0.35, 0.15)
+		else:
+			var anchor := hips_g.origin + yaw_b * Vector3(0.05, 0.3, -0.25)
+			var rd := tgt - anchor
+			if rd.length() > 0.05:
+				var dn := rd.normalized()
+				var rt := Transform3D(_caman_basis(dn, yaw_b * face_dir), tgt - dn * head_len)
+				ct = ct.interpolate_with(rt, _reach)
 	# Keep both grips within arm's reach: slide the caman towards the shoulders.
 	for iter in 3:
-		for g in [[top_side, GRIP_TOP], [low_side, GRIP_LOW]]:
+		var grips := [[top_side, GRIP_TOP], [low_side, GRIP_LOW]]
+		if _free_hand != null:
+			grips = [[low_side, GRIP_LOW]]
+		elif _free_low != null:
+			grips = [[top_side, GRIP_TOP]]
+		for g in grips:
 			var grip: Vector3 = ct * Vector3(0, -g[1], 0)
 			var to_grip: Vector3 = grip - _shoulder(g[0])
 			var reach := _arm_reach(g[0]) * 0.985
@@ -758,8 +656,14 @@ func _pose(_delta: float) -> void:
 	# Both hands grip the shaft: top hand near the butt, lower hand further down.
 	var top := ct * Vector3(0, -GRIP_TOP, 0)
 	var low := ct * Vector3(0, -GRIP_LOW, 0)
-	_solve_arm(top_side, top)
-	_solve_arm(low_side, low)
+	var free_target = null
+	if _free_hand != null:
+		var fh: Vector3 = _free_hand
+		if left_handed:
+			fh.x = -fh.x
+		free_target = hips_g.origin + yaw_b * fh
+	_solve_arm(top_side, free_target if free_target != null else top)
+	_solve_arm(low_side, _free_low if _free_low != null else low)
 
 
 ## Returns [caman position, caman direction, twist, hips offset] for the
@@ -850,6 +754,98 @@ func _action_pose(rot: Dictionary) -> Array:
 				p4 = ready_p.lerp(Vector3(-0.3, 0.1, -0.3), k)
 				d4 = ready_d.slerp(Vector3(-0.45, -0.89, -0.1).normalized(), k)
 			return [p4, d4, 0.0, hips_off]
+		&"shy":
+			# Side-on at the line: toss the ball up with the top hand while the
+			# lower hand holds the caman down at the side, then both hands take
+			# it up behind the head and over the top like a hammer.
+			var u := clampf(t / _action_len, 0.0, 1.0)
+			var toss_p := Vector3(0.25, -0.05, -0.05)
+			var toss_d := Vector3(0.2, -0.9, 0.35).normalized()
+			var wind_p := Vector3(0.1, 0.75, 0.05)
+			var wind_d := Vector3(0.0, -0.5, 0.87).normalized()
+			var hit_p := Vector3(0.08, 0.6, -0.3)
+			var hit_d := Vector3(0.05, 0.75, -0.66).normalized()
+			var fol_p := Vector3(0.0, 0.15, -0.4)
+			var fol_d := Vector3(-0.1, -0.5, -0.86).normalized()
+			var p6: Vector3
+			var d6: Vector3
+			var tw: float
+			if u < 0.3:
+				var k := _ease(u / 0.3)
+				p6 = ready_p.lerp(toss_p, minf(1.0, k * 2.0))
+				d6 = ready_d.slerp(toss_d, minf(1.0, k * 2.0))
+				tw = -0.6 * k
+				# The free hand throws the ball up.
+				_free_hand = Vector3(-0.15, 0.1, -0.3).lerp(Vector3(-0.08, 0.95, -0.35), _ease_out(k))
+			elif u < 0.5:
+				var k := _ease((u - 0.3) / 0.2)
+				p6 = toss_p.lerp(wind_p, k)
+				d6 = toss_d.slerp(wind_d, k)
+				tw = -0.6
+				rot["Spine"] += Vector3(0.18 * k, 0, 0)  # arch back
+			elif u < 0.66:
+				var k := (u - 0.5) / 0.16
+				k = k * k  # accelerate over the top
+				p6 = wind_p.lerp(hit_p, k)
+				d6 = wind_d.slerp(hit_d, k)
+				tw = lerpf(-0.6, 0.0, k)
+				rot["Spine"] += Vector3(0.18 * (1.0 - k), 0, 0)
+				_step(rot, k)
+			elif u < 0.85:
+				var k := _ease_out((u - 0.66) / 0.19)
+				p6 = hit_p.lerp(fol_p, k)
+				d6 = hit_d.slerp(fol_d, k)
+				tw = lerpf(0.0, 0.3, k)
+				rot["Spine"] += Vector3(-0.3 * k, 0, 0)  # fold over the follow-through
+				_step(rot, 1.0)
+			else:
+				var k := _ease((u - 0.85) / 0.15)
+				p6 = fol_p.lerp(ready_p, k)
+				d6 = fol_d.slerp(ready_d, k)
+				tw = lerpf(0.3, 0.0, k)
+				rot["Spine"] += Vector3(-0.3 * (1.0 - k), 0, 0)
+				_step(rot, 1.0 - k)
+			return [p6, d6, tw, hips_off]
+		&"stumble":
+			# Knocked off balance: rocked back, knees buckle, caman flung out.
+			var u := clampf(t / _action_len, 0.0, 1.0)
+			var k := sin(u * PI)
+			rot["Spine"] += Vector3(0.35 * k, 0, 0.2 * k)
+			rot["Neck"] += Vector3(-0.2 * k, 0, 0)
+			_crouch(rot, 0.45 * k)
+			hips_off.y -= 0.06 * k
+			var p7 := ready_p.lerp(Vector3(0.25, 0.15, -0.1), k)
+			var d7 := ready_d.slerp(Vector3(0.6, 0.2, -0.77).normalized(), k)
+			return [p7, d7, 0.25 * k, hips_off]
+		&"poke":
+			# Hockey poke check: lunge on the front leg; set_reach() drives the caman.
+			var k := sin(clampf(t / _action_len, 0.0, 1.0) * PI)
+			rot["Spine"] += Vector3(-0.35 * k, 0, 0)
+			rot["LeftUpperLeg"] += Vector3(0.7 * k, 0, 0)
+			rot["LeftLowerLeg"] += Vector3(-0.5 * k, 0, 0)
+			rot["RightUpperLeg"] += Vector3(-0.35 * k, 0, 0)
+			return []
+		&"block":
+			# Get low behind the stick; set_reach() puts its back over the ball.
+			var k := sin(minf(1.0, t / (_action_len * 0.3)) * PI * 0.5)
+			_crouch(rot, 0.8 * k)
+			rot["Spine"] += Vector3(-0.25 * k, 0, 0)
+			return []
+		&"cleek":
+			# Caman up at an angle in front, under the arc of the other swing.
+			var u := clampf(t / _action_len, 0.0, 1.0)
+			var k := sin(minf(1.0, u * 2.5) * PI * 0.5) * (1.0 - _ease(maxf(0.0, (u - 0.75) / 0.25)))
+			_crouch(rot, 0.3 * k)
+			var p8 := ready_p.lerp(Vector3(0.1, 0.3, -0.35), k)
+			var d8 := ready_d.slerp(Vector3(-0.35, 0.8, -0.5).normalized(), k)
+			return [p8, d8, 0.15 * k, hips_off]
+		&"barge":
+			# Shoulder first: drop and turn the shoulder into them.
+			var k := sin(clampf(t / _action_len, 0.0, 1.0) * PI)
+			_crouch(rot, 0.35 * k)
+			rot["Spine"] += Vector3(-0.2 * k, 0, 0.25 * k)
+			rot["Chest"] += Vector3(0, 0.35 * k, 0)
+			return [ready_p, ready_d, -0.3 * k, hips_off]
 		&"celebrate":
 			var u := clampf(t / _action_len, 0.0, 1.0)
 			var k := sin(minf(1.0, u * 3.0) * PI * 0.5) * (1.0 - _ease(maxf(0.0, (u - 0.75) / 0.25)))
