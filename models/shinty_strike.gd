@@ -86,6 +86,117 @@ static func compute(params: Dictionary) -> Dictionary:
 		"quality": quality, "miss": false, "mishit": mishit}
 
 
+## A full swing modelled the way golf games do it. Where compute() adds a
+## single random aim error, this samples the things that really go wrong in a
+## swing and lets the physics follow from them:
+##   * face angle: which way the bas points at impact (sets start direction)
+##   * swing path: which way the head is travelling (face minus path is
+##     sidespin, so the ball curves: face left of path hooks left)
+##   * strike point: high on the ball (thin, skids low), under it (fat, skied
+##     and short), towards the heel or toe (loses pace, gear-effect spin)
+## Extra keys on top of compute()'s:
+##   difficulty: float    0..1 extra error from running flat out, being off
+##                        balance, pressure or an overswing
+##   contact_offset: float  metres the ball was away from the sweet spot when
+##                        the swing arrived (adds to the strike point error)
+##   shape: float         -1..1 deliberate curve (negative bends it left)
+## Returns compute()'s keys plus: kind ("clean", "thin", "fat", "heel", "toe",
+## "fresh_air"), curve (face minus path, degrees) and side_spin (rad/s).
+static func compute_swing(params: Dictionary) -> Dictionary:
+	var rng: RandomNumberGenerator = params.get("rng", null)
+	if rng == null:
+		rng = RandomNumberGenerator.new()
+		rng.randomize()
+	var ball_v: Vector3 = params.get("ball_velocity", Vector3.ZERO)
+	var power := clampf(float(params.get("power", 0.7)), 0.0, 1.0)
+	var sk := clampf(float(params.get("skill", 60.0)), 0.0, 99.0) / 99.0
+	var ct := clampf(float(params.get("control", 60.0)), 0.0, 99.0) / 99.0
+	var loft := clampf(float(params.get("loft", 0.0)), 0.0, 1.0)
+	var diff := clampf(float(params.get("difficulty", 0.0)), 0.0, 1.0)
+	var shape := clampf(float(params.get("shape", 0.0)), -1.0, 1.0)
+	var offset := float(params.get("contact_offset", 0.0))
+
+	# How big the errors are: bigger swings, worse players, harder situations.
+	var effort := (0.55 + 0.75 * power) * (1.0 + 1.6 * diff)
+	var sig_face := deg_to_rad(lerpf(3.0, 0.6, sk)) * effort
+	var sig_path := deg_to_rad(lerpf(2.4, 0.7, ct)) * effort
+	var sig_v := lerpf(0.022, 0.006, ct) * effort
+	var sig_l := lerpf(0.024, 0.007, ct) * effort
+	# Now and then a swing really goes wrong (the golf "shank").
+	if rng.randf() < lerpf(0.1, 0.015, ct) * (0.5 + power) * (1.0 + 2.0 * diff):
+		sig_v *= 2.6
+		sig_l *= 2.6
+		sig_face *= 1.8
+	# A fast ball coming across the swing is harder to time.
+	var incoming := clampf((ball_v.length() - 8.0) / 30.0, 0.0, 1.0) * (1.0 - 0.6 * ct)
+	sig_v *= 1.0 + incoming
+	sig_l *= 1.0 + incoming
+	var face := rng.randfn(0.0, sig_face)
+	var path := rng.randfn(0.0, sig_path)
+	var v_err := rng.randfn(0.0, sig_v) + offset * rng.randf_range(-0.7, 0.7)
+	var l_err := rng.randfn(0.0, sig_l) + offset * rng.randf_range(-0.7, 0.7)
+	# A deliberate curve: open or close the face against the path.
+	face += deg_to_rad(4.0) * -shape
+	path += deg_to_rad(2.5) * shape
+
+	# Swinging over the top of it, or reaching and missing it entirely.
+	if v_err > 0.05 or absf(l_err) > 0.085 or offset > MAX_REACH:
+		return {"velocity": ball_v, "spin": Vector3.ZERO, "speed": ball_v.length(),
+			"quality": 0.0, "miss": true, "mishit": true, "kind": "fresh_air",
+			"curve": 0.0, "side_spin": 0.0}
+	var miss_dist := Vector2(v_err, l_err).length()
+	var quality := 1.0 - smoothstep(0.008, 0.07, miss_dist)
+	var kind := "clean"
+	if quality < 0.6:
+		if absf(v_err) >= absf(l_err):
+			kind = "thin" if v_err > 0.0 else "fat"
+		else:
+			kind = "toe" if l_err > 0.0 else "heel"
+
+	# Gear effect: a toe hit twists the face shut, a heel hit opens it.
+	face += l_err * 3.0
+	var aim: Vector3 = params.get("aim", Vector3.FORWARD)
+	aim.y = 0.0
+	aim = aim.normalized() if aim.length() > 0.001 else Vector3.FORWARD
+	# Start direction is mostly the face, a little the path (the golf D-plane).
+	var start_yaw := face * 0.8 + path * 0.2
+	var flat := aim.rotated(Vector3.UP, start_yaw)
+
+	# Launch angle: thin contacts come off low, fat ones balloon.
+	var elev_deg := lerpf(3.0, 38.0, loft)
+	if kind == "thin":
+		elev_deg -= v_err * 260.0
+	elif kind == "fat":
+		elev_deg += -v_err * 420.0
+	elev_deg += rng.randfn(0.0, 1.0 + (1.0 - quality) * 4.0)
+	var elev := deg_to_rad(clampf(elev_deg, -2.0, 62.0))
+	var n := (flat * cos(elev) + Vector3.UP * sin(elev)).normalized()
+
+	# The collision itself, as in compute(). Fat hits lose the most pace.
+	var m := ShintyBallPhysics.MASS
+	var e := RESTITUTION * lerpf(0.6, 1.0, quality)
+	var vh := head_speed(power, sk * 99.0) * lerpf(0.5, 1.0, quality)
+	if kind == "fat":
+		vh *= lerpf(0.55, 1.0, quality)
+	var v_in := ball_v.dot(n)
+	var v_out := ((m - e * CAMAN_MASS) * v_in + (1.0 + e) * CAMAN_MASS * vh) / (CAMAN_MASS + m)
+	var velocity := n * v_out + (ball_v - n * v_in) * 0.15
+
+	# Spin: backspin from loft (more when fat, less when thin), sidespin from
+	# face against path. Positive sidespin (about +Y) bends the ball left.
+	var back := lerpf(8.0, 80.0, loft) * lerpf(0.5, 1.0, quality)
+	if kind == "fat":
+		back *= 1.6
+	elif kind == "thin":
+		back *= 0.3
+	var side := clampf((face - path) * vh * 22.0, -90.0, 90.0)
+	var back_axis := flat.cross(Vector3.UP).normalized()
+	var spin := back_axis * back + Vector3.UP * side
+	return {"velocity": velocity, "spin": spin, "speed": velocity.length(), "quality": quality,
+		"miss": false, "mishit": kind != "clean", "kind": kind,
+		"curve": rad_to_deg(face - path), "side_spin": side}
+
+
 ## Hit a ShintyBallModel with a ShintyPlayerModel's caman. Uses the real
 ## distance between the caman head and the ball as the contact offset.
 ## `stats` is the player's JSON dictionary; `kind` is "shot" or "pass".
