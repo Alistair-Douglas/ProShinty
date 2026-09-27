@@ -38,6 +38,11 @@ tackling, keeping, stamina`. Overall ratings are calculated from these,
 weighted by position (see `scripts/team_data.gd`). To add a club, add another
 entry to `teams` with an `id`, `name`, `short` and `colors`.
 
+Club crests are in `data/logos/`, one 256×256 PNG per club named by its `id`
+(for example `data/logos/kingussie.png`). They show on the team select screen
+and the scoreboard. A club without a crest file just shows no crest. The
+crests come from shinty.com and belong to the clubs.
+
 ## How it plays
 
 - 12-a-side, 150 x 75 yard pitch, hails 12 ft wide and 10 ft high.

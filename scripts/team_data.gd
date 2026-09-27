@@ -4,6 +4,8 @@ extends RefCounted
 ## position code listed in FORMATION. Extra players are kept as substitutes.
 
 const PATH := "res://data/teams.json"
+## Club crests, one PNG per team id (e.g. data/logos/kingussie.png).
+const LOGO_DIR := "res://data/logos"
 
 ## Formation spot for each position, as a fraction of the pitch.
 ## x runs from the team's own goal (0) to the goal it attacks (1).
@@ -116,6 +118,18 @@ static func overall(p: Dictionary) -> int:
 	for k in w:
 		sum += float(p.get(k, 50)) * w[k]
 	return roundi(sum)
+
+
+## Path of the team's crest, or "" if there isn't one.
+static func logo_path(team: Dictionary) -> String:
+	var path := "%s/%s.png" % [LOGO_DIR, str(team.get("id", ""))]
+	return path if ResourceLoader.exists(path) else ""
+
+
+## The team's crest texture, or null if there isn't one.
+static func logo(team: Dictionary) -> Texture2D:
+	var path := logo_path(team)
+	return load(path) if path != "" else null
 
 
 ## First player listed at each position; anyone else is a substitute.
