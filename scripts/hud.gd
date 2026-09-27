@@ -37,6 +37,9 @@ func _draw() -> void:
 			var x := bar.position.x - 52 if side == 0 else bar.end.x + 4
 			draw_texture_rect(crests[side], Rect2(Vector2(x, bar.position.y - 2), Vector2(48, 48)), false)
 	var line := "%s  %d - %d  %s" % [teams[0]["name"].to_upper(), m.score[0], m.score[1], teams[1]["name"].to_upper()]
+	if font.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, 22).x > 430:
+		# Long club names (Camanachd Dhun Eideann) don't fit: use the short ones.
+		line = "%s  %d - %d  %s" % [teams[0].get("short", teams[0]["name"]), m.score[0], m.score[1], teams[1].get("short", teams[1]["name"])]
 	draw_string(font, bar.position + Vector2(0, 30), line, HORIZONTAL_ALIGNMENT_CENTER, 440, 22, Color.WHITE)
 	draw_string(font, bar.position + Vector2(440, 30), "%d'" % m.match_minute(), HORIZONTAL_ALIGNMENT_CENTER, 70, 20, Color(1, 0.9, 0.4))
 	_draw_cards(bar)
@@ -75,7 +78,10 @@ func _draw() -> void:
 	if centre_text != "":
 		var box := Rect2(Vector2(w / 2.0 - 330, screen.y / 2.0 - 40), Vector2(660, 80 if sub != "" else 56))
 		draw_rect(box, Color(0, 0, 0, 0.65))
-		draw_string(font, box.position + Vector2(0, 38), centre_text, HORIZONTAL_ALIGNMENT_CENTER, box.size.x, 28, Color.WHITE)
+		var size := 28
+		while size > 16 and font.get_string_size(centre_text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x > box.size.x - 20:
+			size -= 2   # e.g. full time between two long club names
+		draw_string(font, box.position + Vector2(0, 38), centre_text, HORIZONTAL_ALIGNMENT_CENTER, box.size.x, size, Color.WHITE)
 		if sub != "":
 			draw_string(font, box.position + Vector2(0, 66), sub, HORIZONTAL_ALIGNMENT_CENTER, box.size.x, 15, Color(1, 1, 1, 0.8))
 

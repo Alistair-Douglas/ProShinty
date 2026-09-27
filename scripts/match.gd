@@ -1146,6 +1146,8 @@ func _restart(team: int, spot: Vector2, label: String) -> void:
 	taker.facing = toward
 	taker.stagger = 0.0
 	taker.stick = Body.rest_spot(taker)
+	# The ball is placed on the spot, not left where it went out.
+	ball_pos = spot
 	ball_vel = Vector2.ZERO
 	ball_vz = 0.0
 	_take_control(taker)
@@ -1204,6 +1206,11 @@ func award_penalty(team: int, text: String) -> void:
 
 
 func _place_taker(taker: Player, spot: Vector2, toward: Vector2) -> void:
+	# The whistle stops everything: swings in progress and any shy being taken.
+	for p in players:
+		p.swing_t = -1.0
+		p.shy_ready = false
+		p.shy_toss = false
 	taker.pos = spot - toward * (PLAYER_R + 0.55)
 	taker.vel = Vector2.ZERO
 	taker.facing = toward

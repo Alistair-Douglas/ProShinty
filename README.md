@@ -126,6 +126,14 @@ crests come from shinty.com and belong to the clubs.
 - `tests/play_test.gd`: drives the real game with simulated key presses and
   saves screenshots (needs a display).
 - `tests/menu_test.gd`: clicks through the menu dropdowns and Play button.
+- `tests/checkpoint_test.gd`: whole-game check. Plays matches between random
+  clubs, then a full match through the menu at each ground with a bot at the
+  controls, and fails if the ball or players leave the pitch, play gets stuck,
+  or a match never finishes.
+  Run: `godot --headless --fixed-fps 60 --path . -s tests/checkpoint_test.gd` (add `-- quick` for a shorter run)
+- `tests/run_all.sh`: runs all the headless tests, as GitHub does on every
+  pull request (`.github/workflows/tests.yml`).
+  Run: `GODOT=/path/to/godot tests/run_all.sh quick`
 - `models/`: 3D player, ball and hail models plus the hitting and ball-flight
   physics (`ShintyPlayerModel`, `ShintyBallModel`, `ShintyHailModel`,
   `ShintyStrike`, `ShintyBallPhysics`, `ShintyMatchAdapter`). See
