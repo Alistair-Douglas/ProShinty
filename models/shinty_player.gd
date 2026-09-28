@@ -74,6 +74,9 @@ const ACTIONS := {
 
 @export_group("Behaviour")
 ## Fewer meshes (no face guard bars, eyes or number) for distant players.
+## Running off the ball, carry the caman up by the shoulder instead of low
+## by the waist. setup() picks it per player.
+@export var shoulder_carry := false
 @export var low_detail := false:
 	set(v): low_detail = v; _dirty = true
 ## Turn to face the direction of travel automatically.
@@ -130,6 +133,7 @@ func setup(player: Dictionary, team: Dictionary = {}) -> void:
 	build = body["build"]
 	shirt_number = int(player.get("number", 0))
 	is_keeper = str(player.get("position", "")) == "GK"
+	shoulder_carry = carries_on_shoulder(player)
 	left_handed = str(player.get("hand", "R")).to_upper().begins_with("L")
 	if player.has("skin"):
 		skin_color = Color(str(player["skin"]))
@@ -174,6 +178,12 @@ static func body_from_stats(p: Dictionary) -> Dictionary:
 		b = clampf(b, 0.05, 0.95)
 		w = (20.0 + b * 10.0) * pow(h / 100.0, 2.0)
 	return {"height_cm": h, "build": b, "weight_kg": roundf(w)}
+
+
+## Whether a player carries the caman up by the shoulder when running (about
+## two in five do) rather than low by the waist. Stable for each player.
+static func carries_on_shoulder(p: Dictionary) -> bool:
+	return (_seed_of(p) / 7) % 5 < 2
 
 
 ## Kit colours for a team. Missing colours fall back to primary/secondary.
@@ -522,25 +532,29 @@ func _pose(_delta: float) -> void:
 	var idle := 1.0 - run
 	var breathe := sin(_time * 1.8) * 0.015
 	# Shinty stance is upright, not an ice hockey crouch: a slight bend, head up.
-	rot["Spine"] = Vector3(-0.08 * idle - 0.07 * run - 0.1 * sprint, 0, 0)
+	rot["Spine"] = Vector3(-0.08 * idle - 0.1 * run - 0.14 * sprint, 0, 0)
 	rot["Chest"] = Vector3(breathe, 0, 0)
 	rot["UpperChest"] = Vector3(-0.03 * idle, 0, 0)
 	rot["Neck"] = Vector3(0.08 * idle + 0.1 * run + 0.1 * sprint, 0, 0)
 	rot["Head"] = Vector3(0.04, 0, 0)
 
-	# Legs: run cycle blended with a slightly crouched stance
-	var amp := lerpf(0.35, 0.85, sprint)
-	var knee_amp := lerpf(0.8, 1.5, sprint)
+	# Legs: a football run cycle blended with a slightly crouched stance.
+	# The knee drives forward and up, the heel folds under the hip as the leg
+	# swings through, the leg reaches out before the foot lands and gives a
+	# little under the weight, then pushes off behind.
+	var amp := lerpf(0.45, 0.85, sprint)
+	var fold := lerpf(1.1, 2.0, sprint)
 	for side in ["Left", "Right"]:
 		var p := ph if side == "Left" else ph + PI
 		var sgn := -1.0 if side == "Left" else 1.0
-		var thigh_run := sin(p) * amp - 0.05
-		var knee_run := -(0.2 + knee_amp * maxf(0.0, cos(p)) * 0.85)
+		var thigh_run := sin(p) * amp + amp * 0.3
+		var swing_fold := pow(maxf(0.0, cos(p + 0.35)), 2.0)
+		var knee_run := -(0.15 + 0.3 * maxf(0.0, -cos(p)) + fold * swing_fold)
 		var thigh_idle := 0.12
 		var knee_idle := -0.24
 		rot[side + "UpperLeg"] = Vector3(lerpf(thigh_idle, thigh_run, run), 0, sgn * 0.05 * idle)
 		rot[side + "LowerLeg"] = Vector3(lerpf(knee_idle, knee_run, run), 0, 0)
-		rot[side + "Foot"] = Vector3(lerpf(0.12, -0.2 - 0.3 * sin(p), run), 0, 0)
+		rot[side + "Foot"] = Vector3(lerpf(0.12, -0.15 - 0.35 * maxf(0.0, -sin(p)) + 0.2 * swing_fold, run), 0, 0)
 	hips_off.y = -absf(cos(ph)) * 0.045 * run
 	rot["Hips"] = Vector3(0, sin(ph) * 0.12 * run, 0)
 	rot["Chest"] += Vector3(0, -sin(ph) * 0.1 * run, 0)
@@ -565,7 +579,7 @@ func _pose(_delta: float) -> void:
 		var bp := _backswing(1.0)
 		cam_p = cam_p.lerp(bp[0], k)
 		cam_d = cam_d.slerp(bp[1], k)
-		twist = -0.55 * k
+		twist = -1.2 * k
 		_crouch(rot, 0.4 * k)
 
 	if _action != &"":
@@ -633,7 +647,13 @@ func _pose(_delta: float) -> void:
 	# So is a block: the stick is turned so its back sits over the ball.
 	var back_face := _action == &"shy" or _action == &"block"
 	var face_dir := Vector3(0.0, 0.3, 1.0) if back_face else Vector3(0.0, -0.3, -1.0)
-	var cb := _caman_basis(d_sk, yaw_b * face_dir)
+	if _action == &"block":
+		face_dir = Vector3(0.0, -1.0, 0.2)   # hook turned down over the ball
+	# The hook of the bas faces up, as a shinty player carries it, except for
+	# a block and through a hit, where the face turns to meet the ball.
+	var up := 0.0 if back_face else _hook_up()
+	var face_w: Vector3 = yaw_b * face_dir + Vector3.UP * 2.0 * up
+	var cb := _caman_basis(d_sk, face_w)
 	var ct := Transform3D(cb, p_sk)
 	var top_side := "Right" if left_handed else "Left"
 	var low_side := "Left" if left_handed else "Right"
@@ -649,7 +669,7 @@ func _pose(_delta: float) -> void:
 			var arm := _arm_reach(top_side) * 0.97
 			var butt := sh + to_t.normalized() * minf(arm, maxf(0.1, to_t.length() - head_len * 0.5))
 			var dn := (tgt - butt).normalized()
-			var rt := Transform3D(_caman_basis(dn, yaw_b * Vector3(0.0, -0.3, -1.0)), butt - dn * GRIP_TOP)
+			var rt := Transform3D(_caman_basis(dn, yaw_b * Vector3(0.0, -0.3, -1.0) + Vector3.UP * 2.0 * up), butt - dn * GRIP_TOP)
 			ct = ct.interpolate_with(rt, _reach)
 			# The free arm swings out the other way for balance.
 			var out := -1.0 if top_side == "Right" else 1.0
@@ -659,7 +679,7 @@ func _pose(_delta: float) -> void:
 			var rd := tgt - anchor
 			if rd.length() > 0.05:
 				var dn := rd.normalized()
-				var rt := Transform3D(_caman_basis(dn, yaw_b * face_dir), tgt - dn * head_len)
+				var rt := Transform3D(_caman_basis(dn, face_w), tgt - dn * head_len)
 				ct = ct.interpolate_with(rt, _reach)
 	# Running off the ball the caman is carried in the lower hand, low and
 	# across the front of the body with the head out in front just off the
@@ -676,9 +696,16 @@ func _pose(_delta: float) -> void:
 		var bob := absf(cos(ph)) * 0.03 * run
 		var hand := Vector3(0.2 * mx, 0.04 + bob, -0.16 - 0.05 * pump)
 		var cd := Vector3(-0.55 * mx, -0.45 + 0.05 * pump, -0.7).normalized()
+		var face_c := Vector3(0.0, 1.0, -0.3)
+		if shoulder_carry:
+			# Up by the shoulder: hand at the chest, the caman standing up
+			# past the shoulder and a little back, the bas curling back.
+			hand = Vector3(0.2 * mx, 0.24 + bob, -0.2 - 0.05 * pump)
+			cd = Vector3(0.22 * mx, 0.9, 0.34 + 0.05 * pump).normalized()
+			face_c = Vector3(0.0, 0.3, 1.0)
 		var d_c: Vector3 = yaw_b * cd
 		var grip_c: Vector3 = hips_g.origin + yaw_b * hand
-		var carry_t := Transform3D(_caman_basis(d_c, yaw_b * Vector3(-0.3 * mx, -1.0, -0.2)), grip_c - d_c * GRIP_LOW)
+		var carry_t := Transform3D(_caman_basis(d_c, yaw_b * face_c), grip_c - d_c * GRIP_LOW)
 		ct = ct.interpolate_with(carry_t, carry)
 		carry_top = hips_g.origin + yaw_b * Vector3(-0.17 * mx, 0.24 - 0.08 * pump + bob, -0.16 + 0.22 * pump)
 	# Keep both grips within arm's reach: slide the caman towards the shoulders.
@@ -746,7 +773,7 @@ func _action_pose(rot: Dictionary) -> Array:
 			# hands lead the head down (wrists cocked, then released into
 			# the ball) as the weight comes onto the front foot; the finish
 			# is high over the front shoulder with the chest to the target.
-			var top_twist := -0.9 * size
+			var top_twist := -0.9 * size - 0.3 * _big(size)
 			var fin_twist := 0.85 * size
 			var shift := 0.0     # hips: + over the back foot, - the front
 			if t < t0:
@@ -934,7 +961,17 @@ func _backswing(size: float) -> Array:
 	# above the head.
 	var p := Vector3(0.14, -0.08, -0.26).lerp(Vector3(0.28, 0.5, 0.0), size)
 	var d := Vector3(0.25, -0.85, -0.45).normalized().slerp(Vector3(0.08, 0.9, 0.42).normalized(), size)
+	# A big hit is wound right up: hands high by the back shoulder and the
+	# caman raised up and back over it.
+	var big := _big(size)
+	p = p.lerp(Vector3(0.24, 0.64, 0.06), big)
+	d = d.slerp(Vector3(0.06, 0.8, 0.6).normalized(), big)
 	return [p, d]
+
+
+## How much of the extra wind-up a swing of this size gets (big hits only).
+static func _big(size: float) -> float:
+	return _ease((size - 0.7) / 0.3)
 
 
 func _contact(h: float) -> Array:
@@ -991,6 +1028,17 @@ func _mirror_rot(rot: Dictionary) -> Dictionary:
 			name = "Left" + name.substr(5)
 		out[name] = e
 	return out
+
+
+## 1 = turn the hook up; 0 = leave the face square to the ball. A hit turns
+## it square over the backswing and back up after the follow-through.
+func _hook_up() -> float:
+	if not _is_hit_action(_action):
+		return 1.0
+	var times := _swing_times()
+	if _action_t < times[1]:
+		return 1.0 - _ease(_action_t / maxf(0.01, times[0]))
+	return _ease((_action_t - times[2]) / maxf(0.01, _action_len - times[2]))
 
 
 func _caman_basis(dir: Vector3, face: Vector3) -> Basis:
