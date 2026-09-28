@@ -1,38 +1,38 @@
 id,name,short,location,home_ground,colours,league,shinty_com_page
 aberdeen_university,Aberdeen University,ABU,Aberdeen,,Blue and white,,https://shinty.com/aberdeen-university-shinty-club/
-aberdour,Aberdour,ABD,"Aberdour, Fife",Silversands,,South Divisions 1 & 2,https://shinty.com/aberdour-shinty-club/
+aberdour,Aberdour,ABD,"Aberdour, Fife",Silversands,Black and white,South Divisions 1 & 2,https://shinty.com/aberdour-shinty-club/
 ardnamurchan,Ardnamurchan,ARD,Strontian,,"Red, gold and black",South Division 1,https://shinty.com/ardnamurchan-shinty-club/
-badenoch,Badenoch,BAD,Kingussie,"The Dell, Kingussie",,Premier League (women),https://shinty.com/badenoch-ladies-shinty-club/
-ballachulish,Ballachulish,BAL,Ballachulish,Jubilee Park,,,https://shinty.com/ballachulish-shinty-club/
-beauly,Beauly,BEA,Beauly,,,Mowi Premiership,https://shinty.com/beauly-shinty-club-2/
-boleskine,Boleskine,BOL,"Foyers, Loch Ness-side",,,North Division 2,https://shinty.com/boleskine-shinty-club/
-bute,Bute,BUT,Isle of Bute,The Meadows,,South Division 1,https://shinty.com/bute-shinty-club/
-caberfeidh,Caberfeidh,CAB,Strathpeffer,Castle Leod,,,https://shinty.com/caberfeidh-shinty-club/
-camanachd_dhun_eideann,Camanachd Dhun Eideann,CDE,Edinburgh,"The Meadows, Edinburgh",,"Youth leagues (CSYSA, U14s)",https://shinty.com/camanachd-dhun-eideann/
-col_glen,Col Glen,COL,"Glendaruel, Cowal",,,Mowi Premiership,https://shinty.com/col-glen-shinty-club/
-east_lothian,East Lothian,ELO,East Lothian,,,Mixed 6s team in development,https://shinty.com/clubs/east-lothian/
-fort_william,Fort William,FTW,Fort William,An Aird,,Mowi Premiership,https://shinty.com/fortwilliamshintyclub/
-glasgow_mid_argyll,Glasgow Mid Argyll,GMA,Glasgow,"Peterson Park, Yoker",,,https://shinty.com/glasgow-mid-argyll-shinty-club/
-glen_urquhart,Glen Urquhart,GLU,Drumnadrochit,,,,https://shinty.com/glen-urquhart-shinty-club/
-glengarry,Glengarry,GLG,Invergarry,,,,https://shinty.com/glengarry-shinty-club/
-inveraray,Inveraray,INR,"Inveraray, Argyll",,,,https://shinty.com/inveraray-shinty-club/
-inverness,Inverness,INV,Inverness,Bught Park,,,https://shinty.com/inverness-shinty-club/
-kilmallie,Kilmallie,KLM,"Caol, Fort William",Canal Parks,,Mowi National,https://shinty.com/kilmallie-shinty-club/
-kilmory,Kilmory,KLY,"Lochgilphead, Argyll",,,,https://shinty.com/kilmory-shinty-club/
-kingussie,Kingussie,KIN,Kingussie,The Dell,,,https://kingussiecamanachdclub.co.uk/
-kinlochshiel,Kinlochshiel,KSH,"Balmacara, Lochalsh",,,Mowi Premiership,https://shinty.com/kinlochshiel-shinty-club/
+badenoch,Badenoch,BAD,Kingussie,"The Dell, Kingussie",Navy and sky blue,Premier League (women),https://shinty.com/badenoch-ladies-shinty-club/
+ballachulish,Ballachulish,BAL,Ballachulish,Jubilee Park,Red and white,,https://shinty.com/ballachulish-shinty-club/
+beauly,Beauly,BEA,Beauly,,Green and white,Mowi Premiership,https://shinty.com/beauly-shinty-club-2/
+boleskine,Boleskine,BOL,"Foyers, Loch Ness-side",,Black and amber hoops,North Division 2,https://shinty.com/boleskine-shinty-club/
+bute,Bute,BUT,Isle of Bute,The Meadows,Red and white,South Division 1,https://shinty.com/bute-shinty-club/
+caberfeidh,Caberfeidh,CAB,Strathpeffer,Castle Leod,Sky blue and navy,,https://shinty.com/caberfeidh-shinty-club/
+camanachd_dhun_eideann,Camanachd Dhun Eideann,CDE,Edinburgh,"The Meadows, Edinburgh",Green and blue hoops; red and white change kit,"Youth leagues (CSYSA, U14s)",https://shinty.com/camanachd-dhun-eideann/
+col_glen,Col Glen,COL,"Glendaruel, Cowal",,Yellow and black,Mowi Premiership,https://shinty.com/col-glen-shinty-club/
+east_lothian,East Lothian,ELO,East Lothian,,Royal blue and white stripes,Mixed 6s team in development,https://shinty.com/clubs/east-lothian/
+fort_william,Fort William,FTW,Fort William,An Aird,Yellow and black,Mowi Premiership,https://shinty.com/fortwilliamshintyclub/
+glasgow_mid_argyll,Glasgow Mid Argyll,GMA,Glasgow,"Peterson Park, Yoker",Navy and white,,https://shinty.com/glasgow-mid-argyll-shinty-club/
+glen_urquhart,Glen Urquhart,GLU,Drumnadrochit,,Red and black hoops,,https://shinty.com/glen-urquhart-shinty-club/
+glengarry,Glengarry,GLG,Invergarry,,Green and black,,https://shinty.com/glengarry-shinty-club/
+inveraray,Inveraray,INR,"Inveraray, Argyll",,Yellow and black,,https://shinty.com/inveraray-shinty-club/
+inverness,Inverness,INV,Inverness,Bught Park,Red and navy,,https://shinty.com/inverness-shinty-club/
+kilmallie,Kilmallie,KLM,"Caol, Fort William",Canal Parks,"Royal blue shirts, white shorts",Mowi National,https://shinty.com/kilmallie-shinty-club/
+kilmory,Kilmory,KLY,"Lochgilphead, Argyll",,Maroon and black,,https://shinty.com/kilmory-shinty-club/
+kingussie,Kingussie,KIN,Kingussie,The Dell,Red and blue hoops,,https://kingussiecamanachdclub.co.uk/
+kinlochshiel,Kinlochshiel,KSH,"Balmacara, Lochalsh",,Red and black,Mowi Premiership,https://shinty.com/kinlochshiel-shinty-club/
 kyles,Kyles Athletic,KYL,"Tighnabruaich, Argyll",,"Royal blue shirts, white shorts, red stockings",Mowi Premiership,https://shinty.com/kyles-athletic-shinty-club/
-lewis,Lewis,LEW,Isle of Lewis,,,,https://shinty.com/lewis-camanachd/
-lochaber,Lochaber,LOC,Spean Bridge,,,Mowi National,https://shinty.com/lochaber-shinty-club/
-lochcarron,Lochcarron,LCR,Lochcarron,,,,https://shinty.com/lochcarron-shinty-club/
-lovat,Lovat,LOV,Kiltarlity,,,,https://shinty.com/lovat-shinty-club/
-newtonmore,Newtonmore,NEW,Newtonmore,,,,https://shinty.com/newtonmore-shinty-club/
-oban_camanachd,Oban Camanachd,OBC,"Oban, Argyll",,,Mowi Premiership,https://shinty.com/oban-camanachd/
-oban_celtic,Oban Celtic,OCE,"Oban, Argyll",,,Mowi National (withdrew August 2026),https://shinty.com/oban-celtic-shinty-club/
-skye,Skye,SKY,"Portree, Isle of Skye",Pairc nan Laoch,,Mowi Premiership,https://shinty.com/skye-camanachd/
-stirling,Stirling,STI,Stirling,,,Development squad; women in South Division 2,https://shinty.com/stirling-camanachd/
-strachur_dunoon,Strachur-Dunoon,STD,Cowal,Strachurmore and Dunoon Stadium,,Mowi South Division 2,https://shinty.com/strachur-dunooon-shinty-club/
-strathglass,Strathglass,STG,Cannich,,,North Division 1,https://shinty.com/strathglass-shinty-club/
-strathspey,Strathspey,STS,Grantown-on-Spey,Grantown Grammar School fields,,Mowi National (women); men inactive,https://shinty.com/strathspey-shinty-club/
-tayforth,Tayforth,TAY,Edinburgh,Peffermill Playing Fields,,Mowi South Division 2,https://shinty.com/tayforth-shinty-club/
+lewis,Lewis,LEW,Isle of Lewis,,Blue and black (dubh is gorm),,https://shinty.com/lewis-camanachd/
+lochaber,Lochaber,LOC,Spean Bridge,,Red and white hoops,Mowi National,https://shinty.com/lochaber-shinty-club/
+lochcarron,Lochcarron,LCR,Lochcarron,,"Blue top, white shorts, blue socks",,https://shinty.com/lochcarron-shinty-club/
+lovat,Lovat,LOV,Kiltarlity,,White (the Lilywhites),,https://shinty.com/lovat-shinty-club/
+newtonmore,Newtonmore,NEW,Newtonmore,,Royal blue and white,,https://shinty.com/newtonmore-shinty-club/
+oban_camanachd,Oban Camanachd,OBC,"Oban, Argyll",,Red and black,Mowi Premiership,https://shinty.com/oban-camanachd/
+oban_celtic,Oban Celtic,OCE,"Oban, Argyll",,Green and white stripes,Mowi National (withdrew August 2026),https://shinty.com/oban-celtic-shinty-club/
+skye,Skye,SKY,"Portree, Isle of Skye",Pairc nan Laoch,Navy and sky blue,Mowi Premiership,https://shinty.com/skye-camanachd/
+stirling,Stirling,STI,Stirling,,"Orange, white and black",Development squad; women in South Division 2,https://shinty.com/stirling-camanachd/
+strachur_dunoon,Strachur-Dunoon,STD,Cowal,Strachurmore and Dunoon Stadium,Sky blue and gold,Mowi South Division 2,https://shinty.com/strachur-dunooon-shinty-club/
+strathglass,Strathglass,STG,Cannich,,Maroon and white,North Division 1,https://shinty.com/strathglass-shinty-club/
+strathspey,Strathspey,STS,Grantown-on-Spey,Grantown Grammar School fields,Black and blue,Mowi National (women); men inactive,https://shinty.com/strathspey-shinty-club/
+tayforth,Tayforth,TAY,Edinburgh,Peffermill Playing Fields,Yellow and black,Mowi South Division 2,https://shinty.com/tayforth-shinty-club/
 uddingston,Uddingston,UDD,"Uddingston, South Lanarkshire",,"Purple, yellow and black",Mowi South Division 2,https://shinty.com/uddingston/
