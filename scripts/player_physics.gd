@@ -240,7 +240,7 @@ static func update_stick(m, p, dt: float) -> void:
 		target = Vector3(p.pos.x + p.facing.x * m.SHY_ARM, p.pos.y + p.facing.y * m.SHY_ARM, OVERHEAD)
 	elif m.in_throw_up(p):
 		# Caman raised high over the spot; as the ball drops, go up to meet it.
-		target = Vector3(p.pos.x + p.facing.x * 0.45, p.pos.y + p.facing.y * 0.45, OVERHEAD)
+		target = Vector3(m.PITCH.x / 2.0, m.PITCH.y / 2.0, OVERHEAD)   # crossed over the spot
 		if m.throw_up_tossed and m.throw_up_t > m.throw_up_swing.get(p, 99.0) - 0.15:
 			target = Vector3(m.ball_pos.x, m.ball_pos.y, clampf(m.ball_z, 1.5, OVERHEAD))
 	elif p.stagger <= 0.0:

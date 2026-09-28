@@ -38,7 +38,7 @@ const RESTART_AIM_RATE := 1.2  # rad/s: how fast the player turns their aim at a
 const SHY_HOLD := 0.35       # the ball is lifted in the hand this long before it leaves it
 const THROW_UP_SET := 1.2   # seconds the pair stand ready before the ball goes up
 const THROW_UP_TOSS := 8.0   # yd/s: the referee's throw
-const THROW_UP_GAP := 0.8    # each centre stands this far from the spot
+const THROW_UP_GAP := 0.42   # each centre stands this far from the spot: shoulder to shoulder
 const SET_PIECE_PAUSE := 2.2 # hit-outs and corners: play stops while players get set
 const SET_PIECE_MIN := 1.0   # a human taker can't hit it before this
 const FEET_HEIGHT := 0.35     # yards: a ball below this is stopped with the feet
@@ -308,14 +308,14 @@ func _start_throw_up() -> void:
 		p.throw_up = false
 		p.facing = Vector2(attack_dir[p.team], 0)
 		if p.position_code == "LM" and throw_up_pair.size() == p.team:
-			# The two centres stand either side of the spot, side-on to the
-			# goals like a golfer addressing the ball: each on the left of the
-			# spot as he looks up the pitch, facing it, his left shoulder
-			# towards the goal he attacks. Sticks raised over the ball.
+			# The two centres stand shoulder to shoulder over the spot, each
+			# on his own side of it and side-on to the goals, facing opposite
+			# ways across the pitch with the left shoulder towards the goal
+			# he attacks (so the left shoulders meet). Camans raised and
+			# crossed high over the ball.
 			var up_pitch := Vector2(attack_dir[p.team], 0)
-			var left := Vector2(0, -up_pitch.x)
-			p.pos = PITCH / 2.0 + left * THROW_UP_GAP
-			p.facing = -left
+			p.pos = PITCH / 2.0 - up_pitch * THROW_UP_GAP
+			p.facing = up_pitch.rotated(PI / 2.0)
 			p.throw_up = true
 			throw_up_pair.append(p)
 		p.vel = Vector2.ZERO
@@ -1449,13 +1449,13 @@ func _dribble(dt: float) -> void:
 	# Turning with the ball: the player gets the caman round to it sooner.
 	var turning: bool = dribble_vel.length() > 0.5 and dribble_vel.normalized().dot(dir) < 0.75
 	var tap_r: float = Body.CONTACT_R + 0.12 + (0.25 if turning else 0.1) * assist
-	var in_reach: bool = ball_pos.distance_to(c.pos) < DRIBBLE_REACH
+	var in_reach: bool = ball_pos.distance_to(c.pos) < DRIBBLE_REACH - 0.2 * assist
 	if in_reach and head.distance_to(ball_pos) < tap_r and dribble_vel.dot(dir) < run + 0.5:
 		# The tap: just firm enough to roll a yard or so ahead, so the caman
 		# is back on it within a stride; better ball players keep it closer,
 		# and the player's touches are softer still.
-		var lead: float = lerp(2.0, 1.4, c.r("control") / 100.0)
-		lead = lerp(lead, 1.1, assist)
+		var lead: float = lerp(1.7, 1.1, c.r("control") / 100.0)
+		lead = lerp(lead, 0.6, assist)   # the player keeps it tight, to turn with it
 		dribble_vel = dir * max(run + lead, 2.5)
 		dribble_taps += 1
 		return
@@ -1539,6 +1539,8 @@ func _ball_touches(before: Vector3) -> void:
 	events.append({"type": "touch", "by": p, "at": ball_pos, "hands": best_keeper and p.pos.distance_to(ball_pos) > Body.CONTACT_R})
 	# One-handed at full stretch you can stop or tap a ball, rarely control it.
 	var grip: float = 0.55 if p.one_hand and not best_keeper else 1.0
+	if ball_z > FEET_HEIGHT and not best_keeper:
+		grip *= lerp(1.0, 0.5, _running(p))   # a ball in the air is hard to kill on the run
 	if sp < (8.0 + p.r("control") * 0.08) * grip and not best_keeper:
 		_take_control(p)
 		anim(p, "trap")
@@ -1574,6 +1576,11 @@ func _ball_touches(before: Vector3) -> void:
 		last_team = p.team
 
 
+## 0 standing still, 1 flat out.
+func _running(p: Player) -> float:
+	return clamp(p.vel.length() / p.top_speed(), 0.0, 1.0)
+
+
 ## The ball has hit a player's body or feet (legal for everyone in shinty).
 ## Coming at them at a pace they can handle, they kill it: feet planted and
 ## together for a ball along the ground, or off the body for one in the air,
@@ -1586,6 +1593,8 @@ func _body_touch(p: Player, sp: float) -> void:
 	if p.team == last_team and (sp >= limit or not at_them):
 		return   # a team-mate's hit: they get out of its way, or let it run
 	var chance: float = clamp(0.95 - sp / limit * 0.45 + (0.05 if feet else -0.15), 0.2, 0.95)
+	if not feet:
+		chance *= lerp(1.0, 0.35, _running(p))   # killing a ball in the air on the run is hard
 	last_team = p.team
 	p.touch_block = 0.12
 	events.append({"type": "touch", "by": p, "at": ball_pos, "hands": false, "body": true})
