@@ -1,19 +1,15 @@
 class_name ShintyMatchAudio
 extends Node
-## Match sound: the thwack of caman on ball, stick clashes, the crowd's murmur,
-## its "ooh" at a save and its roar for a goal. Everything is driven by the
+## Match sound: the thwack of caman on ball, the ball off the post or bar,
+## stick clashes, the crowd's murmur, its "ooh" at a save and its roar for a goal. Everything is driven by the
 ## events the match appends to match.events, so the match itself knows nothing
-## about sound. The sounds are made by audio/make_sounds.py (CC0).
+## about sound. Where each sound comes from is in audio/README.md.
 
-const THWACKS := [
-	preload("res://audio/sfx/thwack_1.wav"),
-	preload("res://audio/sfx/thwack_2.wav"),
-	preload("res://audio/sfx/thwack_3.wav"),
-]
-const TAP := preload("res://audio/sfx/tap.wav")
-const CLACK := preload("res://audio/sfx/clack.wav")
-const CHEERS := [preload("res://audio/sfx/cheer_1.wav"), preload("res://audio/sfx/cheer_2.wav")]
-const OOH := preload("res://audio/sfx/ooh.wav")
+const HIT := preload("res://audio/sfx/hit_hockey.wav")
+const POST := preload("res://audio/sfx/post_bat.mp3")
+const CLACK := preload("res://audio/sfx/clack_plank.wav")
+const CHEER := preload("res://audio/sfx/cheer_crowd.wav")
+const OOH := preload("res://audio/sfx/ooh_crowd.wav")
 const CROWD_LOOP := preload("res://audio/sfx/crowd_loop.wav")
 
 const SOFT_HIT := 8.0      ## yd/s: a strike this slow is the quietest thwack
@@ -27,6 +23,7 @@ var roar: AudioStreamPlayer  # cheers and oohs, one at a time
 var _sfx: Array[AudioStreamPlayer] = []
 var _next_voice := 0
 var _next_event := 0
+var _next_post := 0
 var _last_kind := ""
 var heard := {}            # plays per sound file, for the tests
 
@@ -46,6 +43,7 @@ func _ready() -> void:
 	add_child(crowd)
 	crowd.play()
 	_next_event = m.events.size()
+	_next_post = m.ball_sim.post_hits.size()
 
 
 func _process(_delta: float) -> void:
@@ -54,6 +52,10 @@ func _process(_delta: float) -> void:
 		var e: Dictionary = m.events[_next_event]
 		_next_event += 1
 		_on_event(e)
+	var posts: Array = m.ball_sim.post_hits
+	while _next_post < posts.size():
+		off_the_post(posts[_next_post])
+		_next_post += 1
 
 
 func _on_event(e: Dictionary) -> void:
@@ -64,14 +66,14 @@ func _on_event(e: Dictionary) -> void:
 			strike(Vector2(m.ball_vel.x, m.ball_vel.y).length(), _last_kind)
 		"touch":
 			if not e.get("hands", false):
-				play(TAP, randf_range(-12.0, -7.0), randf_range(0.92, 1.08))
-		"clash", "battle", "stick_block", "cleek", "block", "late_block":
+				play(HIT, randf_range(-17.0, -12.0), randf_range(1.1, 1.25))  # a soft touch
+		"clash", "stick_block", "cleek", "block", "late_block":
 			play(CLACK, -4.0, randf_range(0.93, 1.07))
 		"save":
-			play(TAP, -6.0, 0.8)
+			play(HIT, -10.0, 0.8)
 			crowd_react(OOH, -5.0)
 		"goal":
-			crowd_react(CHEERS.pick_random(), 0.0)
+			crowd_react(CHEER, 0.0)
 
 
 ## The thwack: louder, sharper and a touch higher the harder the ball is hit.
@@ -83,7 +85,17 @@ func strike(speed: float, kind: String = "") -> void:
 	if kind in ["thin", "heel", "toe"]:
 		db -= 4.0
 		pitch *= 0.88
-	play(THWACKS.pick_random(), db, pitch)
+	play(HIT, db, pitch)
+	heard["strike"] = heard.get("strike", 0) + 1
+
+
+## The ball cracking off a post or the bar, louder the harder it hits;
+## a hard one gets an "ooh" from the crowd.
+func off_the_post(speed_ms: float) -> void:
+	var s := clampf(inverse_lerp(2.0, 25.0, speed_ms), 0.0, 1.0)
+	play(POST, lerpf(-12.0, 0.0, s), randf_range(0.95, 1.05))
+	if s > 0.4:
+		crowd_react(OOH, -5.0)
 
 
 func crowd_react(stream: AudioStream, db: float) -> void:

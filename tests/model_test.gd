@@ -85,6 +85,48 @@ func _run() -> void:
 	lefty.setup({"name": "Lefty", "number": 9, "hand": "L"}, teams[0])
 	lefty.advance(0.016)
 	check(lefty.get_strike_spot().x < 0.0 and lefty.get_caman_head_position().x < 0.0, "left-hander carries the caman on the left")
+
+	print("Carry and running swing")
+	var runner := ShintyPlayerModel.new()
+	runner.manual_update = true
+	root3d.add_child(runner)
+	runner.setup(teams[0]["players"][10], teams[0])
+	runner.set_locomotion(Vector3(0, 0, -6.0))
+	for i in 60:
+		runner.advance(1.0 / 60.0)
+	var carried := runner.get_caman_head_position()
+	check(carried.y > 0.15 and carried.y < 0.8 and carried.z < -0.4, "running, the caman head is carried low out in front (%s)" % carried)
+	check(_top_hand_gap(runner) > 0.15, "running, the top hand is off the caman (%.2f m)" % _top_hand_gap(runner))
+	runner.look_at_point(runner.global_transform * Vector3(0, 0, -2.5))
+	for i in 40:
+		runner.advance(1.0 / 60.0)
+	check(_top_hand_gap(runner) < 0.12, "closing on the ball, both hands are on the caman (%.2f m)" % _top_hand_gap(runner))
+	runner.look_at_point(null)
+	var run_hits := []
+	runner.strike.connect(func(pos, pow): run_hits.append(pos))
+	runner.play_action(&"swing", 1.0)
+	var gap_at_hit := -1.0
+	for i in 60:
+		runner.advance(1.0 / 60.0)
+		if run_hits.size() == 1 and gap_at_hit < 0.0:
+			gap_at_hit = _top_hand_gap(runner)
+	check(run_hits.size() == 1 and (run_hits[0] as Vector3).y < 0.08, "a swing on the run still meets the ground ball")
+	check(gap_at_hit >= 0.0 and gap_at_hit < 0.12, "both hands are on the caman at contact (%.2f m)" % gap_at_hit)
+	var lefty_run := ShintyPlayerModel.new()
+	lefty_run.manual_update = true
+	root3d.add_child(lefty_run)
+	lefty_run.setup({"name": "Lefty", "number": 9, "hand": "L"}, teams[0])
+	lefty_run.set_locomotion(Vector3(0, 0, -6.0))
+	for i in 60:
+		lefty_run.advance(1.0 / 60.0)
+	check(absf(lefty_run.get_caman_head_position().x + carried.x) < 0.1, "left-hander carries the caman the mirror way (%.2f vs %.2f)" % [lefty_run.get_caman_head_position().x, carried.x])
+	var lefty_hits := []
+	lefty_run.strike.connect(func(pos, pow): lefty_hits.append(pos))
+	lefty_run.play_action(&"swing", 1.0)
+	for i in 60:
+		lefty_run.advance(1.0 / 60.0)
+	check(lefty_hits.size() == 1 and (lefty_hits[0] as Vector3).y < 0.08 and (lefty_hits[0] as Vector3).x < 0.0,
+		"a left-hander's running swing meets the ground ball on the left")
 	for a in ["pass", "volley", "tackle", "trap", "save_left", "save_right", "celebrate"]:
 		var done := [false]
 		var cb := func(n): done[0] = true
@@ -264,3 +306,12 @@ func _foot_y(m: ShintyPlayerModel) -> float:
 		var i := sk.find_bone(side + "Foot")
 		lo = minf(lo, (sk.global_transform * sk.get_bone_global_pose(i).origin).y)
 	return lo - 0.06 * m.height_cm / 180.0
+
+
+## How far the top hand is from its grip at the butt of the caman, in metres.
+func _top_hand_gap(m: ShintyPlayerModel) -> float:
+	var sk: Skeleton3D = m.get_node("Skeleton3D")
+	var side := "Right" if m.left_handed else "Left"
+	var wrist := sk.global_transform * sk.get_bone_global_pose(sk.find_bone(side + "Hand")).origin
+	var grip: Vector3 = m._caman.global_transform * Vector3(0, -ShintyPlayerModel.GRIP_TOP, 0)
+	return maxf(0.0, wrist.distance_to(grip) - ShintyPlayerModel.HAND_GRIP * m.height_cm / 180.0)

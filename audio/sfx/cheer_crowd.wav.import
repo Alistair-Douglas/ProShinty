@@ -2,13 +2,13 @@
 
 importer="wav"
 type="AudioStreamWAV"
-uid="uid://dugf0r2ej80s4"
-path="res://.godot/imported/thwack_1.wav-5b3ecb761432bd88e40e2a5ecd9081d3.sample"
+uid="uid://cqedfcvovqowy"
+path="res://.godot/imported/cheer_crowd.wav-b5c0f0977c155939a79a82ae92f59703.sample"
 
 [deps]
 
-source_file="res://audio/sfx/thwack_1.wav"
-dest_files=["res://.godot/imported/thwack_1.wav-5b3ecb761432bd88e40e2a5ecd9081d3.sample"]
+source_file="res://audio/sfx/cheer_crowd.wav"
+dest_files=["res://.godot/imported/cheer_crowd.wav-b5c0f0977c155939a79a82ae92f59703.sample"]
 
 [params]
 

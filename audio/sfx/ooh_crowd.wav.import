@@ -2,13 +2,13 @@
 
 importer="wav"
 type="AudioStreamWAV"
-uid="uid://ux6gbabs1j73"
-path="res://.godot/imported/cheer_2.wav-b0a3b650e5f0757353721b05fdfd6340.sample"
+uid="uid://up5rt5mqajhy"
+path="res://.godot/imported/ooh_crowd.wav-c2eb3b86d2bd332497bac09bafa5aa88.sample"
 
 [deps]
 
-source_file="res://audio/sfx/cheer_2.wav"
-dest_files=["res://.godot/imported/cheer_2.wav-b0a3b650e5f0757353721b05fdfd6340.sample"]
+source_file="res://audio/sfx/ooh_crowd.wav"
+dest_files=["res://.godot/imported/ooh_crowd.wav-c2eb3b86d2bd332497bac09bafa5aa88.sample"]
 
 [params]
 
