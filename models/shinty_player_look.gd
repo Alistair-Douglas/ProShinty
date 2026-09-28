@@ -51,6 +51,7 @@ static func dress(model: ShintyPlayerModel, skeleton: Skeleton3D) -> Node3D:
 static func _bake(skeleton: Skeleton3D, cam: Node3D) -> void:
 	var surfaces := {}   # material (or &"solid") -> _Part
 	var shadow := _Part.new()
+	var joints := _joints(skeleton)
 	var caman_bone := skeleton.find_bone("Caman")
 	for holder in skeleton.get_children():
 		var bone := -1
@@ -74,10 +75,10 @@ static func _bake(skeleton: Skeleton3D, cam: Node3D) -> void:
 			# code that fits things to the body, like ShintyKitSponsor.
 			var local: AABB = c.transform * c.mesh.get_aabb()
 			holder.set_meta("mesh_aabb", holder.get_meta("mesh_aabb").merge(local) if holder.has_meta("mesh_aabb") else local)
-			surfaces[key].add(c.mesh, xf, bone, mat)
+			surfaces[key].add(c.mesh, xf, bone, mat, joints)
 			var size: Vector3 = c.mesh.get_aabb().size
 			if maxf(size.x, maxf(size.y, size.z)) > 0.03:  # eyes, studs and laces cast nothing you'd see
-				shadow.add(c.mesh, xf, bone, null)
+				shadow.add(c.mesh, xf, bone, null, joints)
 			holder.remove_child(c)
 			c.free()
 	var mesh := ArrayMesh.new()
@@ -103,6 +104,59 @@ static func _bake(skeleton: Skeleton3D, cam: Node3D) -> void:
 	caster.skeleton = NodePath("..")
 
 
+## Where one bone bends against the next: [upper, lower, joint position,
+## axis pointing into the lower bone, blend radius, reach], in skeleton space.
+## Vertices of either bone near the joint follow both, so elbows, knees,
+## wrists, ankles and the spine bend smoothly instead of creasing.
+const JOINTS := [
+	["LeftUpperArm", "LeftLowerArm", 0.06, 0.1], ["RightUpperArm", "RightLowerArm", 0.06, 0.1],
+	["LeftLowerArm", "LeftHand", 0.03, 0.06], ["RightLowerArm", "RightHand", 0.03, 0.06],
+	["LeftUpperLeg", "LeftLowerLeg", 0.07, 0.12], ["RightUpperLeg", "RightLowerLeg", 0.07, 0.12],
+	["LeftLowerLeg", "LeftFoot", 0.03, 0.08], ["RightLowerLeg", "RightFoot", 0.03, 0.08],
+	["Hips", "Spine", 0.05, 0.25], ["Spine", "Chest", 0.05, 0.25], ["Chest", "UpperChest", 0.05, 0.25],
+	["UpperChest", "Neck", 0.03, 0.1], ["Neck", "Head", 0.03, 0.1],
+	# Shoulders and hips swing too far to blend both ways (the torso would be
+	# dragged out with the arm), so only the top of the sleeve and of the
+	# shorts leg lean back on the body, which keeps them from poking out.
+	["UpperChest", "LeftUpperArm", 0.06, 0.12, true], ["UpperChest", "RightUpperArm", 0.06, 0.12, true],
+	["Hips", "LeftUpperLeg", 0.07, 0.16, true], ["Hips", "RightUpperLeg", 0.07, 0.16, true],
+]
+
+
+static func _joints(skeleton: Skeleton3D) -> Array:
+	var out := []
+	for j in JOINTS:
+		var up := skeleton.find_bone(j[0])
+		var lo := skeleton.find_bone(j[1])
+		var at := skeleton.get_bone_global_rest(lo).origin
+		# Limbs hang down (-Y) and the spine and neck point up (+Y) at rest.
+		var axis := Vector3.UP if j[1] in ["Spine", "Chest", "UpperChest", "Neck", "Head"] else Vector3.DOWN
+		out.append([up, lo, at, axis, j[2], j[3], j.size() > 4])
+	return out
+
+
+## Bones and weights for a vertex at `p` (skeleton space) on a piece that
+## hangs from `bone`.
+static func _weigh(p: Vector3, bone: int, joints: Array) -> Array:
+	for j in joints:
+		if bone != j[1] and (bone != j[0] or j[6]):
+			continue
+		var d: Vector3 = p - j[2]
+		if d.length() > j[5]:
+			continue
+		var t: float = d.dot(j[3])
+		var r: float = j[4]
+		if t < -r or t > r:
+			continue
+		var w_lo := smoothstep(-r, r, t)
+		if j[6]:  # one-sided: at most half the weight goes back to the body
+			w_lo = 0.5 + 0.5 * smoothstep(-r, r, t)
+		# A piece on the upper bone reaching past the joint (a sleeve over the
+		# elbow) still leans on its own bone a little, and the other way round.
+		return [j[0], j[1], 1.0 - w_lo, w_lo]
+	return [bone, bone, 1.0, 0.0]
+
+
 ## Vertex data for one surface of the baked player.
 class _Part:
 	var verts := PackedVector3Array()
@@ -114,7 +168,7 @@ class _Part:
 	var weights := PackedFloat32Array()
 	var idx := PackedInt32Array()
 
-	func add(mesh: Mesh, xf: Transform3D, bone: int, mat: Material) -> void:
+	func add(mesh: Mesh, xf: Transform3D, bone: int, mat: Material, joints: Array) -> void:
 		var nb := xf.basis.inverse().transposed()
 		var col := Color.WHITE
 		var rm := Vector2(1, 0)
@@ -129,13 +183,15 @@ class _Part:
 			var uv: PackedVector2Array = a[Mesh.ARRAY_TEX_UV]
 			var first := verts.size()
 			for i in v.size():
-				verts.append(xf * v[i])
+				var p := xf * v[i]
+				verts.append(p)
 				norms.append((nb * n[i]).normalized() if n.size() > i else Vector3.UP)
 				uvs.append(uv[i] if uv.size() > i else Vector2.ZERO)
 				uv2s.append(rm)
 				colors.append(col)
-				bones.append_array([bone, 0, 0, 0])
-				weights.append_array([1.0, 0.0, 0.0, 0.0])
+				var bw: Array = ShintyPlayerLook._weigh(p, bone, joints)
+				bones.append_array([bw[0], bw[1], 0, 0])
+				weights.append_array([bw[2], bw[3], 0.0, 0.0])
 			var src: PackedInt32Array = a[Mesh.ARRAY_INDEX]
 			if src.is_empty():
 				src = PackedInt32Array(range(v.size()))
@@ -178,66 +234,66 @@ func _body() -> void:
 
 	# Pelvis in shorts, with the shirt hem hanging over the waistband.
 	var hips := _attach("Hips")
-	_mesh(hips, ShintyMesh.loft([
+	_mesh(hips, _loft([
 		[-0.14, 0.13 * w, 0.085 * w], [-0.1, 0.158 * w * sw, 0.1 * w], [-0.03, 0.166 * w * sw, 0.108 * w],
 		[0.04, 0.158 * w, 0.104 * w], [0.1, 0.146 * w, 0.098 * w]], seg, 2.4), shorts)
 	# Abdomen and chest: the shirt, sculpted a little at the chest and back.
 	var spine := _attach("Spine")
-	_mesh(spine, ShintyMesh.loft([
+	_mesh(spine, _loft([
 		[-0.075, 0.158 * w, 0.107 * w], [-0.03, 0.156 * w, 0.106 * w], [0.05, 0.148 * w, 0.1 * w],
 		[0.15, 0.156 * w, 0.106 * w, -0.004]], seg, 2.3), shirt)
 	var chest := _attach("Chest")
-	_mesh(chest, ShintyMesh.loft([
+	_mesh(chest, _loft([
 		[-0.02, 0.156 * w, 0.106 * w, -0.004], [0.05, 0.168 * w * sw, 0.114 * w, -0.012],
 		[0.1, 0.178 * w * sw, 0.116 * w, -0.014], [0.16, 0.184 * w * sw, 0.11 * w, -0.01]], seg, 2.3), chest_band)
 	var upper := _attach("UpperChest")
-	_mesh(upper, ShintyMesh.loft([
+	_mesh(upper, _loft([
 		[-0.02, 0.184 * w * sw, 0.11 * w, -0.01], [0.04, 0.192 * w * sw, 0.108 * w, -0.008],
 		[0.08, 0.2 * w * sw, 0.098 * w, 0.0], [0.105, 0.18 * w * sw, 0.088 * w, 0.003], [0.122, 0.145 * w * sw, 0.078 * w, 0.005],
 		[0.135, 0.1 * w, 0.066 * w, 0.006], [0.155, 0.062, 0.052, 0.004]], seg, 2.3), shirt)
 	# Collar in the trim colour
-	_mesh(upper, ShintyMesh.loft([[0.13, 0.066, 0.056, 0.003], [0.165, 0.058, 0.05, 0.0]], seg, 2.0, true),
+	_mesh(upper, _loft([[0.13, 0.066, 0.056, 0.003], [0.165, 0.058, 0.05, 0.0]], seg, 2.0, true),
 		ShintyMesh.fabric(m.trim_color, m.trim_color))
 
 	for side in ["Left", "Right"]:
 		var sgn := -1.0 if side == "Left" else 1.0
 		# Upper arm: deltoid in the shirt, short sleeve with a trim cuff, bicep below.
 		var ua := _attach(side + "UpperArm")
-		_mesh(ua, ShintyMesh.loft([
+		_mesh(ua, _loft([
 			[0.03, 0.03 * w, 0.034 * w, 0.0, -0.012 * (-1.0 if side == "Left" else 1.0)], [0.0, 0.058 * w, 0.06 * w],
 			[-0.06, 0.062 * w, 0.059 * w],
 			[-0.15, 0.058 * w, 0.056 * w], [-0.17, 0.059 * w, 0.057 * w]], seg), shirt)
-		_mesh(ua, ShintyMesh.loft([[-0.155, 0.06 * w, 0.058 * w], [-0.185, 0.06 * w, 0.058 * w]], seg, 2.0, true),
+		_mesh(ua, _loft([[-0.155, 0.06 * w, 0.058 * w], [-0.185, 0.06 * w, 0.058 * w]], seg, 2.0, true),
 			ShintyMesh.fabric(m.trim_color, m.trim_color))
-		_mesh(ua, ShintyMesh.loft([
+		_mesh(ua, _loft([
 			[-0.14, 0.05 * w, 0.052 * w], [-0.2, 0.049 * w, 0.051 * w, -0.004], [-0.26, 0.043 * w, 0.044 * w],
 			[-0.3, 0.04 * w, 0.041 * w]], seg), skin)
 		# Forearm: thick near the elbow, tapering to the wrist.
 		var la := _attach(side + "LowerArm")
-		_mesh(la, ShintyMesh.loft([
+		_mesh(la, _loft([
 			[0.02, 0.04 * w, 0.041 * w], [-0.05, 0.046 * w, 0.042 * w], [-0.12, 0.041 * w, 0.036 * w],
 			[-0.22, 0.031 * w, 0.026 * w], [-0.275, 0.027, 0.022]], seg), skin)
 		# Hand: a gripping fist with a thumb wrapped round the caman.
 		var hand := _attach(side + "Hand")
-		_mesh(hand, ShintyMesh.loft([
+		_mesh(hand, _loft([
 			[0.01, 0.027, 0.021], [-0.03, 0.041, 0.024], [-0.065, 0.044, 0.028, -0.006],
 			[-0.095, 0.036, 0.03, -0.012]], 12, 2.8), skin)
 		if detail:
-			var thumb := _mesh(hand, ShintyMesh.loft([[0.0, 0.012, 0.012], [-0.04, 0.011, 0.011], [-0.055, 0.009, 0.009]], 8),
+			var thumb := _mesh(hand, _loft([[0.0, 0.012, 0.012], [-0.04, 0.011, 0.011], [-0.055, 0.009, 0.009]], 8),
 				skin, Vector3(-sgn * 0.02, -0.035, -0.025))
 			thumb.rotation = Vector3(0.9, 0.0, sgn * 0.5)
 
 	for side in ["Left", "Right"]:
 		# Thigh with a front quad bulge; loose shorts leg over the top.
 		var ul := _attach(side + "UpperLeg")
-		_mesh(ul, ShintyMesh.loft([
+		_mesh(ul, _loft([
 			[0.04, 0.078 * w, 0.08 * w], [-0.05, 0.084 * w, 0.086 * w, -0.004], [-0.16, 0.078 * w, 0.08 * w, -0.008],
 			[-0.3, 0.064 * w, 0.064 * w, -0.004], [-0.4, 0.052 * w, 0.054 * w], [-0.455, 0.05 * w, 0.052 * w]], seg), skin)
-		_mesh(ul, ShintyMesh.loft([
+		_mesh(ul, _loft([
 			[0.05, 0.098 * w, 0.098 * w], [-0.08, 0.1 * w, 0.1 * w, -0.004], [-0.2, 0.098 * w, 0.096 * w, -0.006]], seg, 2.0, true), shorts)
 		# Shin: calf muscle behind, sock over most of it with trim hoops at the top.
 		var ll := _attach(side + "LowerLeg")
-		_mesh(ll, ShintyMesh.loft([
+		_mesh(ll, _loft([
 			[0.03, 0.05 * w, 0.052 * w], [-0.05, 0.053 * w, 0.058 * w, 0.01], [-0.14, 0.052 * w, 0.06 * w, 0.014],
 			[-0.26, 0.042 * w, 0.045 * w, 0.006], [-0.38, 0.032 * w, 0.034 * w], [-0.44, 0.032, 0.036]], seg), skin)
 		_mesh(ll, _sock_mesh(), socks, Vector3(0, -0.07, 0))
@@ -251,7 +307,7 @@ func _sock_mesh() -> ArrayMesh:
 	var rings := [
 		[0.0, 0.056 * w, 0.063 * w, 0.013], [-0.07, 0.056 * w, 0.064 * w, 0.014], [-0.19, 0.047 * w, 0.051 * w, 0.006],
 		[-0.31, 0.038 * w, 0.04 * w, 0.0], [-0.38, 0.037, 0.04, 0.002]]
-	return ShintyMesh.loft(rings, seg, 2.0, true)
+	return _loft(rings, seg, 2.0, true)
 
 
 func _boot(foot: Node3D) -> void:
@@ -270,17 +326,17 @@ func _boot(foot: Node3D) -> void:
 	var upper := ShintyMesh.sweep(pts, rad, seg, 2.6, false, Vector3.RIGHT)
 	_mesh(foot, upper, ShintyMesh.solid(col, 0.35, 0.0, 0.3))
 	# Sole plate
-	var sole := ShintyMesh.loft([[0.0, 0.047, 0.13], [0.012, 0.047, 0.13]], seg, 3.5)
+	var sole := _loft([[0.0, 0.047, 0.13], [0.012, 0.047, 0.13]], seg, 3.5)
 	_mesh(foot, sole, ShintyMesh.solid(sole_col, 0.5), Vector3(0, -0.067, -0.055))
 	if detail:
 		var stud := ShintyMesh.solid(Color("d8d8d8"), 0.3, 0.7)
 		for sp in [Vector3(0.025, 0, 0.05), Vector3(-0.025, 0, 0.05), Vector3(0.028, 0, -0.06),
 				Vector3(-0.028, 0, -0.06), Vector3(0.022, 0, -0.14), Vector3(-0.022, 0, -0.14)]:
-			_mesh(foot, ShintyMesh.loft([[0.0, 0.008, 0.008], [-0.012, 0.006, 0.006]], 6), stud, sp + Vector3(0, -0.067, 0))
+			_mesh(foot, _loft([[0.0, 0.008, 0.008], [-0.012, 0.006, 0.006]], 6), stud, sp + Vector3(0, -0.067, 0))
 		# Laces
 		var lace := ShintyMesh.solid(Color("f0f0f0"), 0.8)
 		for i in 4:
-			_mesh(foot, ShintyMesh.loft([[-0.022, 0.003, 0.003], [0.022, 0.003, 0.003]], 6), lace,
+			_mesh(foot, _loft([[-0.022, 0.003, 0.003], [0.022, 0.003, 0.003]], 6), lace,
 				Vector3(0, 0.012 - i * 0.006, -0.03 - i * 0.022)).rotation.z = PI / 2
 
 
@@ -319,7 +375,7 @@ func _kit_details() -> void:
 		name_label.rotation.x = -0.12
 		upper.add_child(name_label)
 	# Club crest on the left breast: a shield in the trim colour.
-	var crest := ShintyMesh.loft([[0.0, 0.004, 0.022], [0.02, 0.018, 0.024], [0.045, 0.02, 0.022], [0.052, 0.02, 0.02]], 10, 3.0)
+	var crest := _loft([[0.0, 0.004, 0.022], [0.02, 0.018, 0.024], [0.045, 0.02, 0.022], [0.052, 0.02, 0.02]], 10, 3.0)
 	var ci := _mesh(chest, crest, ShintyMesh.solid(m.trim_color, 0.6), Vector3(-0.075 * w, 0.03, -0.114 * w))
 	ci.rotation = Vector3(PI / 2 - 0.1, 0, 0)
 	ci.scale = Vector3(1, 1, 0.12)
@@ -367,13 +423,13 @@ func _head() -> void:
 		hair_col = Color("141111")
 	var hair := ShintyMesh.solid(hair_col, 0.85)
 	var neck := _attach("Neck")
-	_mesh(neck, ShintyMesh.loft([[-0.02, 0.058, 0.056], [0.06, 0.052, 0.05, 0.004], [0.13, 0.05, 0.048, 0.008]], seg), skin)
+	_mesh(neck, _loft([[-0.02, 0.058, 0.056], [0.06, 0.052, 0.05, 0.004], [0.13, 0.05, 0.048, 0.008]], seg), skin)
 
 	var head := _attach("Head")
 	var c := Vector3(0, 0.11, 0)
 	# Skull and face in one sculpted piece: chin, jaw, cheekbones, brow.
 	var jaw := 0.066 + 0.01 * m.build
-	_mesh(head, ShintyMesh.loft([
+	_mesh(head, _loft([
 		[-0.108, 0.018, 0.016, -0.083], [-0.1, 0.034, 0.03, -0.074], [-0.08, jaw * 0.85, 0.058, -0.045],
 		[-0.05, jaw, 0.08, -0.018], [-0.015, 0.074, 0.094, -0.006], [0.02, 0.079, 0.1, 0.0],
 		[0.06, 0.079, 0.1, 0.006], [0.095, 0.068, 0.086, 0.01], [0.118, 0.04, 0.052, 0.012],
@@ -397,20 +453,20 @@ func _head() -> void:
 			_mesh(head, _ellipsoid(0.0135, 0.009, 0.008), white, e)
 			_mesh(head, _ellipsoid(0.0068, 0.0068, 0.004), iris, e + Vector3(0, 0, -0.0065))
 			_mesh(head, _ellipsoid(0.0032, 0.0032, 0.002), pupil, e + Vector3(0, 0, -0.0092))
-			var brow := _mesh(head, ShintyMesh.loft([[-0.016, 0.004, 0.003], [0.016, 0.003, 0.002]], 6), hair,
+			var brow := _mesh(head, _loft([[-0.016, 0.004, 0.003], [0.016, 0.003, 0.002]], 6), hair,
 				e + Vector3(sx * 0.002, 0.018, -0.006))
 			brow.rotation.z = PI / 2 + sx * 0.12
 			# Ears
 			var ear := _mesh(head, _ellipsoid(0.01, 0.028, 0.018), skin, c + Vector3(sx * 0.08, 0.005, 0.012))
 			ear.rotation.y = sx * 0.3
 	# Hair: close crop under the helmet, visible at the back and sides.
-	_mesh(head, ShintyMesh.loft([
+	_mesh(head, _loft([
 		[0.0, 0.082, 0.1, 0.012], [0.05, 0.083, 0.102, 0.008], [0.095, 0.072, 0.09, 0.01],
 		[0.12, 0.042, 0.056, 0.012], [0.131, 0.01, 0.014, 0.012]], seg, 2.1, false, -0.3, PI + 0.3), hair, c)
 	# Some players have a beard or stubble.
 	if detail and _chance(5) < 0.35 and m.skin_color.get_luminance() > 0.2:
 		var beard := ShintyMesh.solid(hair_col.lerp(m.skin_color, 0.35), 0.95)
-		_mesh(head, ShintyMesh.loft([
+		_mesh(head, _loft([
 			[-0.109, 0.02, 0.018, -0.084], [-0.1, 0.036, 0.032, -0.075], [-0.08, jaw * 0.87, 0.06, -0.046],
 			[-0.05, jaw * 1.02, 0.082, -0.018], [-0.02, 0.075, 0.094, -0.008]], seg, 2.1, false, PI + 0.25, TAU - 0.25), beard, c)
 	if m.wear_helmet:
@@ -422,23 +478,23 @@ func _helmet(head: Node3D, c: Vector3) -> void:
 	var inner := ShintyMesh.solid(Color("1c1c20"), 0.8)
 	var metal := ShintyMesh.solid(Color("c9ccd1"), 0.25, 0.9)
 	# Dome over the top, a little bigger than the skull.
-	_mesh(head, ShintyMesh.loft([
+	_mesh(head, _loft([
 		[0.03, 0.096, 0.118, 0.008], [0.07, 0.096, 0.118, 0.01], [0.105, 0.083, 0.104, 0.012],
 		[0.128, 0.064, 0.08, 0.014], [0.142, 0.038, 0.047, 0.014], [0.149, 0.01, 0.012, 0.014]], seg + 4, 2.2), shell, c)
 	# Back and side skirt, open at the face.
-	_mesh(head, ShintyMesh.loft([
+	_mesh(head, _loft([
 		[-0.06, 0.09, 0.106, 0.016], [-0.02, 0.095, 0.114, 0.012], [0.035, 0.096, 0.118, 0.008]],
 		seg, 2.2, false, -0.55, PI + 0.55), shell, c)
 	# Padding visible at the rim
-	_mesh(head, ShintyMesh.loft([[0.026, 0.093, 0.114, 0.008], [0.034, 0.093, 0.114, 0.008]], seg, 2.2, true), inner, c)
+	_mesh(head, _loft([[0.026, 0.093, 0.114, 0.008], [0.034, 0.093, 0.114, 0.008]], seg, 2.2, true), inner, c)
 	# Peak over the brow
-	var peak := _mesh(head, ShintyMesh.loft([[0.0, 0.07, 0.02], [0.006, 0.07, 0.02]], seg, 3.0), shell,
+	var peak := _mesh(head, _loft([[0.0, 0.07, 0.02], [0.006, 0.07, 0.02]], seg, 3.0), shell,
 		c + Vector3(0, 0.038, -0.112))
 	peak.rotation.x = 0.25
 	# Vents along the top
 	if detail:
 		for i in 3:
-			var vent := _mesh(head, ShintyMesh.loft([[-0.02, 0.004, 0.012], [0.02, 0.004, 0.012]], 6, 3.0), inner,
+			var vent := _mesh(head, _loft([[-0.02, 0.004, 0.012], [0.02, 0.004, 0.012]], 6, 3.0), inner,
 				c + Vector3((i - 1) * 0.03, 0.128 - absf(i - 1) * 0.01, 0.02))
 			vent.rotation.x = PI / 2 - 0.3
 	# Face guard: curved bars on an arc in front of the face.
@@ -499,17 +555,17 @@ func _caman() -> Node3D:
 	cam.add_child(mi)
 	# Grip tape on the handle and a knob at the end
 	var grip := MeshInstance3D.new()
-	grip.mesh = ShintyMesh.loft([[0.004, 0.0185, 0.0165], [-0.3, 0.0178, 0.016]], 12, 2.0, true)
+	grip.mesh = _loft([[0.004, 0.0185, 0.0165], [-0.3, 0.0178, 0.016]], 12, 2.0, true)
 	grip.material_override = ShintyMesh.tape()
 	cam.add_child(grip)
 	var knob := MeshInstance3D.new()
-	knob.mesh = ShintyMesh.loft([[0.012, 0.012, 0.011], [0.0, 0.021, 0.019], [-0.012, 0.019, 0.017]], 12)
+	knob.mesh = _loft([[0.012, 0.012, 0.011], [0.0, 0.021, 0.019], [-0.012, 0.019, 0.017]], 12)
 	knob.material_override = ShintyMesh.tape()
 	cam.add_child(knob)
 	# Tape round the bas, as players do to protect it
 	if detail:
 		var bt := MeshInstance3D.new()
-		bt.mesh = ShintyMesh.loft([[-(L - 0.1), 0.0152, 0.0205], [-(L - 0.07), 0.0175, 0.0265]], 12, 2.4, true)
+		bt.mesh = _loft([[-(L - 0.1), 0.0152, 0.0205], [-(L - 0.07), 0.0175, 0.0265]], 12, 2.4, true)
 		bt.material_override = ShintyMesh.tape(Color("1d1d22"))
 		cam.add_child(bt)
 	return cam
@@ -536,6 +592,42 @@ func _mesh(parent: Node3D, mesh: Mesh, mat: Material, pos: Vector3 = Vector3.ZER
 	mi.position = pos
 	parent.add_child(mi)
 	return mi
+
+
+## ShintyMesh.loft with extra rings eased in between the given ones
+## (Catmull-Rom), so limbs and torso curve smoothly instead of kinking.
+func _loft(rings: Array, segments: int = 16, squareness: float = 2.0, open_ends: bool = false,
+		arc_from: float = 0.0, arc_to: float = TAU) -> ArrayMesh:
+	if rings.size() >= 3:
+		var full := []
+		for r in rings:
+			full.append([r[0], r[1], r[2], r[3] if r.size() > 3 else 0.0, r[4] if r.size() > 4 else 0.0])
+		var dense := []
+		var steps := 1
+		for i in full.size() - 1:
+			var a: Array = full[maxi(i - 1, 0)]
+			var b: Array = full[i]
+			var c: Array = full[i + 1]
+			var d: Array = full[mini(i + 2, full.size() - 1)]
+			dense.append(b)
+			for k in range(1, steps + 1):
+				var t := float(k) / (steps + 1)
+				var ring := []
+				for j in 5:
+					ring.append(_catmull(a[j], b[j], c[j], d[j], t))
+				# Radii never undershoot below the smaller neighbour (no pinching).
+				ring[1] = maxf(ring[1], minf(b[1], c[1]) * 0.9)
+				ring[2] = maxf(ring[2], minf(b[2], c[2]) * 0.9)
+				dense.append(ring)
+		dense.append(full[full.size() - 1])
+		rings = dense
+	return ShintyMesh.loft(rings, segments, squareness, open_ends, arc_from, arc_to)
+
+
+static func _catmull(p0: float, p1: float, p2: float, p3: float, t: float) -> float:
+	var t2 := t * t
+	return 0.5 * ((2.0 * p1) + (-p0 + p2) * t + (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * t2
+		+ (-p0 + 3.0 * p1 - 3.0 * p2 + p3) * t2 * t)
 
 
 func _ellipsoid(rx: float, ry: float, rz: float) -> ArrayMesh:
