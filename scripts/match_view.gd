@@ -57,6 +57,10 @@ func _ready() -> void:
 	var tracked: Array = figures.values()
 	tracked.append(referee_figure)
 	director.setup(self, tracked, ball)
+	var audio := ShintyMatchAudio.new()
+	audio.name = "Audio"
+	audio.m = m
+	add_child(audio)
 	cam_x = m.ball_pos.x - m.PITCH.x / 2.0
 	_update_camera(1.0)
 
