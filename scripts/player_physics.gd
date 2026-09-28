@@ -31,6 +31,7 @@ const BODY_HEIGHT := 1.9      ## yards; a ball above this goes over a player
 const OVERHEAD := 2.6         ## height of the caman head in an overhead strike
 const RESTITUTION := 0.2      ## how bouncy body contact is
 const REACT_RADIUS := 3.2     ## start reaching for a loose ball this close
+const STICK_CLEAR := 0.1      ## caman shaft and head keep this far off other bodies
 
 
 static func setup(p) -> void:
@@ -79,8 +80,8 @@ static func move(m, p, dt: float) -> void:
 	if p.desired.length() > 0.3 and p.desired.normalized().dot(p.facing) < -0.3:
 		top *= 0.6
 	var want: Vector2 = p.desired.limit_length(top)
-	if p.shy_toss or (p.shy_ready and p == m.carrier):
-		want = Vector2.ZERO   # standing at the line for the shy (turning still aims it)
+	if p.shy_toss or (p.shy_ready and p == m.carrier) or p == m.set_piece_taker_now():
+		want = Vector2.ZERO   # standing over a shy, hit-out or corner (turning still aims it)
 	var old: Vector2 = p.vel
 	var speed := old.length()
 	var u: Vector2
@@ -191,8 +192,18 @@ static func update_stick(m, p, dt: float) -> void:
 	p.stick_target = null
 	if p == m.carrier:
 		target = rest + Vector3(p.facing.x, p.facing.y, 0.0) * 0.08
+		# Dribbling: the caman reaches out to meet the ball as the player runs
+		# onto it, taps it, and comes back to be carried while it rolls on.
+		var ball_at := Vector3(m.ball_pos.x, m.ball_pos.y, 0.0)
+		if m.is_dribbling(p) and ball_at.distance_to(rest) < 1.0:
+			target = ball_at
 	elif p.shy_toss:
 		target = Vector3(p.pos.x + p.facing.x * m.SHY_ARM, p.pos.y + p.facing.y * m.SHY_ARM, OVERHEAD)
+	elif m.in_throw_up(p):
+		# Caman raised high over the spot; as the ball drops, go up to meet it.
+		target = Vector3(p.pos.x + p.facing.x * 0.45, p.pos.y + p.facing.y * 0.45, OVERHEAD)
+		if m.throw_up_tossed and m.throw_up_t > m.throw_up_swing.get(p, 99.0) - 0.15:
+			target = Vector3(m.ball_pos.x, m.ball_pos.y, clampf(m.ball_z, 1.5, OVERHEAD))
 	elif p.stagger <= 0.0:
 		var ball := Vector3(m.ball_pos.x, m.ball_pos.y, m.ball_z)
 		var ahead := ball + Vector3(m.ball_vel.x, m.ball_vel.y, m.ball_vz) * 0.1
@@ -211,7 +222,7 @@ static func update_stick(m, p, dt: float) -> void:
 	var cur: Vector3 = p.stick + Vector3(p.vel.x, p.vel.y, 0.0) * dt
 	var spd := STICK_SPEED * (1.7 if p.lunge > 0.0 else 1.0) * (0.5 if p.stagger > 0.0 else 1.0)
 	cur += (_clamp_reach(p, target, keeper_area) - cur).limit_length(spd * dt)
-	p.stick = _clamp_reach(p, cur, keeper_area)
+	p.stick = _clear_bodies(m, p, _clamp_reach(p, cur, keeper_area), keeper_area)
 	p.one_hand = p != m.carrier and Vector2(p.stick.x, p.stick.y).distance_to(p.pos) > TWO_HAND_REACH
 	var out := Vector2(p.stick.x - rest.x, p.stick.y - rest.y).length()
 	p.reach = clampf(maxf(out / 1.1, p.stick.z / 2.2), 0.0, 1.0)
@@ -224,8 +235,48 @@ static func _clamp_reach(p, v: Vector3, keeper_area: bool) -> Vector3:
 	var r := max_reach(p)
 	if flat.length() > r:
 		flat = flat.normalized() * r
-	var h := clampf(v.z, 0.0, maxf(max_height(p, flat.length(), keeper_area), OVERHEAD if p.shy_toss else 0.0))
+	var h := clampf(v.z, 0.0, maxf(max_height(p, flat.length(), keeper_area), OVERHEAD if (p.shy_toss or p.throw_up) else 0.0))
 	return Vector3(p.pos.x + flat.x, p.pos.y + flat.y, h)
+
+
+## Bodies are solid to camans too: the head can't sit inside another player,
+## and the shaft (from the hands, just in front of the body, to the head)
+## can't pass through one. A caman that would is swung round the side of
+## them, or held short, instead. Overhead (a shy) it clears everyone.
+static func _clear_bodies(m, p, head: Vector3, keeper_area: bool) -> Vector3:
+	if head.z > BODY_HEIGHT:
+		return head
+	var hands: Vector2 = p.pos + p.facing * 0.25
+	var clear := BODY_R + STICK_CLEAR
+	for q in m.players:
+		if q == p:
+			continue
+		var h := Vector2(head.x, head.y)
+		if q.pos.distance_squared_to(p.pos) > 16.0:
+			continue
+		var close: Vector2 = Geometry2D.get_closest_point_to_segment(q.pos, hands, h)
+		var off: Vector2 = close - q.pos
+		var d := off.length()
+		if d >= clear:
+			continue
+		if close.distance_to(h) < 0.05:
+			# The head itself is in them: push it straight out.
+			var out: Vector2 = off / d if d > 0.001 else (h - p.pos).normalized()
+			h = q.pos + out * clear
+		else:
+			# The shaft goes through them: turn the caman round their side,
+			# pivoting at the hands, whichever way is nearer.
+			var r := hands.distance_to(h)
+			var to_q: Vector2 = q.pos - hands
+			var side := signf(to_q.cross(h - hands))
+			if side == 0.0:
+				side = p.hand
+			var need := asin(clampf(clear / maxf(to_q.length(), clear), 0.0, 1.0))
+			var dir: Vector2 = to_q.normalized().rotated(side * need)
+			h = hands + dir * minf(r, maxf(to_q.length() - clear, 0.3)) if to_q.length() < clear + 0.05 \
+				else hands + dir.rotated(side * 0.02) * r
+		head = _clamp_reach(p, Vector3(h.x, h.y, head.z), keeper_area)
+	return head
 
 
 ## Closest the ball came to point `q` while it moved from `a` to `b` (3D).

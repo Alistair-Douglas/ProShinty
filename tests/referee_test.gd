@@ -180,8 +180,17 @@ func _test_no_goal_direct_from_free_hit() -> void:
 		if p != taker:
 			p.pos = Vector2(m.PITCH.x / 2.0, p.pos.y)  # and nobody in the way
 	m._strike_speed(taker, (goal - m.ball_pos).normalized(), 30.0, 0.3, "shooting")
+	var aimed := false
 	for i in 120:
 		m.step(1.0 / 60.0)
+		if not aimed and m.carrier == null:
+			# Struck: send it straight in, whatever the swing did, so a
+			# miss-hit going wide can't make this test flaky.
+			aimed = true
+			m.ball_vel = (goal - m.ball_pos).normalized() * 30.0
+			m.ball_z = 0.3
+			m.ball_vz = 0.0
+			m.ball_sim.set_spin(Vector3.ZERO)
 		if m.state != m.State.PLAY:
 			break
 	_check(m.score[0] == 0, "no goal given")
