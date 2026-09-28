@@ -25,8 +25,8 @@ const GRIP_LOW := 0.24     ## distance of the lower hand from the butt
 const HAND_GRIP := 0.065   ## wrist to the middle of the grip
 const HEAD_LOCAL := Vector3(0.0, -CAMAN_LENGTH + 0.015, -0.055)  ## caman head centre in caman space
 ## Ready stance, hips space: butt of the caman and its direction to the head.
-const READY_P := Vector3(0.12, 0.0, -0.3)
-const READY_D := Vector3(0.14, -0.55, -0.82)
+const READY_P := Vector3(0.16, 0.0, -0.26)
+const READY_D := Vector3(-0.08, -0.55, -0.83)
 
 ## Keeper shirts, picked to stand out from the team's own colours.
 const KEEPER_CHOICES := [Color("f2c400"), Color("2e9e4f"), Color("f07c1a"), Color("26262b"), Color("8e44ad")]
@@ -380,6 +380,10 @@ func advance(delta: float) -> void:
 	var carry_goal := 0.0
 	if _action == &"" and not _charging and _charge <= 0.0:
 		carry_goal = _ease((_speed - 1.2) / 1.6) * (1.0 - clampf(_reach * 5.0, 0.0, 1.0))
+		# Closing on the ball, the second hand comes on, ready to strike.
+		if _look_target is Vector3:
+			var to_ball: Vector3 = (_look_target as Vector3) - global_position
+			carry_goal *= _ease((Vector2(to_ball.x, to_ball.z).length() - 4.0) / 4.0)
 	_carry = move_toward(_carry, carry_goal, delta * (2.5 if carry_goal > _carry else 6.0))
 	if _charging:
 		_charge = minf(1.0, _charge + delta / 0.35)
@@ -549,10 +553,10 @@ func _pose(_delta: float) -> void:
 	_free_hand = null
 
 	# Caman carry pose (in hips-relative skeleton space, right-handed)
-	# Two hands at the waist, the head held up off the grass out in front at
-	# about knee height (a hockey player would have it flat on the ice).
-	var cam_p := _lerp3(READY_P, Vector3(0.18, 0.05, -0.26), run)
-	var cam_d := _lerp3(READY_D, Vector3(0.2, -0.45, -0.87), run).normalized()
+	# Two hands low across the thighs, the head held just off the grass out in
+	# front (a hockey player would have it flat on the ice).
+	var cam_p := _lerp3(READY_P, Vector3(0.18, 0.02, -0.24), run)
+	var cam_d := _lerp3(READY_D, Vector3(-0.25, -0.5, -0.83), run).normalized()
 	cam_p.y += sin(ph * 2.0) * 0.025 * run
 	var twist := 0.0
 
@@ -620,9 +624,9 @@ func _pose(_delta: float) -> void:
 
 	# Place the caman relative to the hips, turned with the torso.
 	var hips_g := _skel.get_bone_global_pose(_bone["Hips"])
-	var yaw_b := Basis(Vector3.UP, (-twist if left_handed else twist) * 0.5 + rot["Hips"].y * (-1.0 if left_handed else 1.0))
-	if left_handed:
-		yaw_b = Basis(Vector3.UP, -twist * 0.5 - rot["Hips"].y)
+	# twist and rot are already mirrored for left-handers, so this turns the
+	# caman with the torso either way.
+	var yaw_b := Basis(Vector3.UP, twist * 0.5 + rot["Hips"].y)
 	var p_sk: Vector3 = hips_g.origin + yaw_b * cam_p
 	var d_sk: Vector3 = (yaw_b * cam_d).normalized()
 	# A shy is struck with the back of the bas, so the face is turned round.
@@ -657,11 +661,11 @@ func _pose(_delta: float) -> void:
 				var dn := rd.normalized()
 				var rt := Transform3D(_caman_basis(dn, yaw_b * face_dir), tgt - dn * head_len)
 				ct = ct.interpolate_with(rt, _reach)
-	# Running off the ball the caman is carried in the lower hand, up by that
-	# shoulder with the shaft sloping up and back so the head rides behind it,
-	# and the top hand is free to pump like a runner's. When a swing starts the
-	# stick comes off the shoulder and the top hand joins it by the top of the
-	# backswing, so the hit itself is always two-handed.
+	# Running off the ball the caman is carried in the lower hand, low and
+	# across the front of the body with the head out in front just off the
+	# grass (as at The Dell), and the top hand is free to pump like a
+	# runner's. When a swing starts the top hand joins the stick by the top of
+	# the backswing, so the hit itself is always two-handed.
 	var carry := _carry
 	if _action != &"":
 		carry = _carry_from * (1.0 - _ease(_action_age / maxf(0.01, _carry_fade)))
@@ -670,11 +674,11 @@ func _pose(_delta: float) -> void:
 		var mx := -1.0 if left_handed else 1.0
 		var pump := sin(ph) * run   # > 0: front (left) leg forward
 		var bob := absf(cos(ph)) * 0.03 * run
-		var hand := Vector3(0.21 * mx, 0.15 + bob, -0.2 - 0.06 * pump)
-		var cd := Vector3(0.3 * mx, 0.72, 0.62 + 0.06 * pump).normalized()
+		var hand := Vector3(0.2 * mx, 0.04 + bob, -0.16 - 0.05 * pump)
+		var cd := Vector3(-0.55 * mx, -0.45 + 0.05 * pump, -0.7).normalized()
 		var d_c: Vector3 = yaw_b * cd
 		var grip_c: Vector3 = hips_g.origin + yaw_b * hand
-		var carry_t := Transform3D(_caman_basis(d_c, yaw_b * Vector3(0.3 * mx, 0.0, 1.0)), grip_c - d_c * GRIP_LOW)
+		var carry_t := Transform3D(_caman_basis(d_c, yaw_b * Vector3(-0.3 * mx, -1.0, -0.2)), grip_c - d_c * GRIP_LOW)
 		ct = ct.interpolate_with(carry_t, carry)
 		carry_top = hips_g.origin + yaw_b * Vector3(-0.17 * mx, 0.24 - 0.08 * pump + bob, -0.16 + 0.22 * pump)
 	# Keep both grips within arm's reach: slide the caman towards the shoulders.
@@ -926,10 +930,10 @@ func _action_pose(rot: Dictionary) -> Array:
 
 
 func _backswing(size: float) -> Array:
-	# Top: hands up by the back shoulder, wrists cocked, the caman pointing up
-	# and back behind the head.
-	var p := Vector3(0.14, -0.08, -0.26).lerp(Vector3(0.3, 0.5, 0.02), size)
-	var d := Vector3(0.25, -0.85, -0.45).normalized().slerp(Vector3(0.12, 0.72, 0.68).normalized(), size)
+	# Top: hands together up by the back shoulder, the caman nearly upright
+	# above the head.
+	var p := Vector3(0.14, -0.08, -0.26).lerp(Vector3(0.28, 0.5, 0.0), size)
+	var d := Vector3(0.25, -0.85, -0.45).normalized().slerp(Vector3(0.08, 0.9, 0.42).normalized(), size)
 	return [p, d]
 
 

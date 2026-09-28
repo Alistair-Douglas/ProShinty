@@ -8,7 +8,8 @@ const POSES := [
 	["Standing", 0.0, &"", 0.0],
 	["Jogging", 3.0, &"", 0.0],
 	["Sprinting", 7.0, &"", 0.0],
-	["Running swing: back", 5.0, &"swing", 0.36],
+	["Near the ball", 3.0, &"near", 0.0],
+	["Swing on the run", 5.0, &"swing", 0.36],
 	["Swing: top", 0.0, &"swing", 0.36],
 	["Swing: contact", 0.0, &"swing", 0.47],
 	["Swing: follow", 0.0, &"swing", 0.62],
@@ -42,7 +43,7 @@ func _run() -> void:
 			m.manual_update = true
 			world.add_child(m)
 			m.setup({"number": 7, "name": "Player 7", "position": "LM"}, team)
-			var x := (i - (POSES.size() - 1) / 2.0) * 1.3
+			var x := (i - (POSES.size() - 1) / 2.0) * 1.15
 			m.position = Vector3(x, -row * 2.5, 0)
 			# Top row: side on, facing left (+X is the camera's right). Bottom
 			# row: towards the camera and a little to its left.
@@ -53,7 +54,12 @@ func _run() -> void:
 			for f in 40:
 				m.advance(1.0 / 60.0)
 			var act: StringName = pose[2]
-			if act != &"":
+			if act == &"near":
+				# The ball a couple of metres ahead: both hands come on.
+				m.look_at_point(m.global_transform * Vector3(0, 0, -2.5))
+				for f in 40:
+					m.advance(1.0 / 60.0)
+			elif act != &"":
 				m.play_action(act, 1.0)
 				var target: float = pose[3] * ShintyPlayerModel.ACTIONS[String(act)]
 				var t := 0.0
@@ -64,14 +70,14 @@ func _run() -> void:
 			if row == 0:
 				var tag := Label3D.new()
 				tag.text = pose[0]
-				tag.font_size = 36
+				tag.font_size = 30
 				tag.outline_size = 10
 				tag.pixel_size = 0.004
 				tag.position = Vector3(x, 2.1, 0)
 				world.add_child(tag)
 	var cam := Camera3D.new()
 	cam.projection = Camera3D.PROJECTION_ORTHOGONAL
-	cam.size = 5.4
+	cam.size = 5.6
 	cam.position = Vector3(0, -0.3, 10)
 	world.add_child(cam)
 	cam.make_current()

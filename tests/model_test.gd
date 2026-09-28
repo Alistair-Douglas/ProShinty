@@ -94,8 +94,14 @@ func _run() -> void:
 	runner.set_locomotion(Vector3(0, 0, -6.0))
 	for i in 60:
 		runner.advance(1.0 / 60.0)
-	check(runner.get_caman_head_position().y > 1.3, "running, the caman rides up by the shoulder (head %.2f m)" % runner.get_caman_head_position().y)
+	var carried := runner.get_caman_head_position()
+	check(carried.y > 0.15 and carried.y < 0.8 and carried.z < -0.4, "running, the caman head is carried low out in front (%s)" % carried)
 	check(_top_hand_gap(runner) > 0.15, "running, the top hand is off the caman (%.2f m)" % _top_hand_gap(runner))
+	runner.look_at_point(runner.global_transform * Vector3(0, 0, -2.5))
+	for i in 40:
+		runner.advance(1.0 / 60.0)
+	check(_top_hand_gap(runner) < 0.12, "closing on the ball, both hands are on the caman (%.2f m)" % _top_hand_gap(runner))
+	runner.look_at_point(null)
 	var run_hits := []
 	runner.strike.connect(func(pos, pow): run_hits.append(pos))
 	runner.play_action(&"swing", 1.0)
@@ -113,7 +119,14 @@ func _run() -> void:
 	lefty_run.set_locomotion(Vector3(0, 0, -6.0))
 	for i in 60:
 		lefty_run.advance(1.0 / 60.0)
-	check(lefty_run.get_caman_head_position().x < 0.0, "left-hander carries the caman on the left shoulder")
+	check(absf(lefty_run.get_caman_head_position().x + carried.x) < 0.1, "left-hander carries the caman the mirror way (%.2f vs %.2f)" % [lefty_run.get_caman_head_position().x, carried.x])
+	var lefty_hits := []
+	lefty_run.strike.connect(func(pos, pow): lefty_hits.append(pos))
+	lefty_run.play_action(&"swing", 1.0)
+	for i in 60:
+		lefty_run.advance(1.0 / 60.0)
+	check(lefty_hits.size() == 1 and (lefty_hits[0] as Vector3).y < 0.08 and (lefty_hits[0] as Vector3).x < 0.0,
+		"a left-hander's running swing meets the ground ball on the left")
 	for a in ["pass", "volley", "tackle", "trap", "save_left", "save_right", "celebrate"]:
 		var done := [false]
 		var cb := func(n): done[0] = true
