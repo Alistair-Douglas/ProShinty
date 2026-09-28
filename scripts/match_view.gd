@@ -31,6 +31,9 @@ func _ready() -> void:
 	pitch.length_yd = m.PITCH.x
 	pitch.width_yd = m.PITCH.y
 	pitch.show_placeholder_goals = false  # our own hails below
+	var q: int = get_node("/root/Game").graphics_quality if has_node("/root/Game") else ShintyPitch.Detail.MEDIUM
+	pitch.graphics_quality = q
+	pitch.scenery_detail = ShintyPitch.Detail.LOW if q == ShintyPitch.Detail.LOW else ShintyPitch.Detail.MEDIUM
 	add_child(pitch)
 	_build_hails()
 	for p in m.players:
@@ -198,6 +201,7 @@ func _mesh(mesh: Mesh, mat: Material) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
 	mi.mesh = mesh
 	mi.material_override = mat
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	return mi
 
 

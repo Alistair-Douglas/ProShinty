@@ -39,34 +39,118 @@ static func dress(model: ShintyPlayerModel, skeleton: Skeleton3D) -> Node3D:
 	d._kit_details()
 	d._head()
 	var cam := d._caman()
-	for holder in skeleton.get_children():
-		_merge_by_material(holder)
+	_bake(skeleton, cam)
 	return cam
 
 
-## Fewer draw calls: join the meshes under one bone that share a material.
-static func _merge_by_material(holder: Node) -> void:
-	var groups := {}
-	for c in holder.get_children():
-		if c is MeshInstance3D and c.material_override != null:
-			var key: Material = c.material_override
-			if not groups.has(key):
-				groups[key] = []
-			groups[key].append(c)
-	for mat in groups:
-		var list: Array = groups[mat]
-		if list.size() < 2:
+## Few draw calls: every piece is baked into one skinned mesh on the skeleton,
+## one surface per material (plain-coloured parts share a single surface), and
+## a second single-surface copy casts the shadow. Each piece follows its bone
+## rigidly, exactly as it did hanging from a BoneAttachment3D; the caman rides
+## on its own "Caman" bone, which ShintyPlayerModel poses every frame.
+static func _bake(skeleton: Skeleton3D, cam: Node3D) -> void:
+	var surfaces := {}   # material (or &"solid") -> _Part
+	var shadow := _Part.new()
+	var caman_bone := skeleton.find_bone("Caman")
+	for holder in skeleton.get_children():
+		var bone := -1
+		var base := Transform3D.IDENTITY
+		if holder is BoneAttachment3D:
+			bone = skeleton.find_bone(holder.bone_name)
+			base = skeleton.get_bone_global_rest(bone)
+		elif holder == cam:
+			bone = caman_bone
+		if bone < 0:
 			continue
-		var st := SurfaceTool.new()
-		for mi in list:
-			st.append_from(mi.mesh, 0, mi.transform)
-		var merged := MeshInstance3D.new()
-		merged.mesh = st.commit()
-		merged.material_override = mat
-		holder.add_child(merged)
-		for mi in list:
-			holder.remove_child(mi)
-			mi.free()
+		for c in holder.get_children():
+			if not (c is MeshInstance3D):
+				continue
+			var mat: Material = c.material_override
+			var key: Variant = &"solid" if mat is StandardMaterial3D else mat
+			if not surfaces.has(key):
+				surfaces[key] = _Part.new()
+			var xf: Transform3D = base * c.transform
+			surfaces[key].add(c.mesh, xf, bone, mat)
+			var size: Vector3 = c.mesh.get_aabb().size
+			if maxf(size.x, maxf(size.y, size.z)) > 0.03:  # eyes, studs and laces cast nothing you'd see
+				shadow.add(c.mesh, xf, bone, null)
+			holder.remove_child(c)
+			c.free()
+	var mesh := ArrayMesh.new()
+	for key in surfaces:
+		surfaces[key].commit(mesh, true)
+		mesh.surface_set_material(mesh.get_surface_count() - 1, ShintyMesh.solid_vc() if key is StringName else key)
+	var skin := skeleton.create_skin_from_rest_transforms()
+	var body := MeshInstance3D.new()
+	body.name = "Body"
+	body.mesh = mesh
+	body.skin = skin
+	body.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	skeleton.add_child(body)
+	body.skeleton = NodePath("..")
+	var shadow_mesh := ArrayMesh.new()
+	shadow.commit(shadow_mesh, false)
+	var caster := MeshInstance3D.new()
+	caster.name = "ShadowCaster"
+	caster.mesh = shadow_mesh
+	caster.skin = skin
+	caster.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_SHADOWS_ONLY
+	skeleton.add_child(caster)
+	caster.skeleton = NodePath("..")
+
+
+## Vertex data for one surface of the baked player.
+class _Part:
+	var verts := PackedVector3Array()
+	var norms := PackedVector3Array()
+	var uvs := PackedVector2Array()
+	var uv2s := PackedVector2Array()
+	var colors := PackedColorArray()
+	var bones := PackedInt32Array()
+	var weights := PackedFloat32Array()
+	var idx := PackedInt32Array()
+
+	func add(mesh: Mesh, xf: Transform3D, bone: int, mat: Material) -> void:
+		var nb := xf.basis.inverse().transposed()
+		var col := Color.WHITE
+		var rm := Vector2(1, 0)
+		if mat is StandardMaterial3D:
+			col = mat.albedo_color
+			col.a = mat.clearcoat if mat.clearcoat_enabled else 0.0
+			rm = Vector2(mat.roughness, mat.metallic)
+		for s in mesh.get_surface_count():
+			var a := mesh.surface_get_arrays(s)
+			var v: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
+			var n: PackedVector3Array = a[Mesh.ARRAY_NORMAL]
+			var uv: PackedVector2Array = a[Mesh.ARRAY_TEX_UV]
+			var first := verts.size()
+			for i in v.size():
+				verts.append(xf * v[i])
+				norms.append((nb * n[i]).normalized() if n.size() > i else Vector3.UP)
+				uvs.append(uv[i] if uv.size() > i else Vector2.ZERO)
+				uv2s.append(rm)
+				colors.append(col)
+				bones.append_array([bone, 0, 0, 0])
+				weights.append_array([1.0, 0.0, 0.0, 0.0])
+			var src: PackedInt32Array = a[Mesh.ARRAY_INDEX]
+			if src.is_empty():
+				src = PackedInt32Array(range(v.size()))
+			for i in src:
+				idx.append(first + i)
+
+	func commit(mesh: ArrayMesh, shaded: bool) -> void:
+		var arrays := []
+		arrays.resize(Mesh.ARRAY_MAX)
+		arrays[Mesh.ARRAY_VERTEX] = verts
+		arrays[Mesh.ARRAY_BONES] = bones
+		arrays[Mesh.ARRAY_WEIGHTS] = weights
+		arrays[Mesh.ARRAY_INDEX] = idx
+		if shaded:
+			arrays[Mesh.ARRAY_NORMAL] = norms
+			arrays[Mesh.ARRAY_TEX_UV] = uvs
+			arrays[Mesh.ARRAY_TEX_UV2] = uv2s
+			arrays[Mesh.ARRAY_COLOR] = colors
+		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 
 
 func _pick(list: Array, salt: int) -> Variant:
@@ -247,6 +331,11 @@ func _label(text: String, size: int, px: float) -> Label3D:
 	l.outline_modulate = m.shirt_color.darkened(0.5)
 	l.double_sided = false
 	l.shaded = true
+	l.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	# Too small to read beyond this, so don't draw it (metres; x1.1 in yards).
+	l.visibility_range_end = 45.0
+	l.visibility_range_end_margin = 5.0
+	l.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
 	var f := SystemFont.new()
 	f.font_names = PackedStringArray(["Oswald", "Bebas Neue", "Impact", "Arial Narrow", "DejaVu Sans Condensed", "Sans"])
 	f.font_weight = 800

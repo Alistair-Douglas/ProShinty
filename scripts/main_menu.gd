@@ -75,6 +75,8 @@ func _ready() -> void:
 	quit.text = "Quit"
 	quit.pressed.connect(func(): get_tree().quit())
 	left.add_child(quit)
+	var gfx_pick := _option(left, "Graphics", Game.GRAPHICS_NAMES, Game.graphics_quality)
+	gfx_pick.item_selected.connect(func(i): Game.set_graphics_quality(i))
 
 	if not Game.last_result.is_empty():
 		var r: Dictionary = Game.last_result
