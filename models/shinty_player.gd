@@ -565,7 +565,7 @@ func _pose(_delta: float) -> void:
 		var bp := _backswing(1.0)
 		cam_p = cam_p.lerp(bp[0], k)
 		cam_d = cam_d.slerp(bp[1], k)
-		twist = -0.55 * k
+		twist = -1.2 * k
 		_crouch(rot, 0.4 * k)
 
 	if _action != &"":
@@ -752,7 +752,7 @@ func _action_pose(rot: Dictionary) -> Array:
 			# hands lead the head down (wrists cocked, then released into
 			# the ball) as the weight comes onto the front foot; the finish
 			# is high over the front shoulder with the chest to the target.
-			var top_twist := -0.9 * size
+			var top_twist := -0.9 * size - 0.3 * _big(size)
 			var fin_twist := 0.85 * size
 			var shift := 0.0     # hips: + over the back foot, - the front
 			if t < t0:
@@ -940,7 +940,17 @@ func _backswing(size: float) -> Array:
 	# above the head.
 	var p := Vector3(0.14, -0.08, -0.26).lerp(Vector3(0.28, 0.5, 0.0), size)
 	var d := Vector3(0.25, -0.85, -0.45).normalized().slerp(Vector3(0.08, 0.9, 0.42).normalized(), size)
+	# A big hit is wound right up: hands high by the back shoulder and the
+	# caman laid back behind the head.
+	var big := _big(size)
+	p = p.lerp(Vector3(0.24, 0.64, 0.06), big)
+	d = d.slerp(Vector3(0.05, 0.5, 0.86).normalized(), big)
 	return [p, d]
+
+
+## How much of the extra wind-up a swing of this size gets (big hits only).
+static func _big(size: float) -> float:
+	return _ease((size - 0.7) / 0.3)
 
 
 func _contact(h: float) -> Array:
