@@ -123,6 +123,8 @@ var attack_dir := [1, -1]
 var protected_timer := 0.0
 var paused := false
 var charge := -1.0
+const SHOOT_RANGE := 70.0   # the shoot button aims at goal from within this many yards
+var charge_kind := "shoot"   # which button is being held: "shoot" (at goal) or "hit" (long)
 var steer := Vector2.ZERO   # smoothed human steering direction
 var message := ""
 var message_timer := 0.0
@@ -703,9 +705,10 @@ func _human_control(dt: float) -> void:
 		aim = p.facing
 	if p == set_piece_taker_now() and set_piece_t < SET_PIECE_MIN:
 		return   # play has stopped: let everyone get set first
-	if Input.is_action_just_pressed("shoot"):
+	if Input.is_action_just_pressed("shoot") or Input.is_action_just_pressed("hit"):
 		# Also how you swing at an opponent's ball: beat their swing to it.
 		charge = 0.0
+		charge_kind = "hit" if Input.is_action_just_pressed("hit") else "shoot"
 	if Input.is_action_just_pressed("block"):
 		Counters.start_block(self, p)
 	if Input.is_action_just_pressed("cleek"):
@@ -716,10 +719,14 @@ func _human_control(dt: float) -> void:
 		# Golf-style meter: it fills to full power, then keeps going into an
 		# overswing that adds power error (miss-hits and curve) but no power.
 		charge = min(OVERSWING_MAX, charge + dt * 1.3)
-		if not Input.is_action_pressed("shoot"):
+		if not Input.is_action_pressed(charge_kind):
 			# Swing whether or not the ball is there yet: timing a first-time
 			# hit on a ball arriving is up to you. Miss it and it's fresh air.
-			_human_shoot(p, aim, charge)
+			var restart: bool = p == set_piece_taker_now() or (p.shy_ready and carrier == p)
+			if charge_kind == "shoot" and not restart:
+				_human_shoot(p, mv, charge)
+			else:
+				_human_hit(p, aim, charge)
 			charge = -1.0
 	if Input.is_action_just_pressed("pass"):
 		if carrier == p or _ball_in_reach(p):
@@ -754,21 +761,42 @@ func _ball_in_reach(p: Player) -> bool:
 	return carrier == null and p.touch_block <= 0.0 and ball_z < REACH_HEIGHT and p.pos.distance_to(ball_pos) < Body.max_reach(p) + 0.4
 
 
-func _human_shoot(p: Player, aim: Vector2, charged: float) -> void:
+## The shoot button: always at goal, wherever the player is facing. Hold for
+## power; the stick picks the corner (steer one way or the other of the goal
+## for that post, or leave it for the far corner).
+func _human_shoot(p: Player, steer_in: Vector2, charged: float) -> void:
 	var power: float = min(charged, 1.0)
 	p.overswing = max(0.0, charged - 1.0) / (OVERSWING_MAX - 1.0)
 	p.charged = power
 	var goal := target_goal(p.team)
 	var to_goal := goal - p.pos
-	var loft := power * 7.0
-	if to_goal.length() < 45.0 and abs(aim.angle_to(to_goal)) < deg_to_rad(40.0):
-		# Aim assist: pull the shot towards the goal, placement follows the stick.
-		var spot := goal + Vector2(0, clamp(aim.y * 6.0, -1.0, 1.0) * (GOAL_W / 2.0 - 0.5))
-		aim = (spot - p.pos).normalized()
-		loft = 0.5 + power * 3.0
-		if carrier == p or _ball_in_reach(p):
-			shots[p.team] += 1
+	if to_goal.length() > SHOOT_RANGE:
+		# Too far out to shoot: it's a long hit where the player is aiming.
+		_human_hit(p, p.facing if steer_in.length() < 0.3 else steer_in.normalized(), charged)
+		return
+	var side: float
+	if abs(steer_in.y) > 0.3:
+		# Steering up or down the pitch picks that post.
+		side = clamp(steer_in.y * 2.0, -1.0, 1.0)
+	else:
+		side = -signf(p.pos.y - goal.y) if abs(p.pos.y - goal.y) > 1.0 else (1.0 if randf() < 0.5 else -1.0)
+	var spot := goal + Vector2(0, side * (GOAL_W / 2.0 - 0.5))
+	var aim := (spot - p.pos).normalized()
+	# Low and hard close in; from distance it has to be lofted in.
+	var loft: float = 0.5 + power * (3.0 if to_goal.length() < 45.0 else 5.0)
+	if carrier == p or _ball_in_reach(p):
+		shots[p.team] += 1
+	p.facing = aim
 	_strike(p, aim, max(power, 0.2), loft, "shooting")
+
+
+## The long-hit button (and a restart): straight where the player is aiming,
+## lofted more the harder it's hit. Clearances, long balls, shies.
+func _human_hit(p: Player, aim: Vector2, charged: float) -> void:
+	var power: float = min(charged, 1.0)
+	p.overswing = max(0.0, charged - 1.0) / (OVERSWING_MAX - 1.0)
+	p.charged = power
+	_strike(p, aim, max(power, 0.2), power * 7.0, "shooting")
 
 
 func _human_pass(p: Player, aim: Vector2) -> void:
