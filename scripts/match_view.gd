@@ -21,6 +21,7 @@ var shy_blend := 0.0      # 0 = broadcast camera, 1 = shy camera
 var shy_look := Vector3.ZERO
 var shy_eye := Vector3.ZERO
 var director: ShintyTVDirector
+var aim_arrow: Node3D     # where the player is aiming a shy, hit-out or corner
 var crowd: ShintyCrowd
 var goal_judges: ShintyGoalJudges
 
@@ -57,6 +58,7 @@ func _ready() -> void:
 	camera.current = true
 	add_child(camera)
 	_build_boards()
+	_build_aim_arrow()
 	_build_crowd()
 	director = ShintyTVDirector.new()
 	director.name = "TVDirector"
@@ -89,6 +91,7 @@ func _process(delta: float) -> void:
 		else:
 			figures[p]["root"].visible = false  # sent off
 	_update_referee(delta)
+	_update_aim_arrow()
 	ball.position = w(m.ball_pos, m.ball_z + ShintyBallPhysics.RADIUS * ShintyMatchAdapter.TO_YARDS)
 	_update_camera(delta)
 	director.after_frame(delta)
@@ -172,6 +175,32 @@ func _update_camera(delta: float) -> void:
 	camera.position = eye.lerp(shy_eye, k)
 	camera.look_at(look.lerp(shy_look, k), Vector3.UP)
 	camera.fov = lerpf(tv[2], 45.0, k)
+
+
+## A flat arrow on the grass from the player's taker along their aim, while
+## they line up a shy, hit-out or corner.
+func _build_aim_arrow() -> void:
+	aim_arrow = Node3D.new()
+	aim_arrow.name = "AimArrow"
+	var mat := _mat(Color(1, 0.92, 0.2, 0.75), true)
+	var shaft := _mesh(_box(Vector3(0.18, 0.02, 5.0)), mat)
+	shaft.position = Vector3(0, 0, -2.5)
+	aim_arrow.add_child(shaft)
+	var tip := _mesh(_cone(0.45, 0.9), mat)
+	tip.rotation_degrees = Vector3(-90, 0, 0)
+	tip.position = Vector3(0, 0, -5.4)
+	aim_arrow.add_child(tip)
+	aim_arrow.visible = false
+	add_child(aim_arrow)
+
+
+func _update_aim_arrow() -> void:
+	var p = m.human
+	var on: bool = p != null and p in m.players and (p == m.set_piece_taker_now() or (p.shy_ready and m.carrier == p))
+	aim_arrow.visible = on
+	if on:
+		aim_arrow.position = w(p.pos + p.facing * 0.9, 0.05)
+		aim_arrow.rotation = Vector3(0, atan2(-p.facing.x, -p.facing.y), 0)
 
 
 ## Screen position of a pitch point, for the HUD.

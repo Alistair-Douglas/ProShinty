@@ -225,10 +225,11 @@ func _drive_menu_matches() -> bool:
 	if m.state == m.State.FULL_TIME:
 		_release_all()
 		_check_events(m, "menu match %d" % (_venue + 1))
-		print("  full time %d - %d, the bot started %d swings" % [m.score[0], m.score[1], _swings])
+		print("  full time %d - %d, the bot started %d swings, held the ball up for %d frames" % [m.score[0], m.score[1], _swings, _shields])
 		if _swings == 0:
 			_fail("menu match %d: the bot's key presses never started a swing" % (_venue + 1))
 		_swings = 0
+		_shields = 0
 		# What pressing a button at full time does.
 		change_scene_to_file("res://scenes/main_menu.tscn")
 		_match_frames = -1000000
@@ -254,6 +255,7 @@ func _physics_process(delta: float) -> bool:
 
 var _swing_hold := 0
 var _counted := false
+var _shields := 0   ## frames the bot held the ball up
 var _swings := 0   ## hits the bot started (checks key presses reach the match)
 
 
@@ -278,7 +280,7 @@ func _bot(m: Node) -> void:
 		_counted = true
 	if _swing_hold == 0:
 		_counted = false
-	for a in ["move_left", "move_right", "move_up", "move_down", "switch", "pass", "block", "cleek", "barge", "sprint"]:
+	for a in ["move_left", "move_right", "move_up", "move_down", "switch", "pass", "block", "cleek", "barge", "sprint", "shield"]:
 		Input.action_release(a)
 	var target: Vector2 = m.ball_pos
 	if m.carrier == h:
@@ -294,12 +296,16 @@ func _bot(m: Node) -> void:
 		_swing_hold -= 1
 		if _swing_hold == 0:
 			Input.action_release("shoot")
+			Input.action_release("hit")
 		return
 	var near: bool = h.pos.distance_to(m.ball_pos) < 2.5
+	if m.carrier == h and m._nearest_opponent_dist(h) < 2.5 and _match_frames % 200 < 100:
+		Input.action_press("shield")   # hold it up under pressure
+		_shields += 1
 	if m.carrier == h:
 		var to_goal: float = h.pos.distance_to(m.target_goal(h.team))
 		if to_goal < 35.0 or randf() < 0.01:
-			Input.action_press("shoot")
+			Input.action_press("shoot" if to_goal < 60.0 else "hit")   # long hit from deep
 			_swing_hold = randi_range(20, 60)   # sometimes into the overswing
 		elif randf() < 0.01:
 			Input.action_press("pass")
@@ -324,6 +330,6 @@ func _bot(m: Node) -> void:
 
 
 func _release_all() -> void:
-	for a in ["move_left", "move_right", "move_up", "move_down", "switch", "pass", "block", "cleek", "barge", "sprint", "shoot"]:
+	for a in ["move_left", "move_right", "move_up", "move_down", "switch", "pass", "block", "cleek", "barge", "sprint", "shoot", "hit", "shield"]:
 		Input.action_release(a)
 	_swing_hold = 0

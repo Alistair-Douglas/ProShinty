@@ -32,12 +32,18 @@ const DRIBBLE_LOSE := 3.2    # yards: a touch this far from the carrier has got 
 const SHY_TOSS := 6.5        # yd/s: how hard a shy is thrown up
 const SHY_ARM := 0.8         # the shy is tossed an arm's length in front
 const SHY_ATTEMPTS := 3      # tries at a clean strike before the shy goes over
+const SHY_MIN_SPEED := 14.0  # yd/s: the softest shy
+const SHY_MAX_SPEED := 38.0  # and the hardest
+const RESTART_AIM_RATE := 1.2  # rad/s: how fast the player turns their aim at a restart
 const SHY_HOLD := 0.35       # the ball is lifted in the hand this long before it leaves it
 const THROW_UP_SET := 1.2   # seconds the pair stand ready before the ball goes up
 const THROW_UP_TOSS := 8.0   # yd/s: the referee's throw
 const THROW_UP_GAP := 0.8    # each centre stands this far from the spot
 const SET_PIECE_PAUSE := 2.2 # hit-outs and corners: play stops while players get set
 const SET_PIECE_MIN := 1.0   # a human taker can't hit it before this
+const SHIELD_SPEED := 0.45   # shielding the ball: walking pace, body between ball and man
+const BATTLE_TIME := 0.8     # a stick battle for the ball lasts this long
+const BATTLE_SLOW := 0.35    # both players are near enough stood still while they fight for it
 
 enum State { THROW_UP, PLAY, GOAL, HALF_TIME, FULL_TIME }
 
@@ -87,6 +93,8 @@ class Player:
 	var counter_age := 0.0
 	var read_swing := -1     # AI: the opponent swing already reacted to
 	var overswing := 0.0     # human: 0..1 past full power
+	var shielding := false   # carrier holding the ball up, body between it and the man
+	var hold_t := 0.0        # AI: how long to keep holding it up
 
 	func r(key: String) -> float:
 		return float(data.get(key, 50))
@@ -120,6 +128,11 @@ var attack_dir := [1, -1]
 var protected_timer := 0.0
 var paused := false
 var charge := -1.0
+## A stick battle for the carrier's ball: {"t": tackler, "o": carrier,
+## "time": s, "effort": {player: extra}}. Empty when there isn't one.
+var battle := {}
+const SHOOT_RANGE := 70.0   # the shoot button aims at goal from within this many yards
+var charge_kind := "shoot"   # which button is being held: "shoot" (at goal) or "hit" (long)
 var steer := Vector2.ZERO   # smoothed human steering direction
 var message := ""
 var message_timer := 0.0
@@ -149,6 +162,8 @@ var throw_up_swing := {}           # Player -> when they swing at it
 var shy_lift: Player = null        # taking a shy with the ball still in the hand
 var shy_lift_t := 0.0
 var shy_lift_from := Vector3.ZERO
+var restart_aim := 0.0             # the player's aim at a restart, off restart_base
+var restart_base := Vector2.RIGHT  # straight in from the line (a shy) or the default aim
 var dribble_vel := Vector2.ZERO    # a dribbled ball rolling ahead of its carrier
 var dribble_taps := 0
 
@@ -337,14 +352,19 @@ func own_goal(team: int) -> Vector2:
 
 
 func home_world(p: Player) -> Vector2:
+	return home_at(p, ball_pos)
+
+
+## Formation spot for p with the ball at `ball` (see home_world).
+func home_at(p: Player, ball: Vector2) -> Vector2:
 	var f: Vector2 = p.home
 	if not p.is_keeper():
-		var bx := own_frac(p.team, ball_pos.x)
+		var bx := own_frac(p.team, ball.x)
 		# Forwards are man-marked by the opposing backs and hold their line;
 		# everyone else shifts up and down the park with the ball.
 		var shift := 0.15 if p.role == "FWD" else 0.5
 		f.x = clamp(f.x + (bx - 0.5) * shift, 0.05, 0.94)
-		f.y = clamp(f.y + (ball_pos.y / PITCH.y - 0.5) * (0.12 if p.role == "FWD" else 0.3), 0.06, 0.94)
+		f.y = clamp(f.y + (ball.y / PITCH.y - 0.5) * (0.12 if p.role == "FWD" else 0.3), 0.06, 0.94)
 		if carrier != null and carrier.team == p.team:
 			f.x = min(f.x + 0.05, 0.94)
 	return frac_to_world(p.team, f)
@@ -412,6 +432,9 @@ func _update_players(dt: float) -> void:
 		p.lunge = max(0.0, p.lunge - dt)
 		Counters.tick(p, dt)
 		p.sprinting = false
+		if p != carrier:
+			p.shielding = false
+			p.hold_t = 0.0
 	if human != null and human.is_keeper() and carrier != human:
 		human = _nearest_outfield(human_side, ball_pos, null)
 	for t in 2:
@@ -431,6 +454,7 @@ func _update_players(dt: float) -> void:
 		_restart(fouled.team, fouled.pos, "Free hit")
 		_say("Foul: push in the back", 1.5)
 		return
+	_update_battle(dt)
 	for p in players:
 		Body.update_stick(self, p, dt)
 		if p.swing_t >= 0.0:
@@ -519,8 +543,10 @@ func _ai_chase(p: Player, dt: float) -> void:
 
 
 func _ai_carrier(p: Player, dt: float) -> void:
-	if p.swing_t >= 0.0:
-		return   # mid-swing: committed
+	if p.swing_t >= 0.0 or in_battle(p):
+		return   # mid-swing or fighting for it: committed
+	p.hold_t = max(0.0, p.hold_t - dt)
+	p.shielding = p.hold_t > 0.0
 	if p.shy_ready or p == set_piece_taker_now():
 		# A shy, hit-out or corner has to be taken: pass it to someone open or hit it long.
 		p.think -= dt
@@ -541,6 +567,10 @@ func _ai_carrier(p: Player, dt: float) -> void:
 				return
 		if pressure < 4.0 and randf() < 0.6 and _ai_pass(p, false):
 			return
+		if pressure < 2.5 and p.hold_t <= 0.0 and randf() < 0.4:
+			# Nothing on: hold it up, back into the man, and wait for support.
+			p.hold_t = randf_range(0.8, 1.8)
+			p.shielding = true
 		if randf() < 0.12 and _ai_pass(p, true):
 			return
 		if own_frac(p.team, p.pos.x) < 0.3 and pressure < 6.0 and randf() < 0.5:
@@ -682,11 +712,29 @@ func _human_control(dt: float) -> void:
 			charge = -1.0
 			return
 	var aim := mv.normalized() if mv.length() > 0.15 else p.facing
+	p.shielding = carrier == p and Input.is_action_pressed("shield") and p.swing_t < 0.0
+	if in_battle(p):
+		# Fighting for the ball: every press of a stick button is more effort.
+		charge = -1.0
+		for a in ["shoot", "hit", "pass", "shield", "barge"]:
+			if Input.is_action_just_pressed(a):
+				battle["effort"][p] = min(battle["effort"].get(p, 0.0) + 6.0, 24.0)
+		return
+	if p == set_piece_taker_now() or (p.shy_ready and carrier == p):
+		# Standing over a restart: the stick turns the aim smoothly, within
+		# a half circle (for a shy, from up the line round to down the line).
+		p.desired = Vector2.ZERO
+		if mv.length() > 0.15:
+			var want: float = clamp(restart_base.angle_to(mv), -PI / 2.0, PI / 2.0)
+			restart_aim = move_toward(restart_aim, want, RESTART_AIM_RATE * dt)
+		p.facing = restart_base.rotated(restart_aim)
+		aim = p.facing
 	if p == set_piece_taker_now() and set_piece_t < SET_PIECE_MIN:
 		return   # play has stopped: let everyone get set first
-	if Input.is_action_just_pressed("shoot"):
+	if Input.is_action_just_pressed("shoot") or Input.is_action_just_pressed("hit"):
 		# Also how you swing at an opponent's ball: beat their swing to it.
 		charge = 0.0
+		charge_kind = "hit" if Input.is_action_just_pressed("hit") else "shoot"
 	if Input.is_action_just_pressed("block"):
 		Counters.start_block(self, p)
 	if Input.is_action_just_pressed("cleek"):
@@ -697,10 +745,14 @@ func _human_control(dt: float) -> void:
 		# Golf-style meter: it fills to full power, then keeps going into an
 		# overswing that adds power error (miss-hits and curve) but no power.
 		charge = min(OVERSWING_MAX, charge + dt * 1.3)
-		if not Input.is_action_pressed("shoot"):
+		if not Input.is_action_pressed(charge_kind):
 			# Swing whether or not the ball is there yet: timing a first-time
 			# hit on a ball arriving is up to you. Miss it and it's fresh air.
-			_human_shoot(p, aim, charge)
+			var restart: bool = p == set_piece_taker_now() or (p.shy_ready and carrier == p)
+			if charge_kind == "shoot" and not restart:
+				_human_shoot(p, mv, charge)
+			else:
+				_human_hit(p, aim, charge)
 			charge = -1.0
 	if Input.is_action_just_pressed("pass"):
 		if carrier == p or _ball_in_reach(p):
@@ -735,21 +787,42 @@ func _ball_in_reach(p: Player) -> bool:
 	return carrier == null and p.touch_block <= 0.0 and ball_z < REACH_HEIGHT and p.pos.distance_to(ball_pos) < Body.max_reach(p) + 0.4
 
 
-func _human_shoot(p: Player, aim: Vector2, charged: float) -> void:
+## The shoot button: always at goal, wherever the player is facing. Hold for
+## power; the stick picks the corner (steer one way or the other of the goal
+## for that post, or leave it for the far corner).
+func _human_shoot(p: Player, steer_in: Vector2, charged: float) -> void:
 	var power: float = min(charged, 1.0)
 	p.overswing = max(0.0, charged - 1.0) / (OVERSWING_MAX - 1.0)
 	p.charged = power
 	var goal := target_goal(p.team)
 	var to_goal := goal - p.pos
-	var loft := power * 7.0
-	if to_goal.length() < 45.0 and abs(aim.angle_to(to_goal)) < deg_to_rad(40.0):
-		# Aim assist: pull the shot towards the goal, placement follows the stick.
-		var spot := goal + Vector2(0, clamp(aim.y * 6.0, -1.0, 1.0) * (GOAL_W / 2.0 - 0.5))
-		aim = (spot - p.pos).normalized()
-		loft = 0.5 + power * 3.0
-		if carrier == p or _ball_in_reach(p):
-			shots[p.team] += 1
+	if to_goal.length() > SHOOT_RANGE:
+		# Too far out to shoot: it's a long hit where the player is aiming.
+		_human_hit(p, p.facing if steer_in.length() < 0.3 else steer_in.normalized(), charged)
+		return
+	var side: float
+	if abs(steer_in.y) > 0.3:
+		# Steering up or down the pitch picks that post.
+		side = clamp(steer_in.y * 2.0, -1.0, 1.0)
+	else:
+		side = -signf(p.pos.y - goal.y) if abs(p.pos.y - goal.y) > 1.0 else (1.0 if randf() < 0.5 else -1.0)
+	var spot := goal + Vector2(0, side * (GOAL_W / 2.0 - 0.5))
+	var aim := (spot - p.pos).normalized()
+	# Low and hard close in; from distance it has to be lofted in.
+	var loft: float = 0.5 + power * (3.0 if to_goal.length() < 45.0 else 5.0)
+	if carrier == p or _ball_in_reach(p):
+		shots[p.team] += 1
+	p.facing = aim
 	_strike(p, aim, max(power, 0.2), loft, "shooting")
+
+
+## The long-hit button (and a restart): straight where the player is aiming,
+## lofted more the harder it's hit. Clearances, long balls, shies.
+func _human_hit(p: Player, aim: Vector2, charged: float) -> void:
+	var power: float = min(charged, 1.0)
+	p.overswing = max(0.0, charged - 1.0) / (OVERSWING_MAX - 1.0)
+	p.charged = power
+	_strike(p, aim, max(power, 0.2), power * 7.0, "shooting")
 
 
 func _human_pass(p: Player, aim: Vector2) -> void:
@@ -824,9 +897,9 @@ func _throw_up_shy(p: Player) -> void:
 	var a := 0.5 * GRAVITY
 	var c := Body.OVERHEAD - 1.4
 	p.swing_t = SHY_HOLD + (SHY_TOSS + sqrt(SHY_TOSS * SHY_TOSS - 4.0 * a * c)) / (2.0 * a)
-	# High and long, whatever the taker was going to do with it.
+	# Up and over, as hard as the taker chose to hit it.
 	var req: Dictionary = p.swing_req
-	req["speed"] = max(req["speed"], 22.0)
+	req["speed"] = clamp(req["speed"], SHY_MIN_SPEED, SHY_MAX_SPEED)
 	req["loft"] = max(req["loft"], req["speed"] * 0.45)
 	req["kind"] = "shy"
 	for o in players:
@@ -874,7 +947,10 @@ func _contact(p: Player) -> void:
 	if not shy and _nearest_opponent_dist(p) < 2.0:
 		diff += 0.2
 	if shy:
-		diff += 0.1
+		# Overhead with the back of the stick: the harder you go at it, the
+		# likelier you are to miss it or shank it off the heel or toe.
+		var force: float = clamp((req["speed"] - SHY_MIN_SPEED) / (SHY_MAX_SPEED - SHY_MIN_SPEED), 0.0, 1.0)
+		diff += 0.05 + force * force * 0.7
 	var res := ShintyMatchAdapter.swing_like_match(p.data, req["dir"], req["speed"], req["loft"], req["skill_key"],
 		ball_vel, ball_vz, _skill_mod(p.team), clamp(diff, 0.0, 1.0), offset)
 	p.overswing = 0.0
@@ -1061,7 +1137,7 @@ func _take_control(p: Player) -> void:
 ## It has to physically reach the ball, and a carrier shielding the ball with
 ## their body is much harder to take it from.
 func _try_tackle(t: Player, o: Player) -> void:
-	if t.cooldown > 0.0 or protected_timer > 0.0 or carrier != o or t.stagger > 0.0:
+	if t.cooldown > 0.0 or protected_timer > 0.0 or carrier != o or t.stagger > 0.0 or not battle.is_empty():
 		return
 	t.swing = 0.25
 	t.lunge = 0.35
@@ -1074,30 +1150,102 @@ func _try_tackle(t: Player, o: Player) -> void:
 	var shielded := _dist_to_segment(o.pos, t.pos, ball_pos) < Body.BODY_R * 1.2
 	if shielded:
 		chance *= 0.45   # the ball is on the far side of the carrier's body
+	if o.shielding:
+		chance *= 0.7    # braced for it, and strong on the ball
 	chance *= lerp(1.0, 0.6, clamp((d - 1.2) / 1.0, 0.0, 1.0))
-	var won := randf() < chance
+	# Rarely a clean steal: a poke that gets there usually starts a battle.
+	var roll := randf()
+	var won := roll < chance * 0.3
 	events.append({"type": "tackle", "by": t, "on": o, "won": won, "at": o.pos})
+	if not won and roll < chance:
+		battle = {"t": t, "o": o, "time": 0.0, "effort": {}}
+		events.append({"type": "battle", "team": t.team, "at": ball_pos})
+		t.cooldown = 0.2
+		return
 	if not won and shielded and randf() < 0.06:
 		# Reaching through the carrier's body for the ball: caman on the man.
 		events.append({"type": "foul", "kind": "hack", "by": t, "on": o, "at": o.pos, "severity": 0.3})
 	if won:
-		carrier = null
-		o.touch_block = 0.5
-		o.cooldown = 0.4
-		o.swing_t = -1.0
-		last_team = t.team
-		# The ball never jumps between sticks: the poke knocks it loose and it
-		# rolls. Usually the tackler hooks it back towards their own caman to
-		# collect; sometimes it's poked away into space.
-		if randf() < 0.6:
-			var to_stick := Vector2(t.stick.x, t.stick.y) - ball_pos
-			ball_vel = to_stick.normalized() * clamp(to_stick.length() * 3.0, 2.0, 5.0) + t.vel * 0.5
-			t.touch_block = 0.0
-		else:
-			ball_vel = (ball_pos - t.pos).normalized().rotated(randf_range(-0.7, 0.7)) * randf_range(4.0, 8.0)
-		ball_vz = 0.0
+		_steal(t, o)
 	else:
-		t.cooldown = 0.7
+		t.cooldown = 1.0
+
+
+## The tackler has taken it: the ball is knocked off the carrier's stick.
+func _steal(t: Player, o: Player) -> void:
+	carrier = null
+	o.touch_block = 0.5
+	o.cooldown = 0.4
+	o.swing_t = -1.0
+	o.shielding = false
+	last_team = t.team
+	# The ball never jumps between sticks: the poke knocks it loose and it
+	# rolls. Usually the tackler hooks it back towards their own caman to
+	# collect; sometimes it's poked away into space.
+	if randf() < 0.6:
+		var to_stick := Vector2(t.stick.x, t.stick.y) - ball_pos
+		ball_vel = to_stick.normalized() * clamp(to_stick.length() * 3.0, 2.0, 5.0) + t.vel * 0.5
+		t.touch_block = 0.0
+	else:
+		ball_vel = (ball_pos - t.pos).normalized().rotated(randf_range(-0.7, 0.7)) * randf_range(4.0, 8.0)
+	ball_vz = 0.0
+
+
+func in_battle(p: Player) -> bool:
+	return not battle.is_empty() and (battle["t"] == p or battle["o"] == p)
+
+
+## Two sticks on the ball: they lean in and fight for it. Strength, ball
+## control, tackling and holding it up decide it, and so does effort (the
+## player hammering a stick button). The carrier usually keeps it, or it
+## squirts loose for a 50/50; only now and then does the tackler come away
+## with it cleanly.
+func _update_battle(dt: float) -> void:
+	if battle.is_empty():
+		return
+	var t: Player = battle["t"]
+	var o: Player = battle["o"]
+	if state != State.PLAY or carrier != o or t.stagger > 0.0 or o.stagger > 0.0 \
+			or t.pos.distance_to(ball_pos) > Body.max_reach(t) + 0.4:
+		battle = {}   # knocked off, or the carrier got away from them
+		t.cooldown = max(t.cooldown, 0.6)
+		return
+	battle["time"] += dt
+	if battle["time"] < BATTLE_TIME:
+		return
+	var eff: Dictionary = battle["effort"]
+	if t != human:
+		eff[t] = randf_range(0.0, 14.0)
+	if o != human:
+		eff[o] = randf_range(0.0, 14.0)
+	var so: float = o.r("control") * 0.55 + o.r("tackling") * 0.2 + (o.mass - 75.0) * 0.8 \
+		+ (18.0 if o.shielding else 0.0) + eff.get(o, 0.0) + _skill_mod(o.team) * 100.0
+	var st: float = t.r("tackling") * 0.6 + t.r("control") * 0.15 + (t.mass - 75.0) * 0.8 \
+		+ eff.get(t, 0.0) + _skill_mod(t.team) * 100.0
+	var diff: float = (so - st) / 40.0 + randfn(0.0, 0.5)
+	battle = {}
+	if diff > -0.1:
+		# The carrier rides it and keeps the ball.
+		t.cooldown = 1.2
+		t.touch_block = 0.6
+		events.append({"type": "battle_kept", "team": o.team})
+	elif diff < -0.8:
+		events.append({"type": "battle_won", "team": t.team})
+		_steal(t, o)
+	else:
+		# Neither gets it: the ball squirts out between them.
+		carrier = null
+		last_team = t.team
+		o.touch_block = 0.25
+		t.touch_block = 0.25
+		o.shielding = false
+		var across := (o.pos - t.pos).orthogonal().normalized()
+		if randf() < 0.5:
+			across = -across
+		ball_vel = across.rotated(randf_range(-0.6, 0.6)) * randf_range(3.0, 6.0)
+		ball_vz = 0.0
+		events.append({"type": "battle_loose", "team": o.team})
+		events.append({"type": "clash", "team": t.team})
 
 
 ## The carrier has been knocked off the ball: it squirts away.
@@ -1180,7 +1328,14 @@ func _update_ball(dt: float) -> void:
 func is_dribbling(p: Player) -> bool:
 	return p == carrier and state == State.PLAY and protected_timer <= 0.0 and p.swing_t < 0.0 \
 		and not p.shy_ready and set_piece_taker_now() == null and p.stagger <= 0.0 \
+		and not p.shielding and not in_battle(p) \
 		and (p.vel.length() > 1.5 or dribble_vel.length() > 0.5)
+
+
+## How much help a dribbler gets: 1 for the player's own man (softer
+## touches, a quicker stick when turning, harder to nick), 0 for the computer.
+func dribble_assist(p: Player) -> float:
+	return 1.0 if p == human else 0.0
 
 
 func _dribble(dt: float) -> void:
@@ -1196,12 +1351,30 @@ func _dribble(dt: float) -> void:
 	var dir := want.normalized()
 	var run: float = max(c.vel.dot(dir), 0.0)
 	var head := Vector2(c.stick.x, c.stick.y)
-	if head.distance_to(ball_pos) < Body.CONTACT_R + 0.12 and dribble_vel.dot(dir) < run + 0.5:
+	var assist := dribble_assist(c)
+	# Turning with the ball: the player gets the caman round to it sooner.
+	var turning: bool = dribble_vel.length() > 0.5 and dribble_vel.normalized().dot(dir) < 0.75
+	var tap_r: float = Body.CONTACT_R + 0.12 + (0.25 if turning else 0.1) * assist
+	if head.distance_to(ball_pos) < tap_r and dribble_vel.dot(dir) < run + 0.5:
 		# The tap: just firm enough to roll ahead of the player; better ball
-		# players keep it closer.
+		# players keep it closer, and the player's touches are softer still.
 		var soft: float = lerp(1.45, 1.2, c.r("control") / 100.0)
-		dribble_vel = dir * max(run * soft + 1.0, 2.5)
+		soft = lerp(soft, 1.08, assist)
+		dribble_vel = dir * max(run * soft + lerp(1.0, 0.6, assist), 2.5)
 		dribble_taps += 1
+		return
+	if assist > 0.0 and dribble_vel.length() > 0.3:
+		# The player shepherds a rolling touch round with them as they turn.
+		var bend: float = dribble_vel.angle_to(dir)
+		dribble_vel = dribble_vel.rotated(clampf(bend, -3.0 * dt, 3.0 * dt))
+	var overrun: bool = (ball_pos - head).dot(dir) < -0.1
+	if assist > 0.0 and head.distance_to(ball_pos) < 1.8 \
+			and (overrun or (dribble_vel.length() > 0.5 and dribble_vel.normalized().dot(dir) < 0.3)):
+		# A sharp turn, or running past it: the player hooks the ball back
+		# round with the caman rather than letting it run away.
+		ball_pos = ball_pos.move_toward(head, (c.vel.length() + CARRY_CATCH_UP) * dt)
+		dribble_vel = dribble_vel.move_toward(c.vel, 30.0 * dt)
+		ball_vel = dribble_vel
 		return
 	var loose: bool = head.distance_to(ball_pos) > 0.8
 	if loose:
@@ -1211,7 +1384,7 @@ func _dribble(dt: float) -> void:
 				continue
 			if Vector2(o.stick.x, o.stick.y).distance_to(ball_pos) >= Body.CONTACT_R:
 				continue
-			if randf() > 0.25 + (o.r("tackling") - c.r("control")) / 250.0:
+			if randf() > (0.2 + (o.r("tackling") - c.r("control")) / 250.0) * (1.0 - 0.5 * assist):
 				o.touch_block = 0.5   # got a touch on it but the carrier kept it
 				continue
 			carrier = null
@@ -1221,7 +1394,7 @@ func _dribble(dt: float) -> void:
 			_take_control(o)
 			anim(o, "trap")
 			return
-	if ball_pos.distance_to(c.pos) > DRIBBLE_LOSE:
+	if ball_pos.distance_to(c.pos) > DRIBBLE_LOSE + 0.5 * assist:
 		# Overran it or turned away: it's a loose ball now.
 		carrier = null
 		c.touch_block = 0.15
@@ -1354,7 +1527,8 @@ func _check_ball_out() -> void:
 			var gx: float = abs(end_x - D_RADIUS)
 			_restart(defending, Vector2(gx, PITCH.y / 2.0 + randf_range(-4.0, 4.0)), "Hit-out")
 	elif ball_pos.y < 0.0 or ball_pos.y > PITCH.y:
-		var spot := Vector2(clamp(ball_pos.x, 1.0, PITCH.x - 1.0), clamp(ball_pos.y, 0.5, PITCH.y - 0.5))
+		# The shy is taken from the touchline where it went out.
+		var spot := Vector2(clamp(ball_pos.x, 1.0, PITCH.x - 1.0), 0.0 if ball_pos.y < 0.0 else PITCH.y)
 		_restart(1 - last_team if last_team >= 0 else 0, spot, "Shy")
 
 
@@ -1367,12 +1541,21 @@ func _restart(team: int, spot: Vector2, label: String) -> void:
 		p.swing_t = -1.0
 		p.shy_ready = false
 		p.shy_toss = false
-	taker.pos = spot - toward * (PLAYER_R + 0.55)
-	taker.pos = Vector2(clamp(taker.pos.x, 1.5, PITCH.x - 1.5), clamp(taker.pos.y, 1.5, PITCH.y - 1.5))
+	if label == "Shy":
+		# Toes just behind the line, facing straight in.
+		var inward := Vector2(0, 1) if spot.y < PITCH.y / 2.0 else Vector2(0, -1)
+		toward = inward
+		taker.pos = spot - inward * 0.2
+		spot += inward * 0.35
+	else:
+		taker.pos = spot - toward * (PLAYER_R + 0.55)
+		taker.pos = Vector2(clamp(taker.pos.x, 1.5, PITCH.x - 1.5), clamp(taker.pos.y, 1.5, PITCH.y - 1.5))
 	taker.vel = Vector2.ZERO
 	taker.facing = toward
 	taker.stagger = 0.0
 	taker.stick = Body.rest_spot(taker)
+	restart_base = toward
+	restart_aim = 0.0
 	# The ball is placed on the spot, not left where it went out.
 	ball_pos = spot
 	ball_vel = Vector2.ZERO
@@ -1381,7 +1564,7 @@ func _restart(team: int, spot: Vector2, label: String) -> void:
 	# A shy is thrown up and struck overhead (see _throw_up_shy).
 	taker.shy_ready = label == "Shy"
 	taker.shy_attempts = 0
-	taker.think = 0.9
+	taker.think = 0.9 if label != "Shy" else 1.8   # a shy: let everyone get to their spots
 	protected_timer = 1.5
 	_clear_set_piece()
 	if label == "Hit-out" or label == "Corner":

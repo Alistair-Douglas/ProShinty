@@ -48,6 +48,8 @@ var focus := [Vector2.ZERO, Vector2.ZERO]   # where the ball is (or will be) won
 var focus_player := [null, null]            # who has it, or will get it
 var supporters := [[], []]
 var cover := [null, null]
+var preset := {}               # Player -> where they stand for the current restart
+var preset_for := []           # [taker, kind, spot] the presets were worked out for
 
 
 func _init(match_node) -> void:
@@ -105,11 +107,10 @@ func begin_team(t: int, dt: float, chasers: Array) -> void:
 func off_ball(p, dt: float) -> void:
 	var pl := _plan(p)
 	var t: int = p.team
-	if m.set_piece == "Corner" and m.set_piece_taker_now() != null:
-		var spot = _corner_spot(p)
-		if spot != null:
-			m._steer_to(p, _legal(t, spot), p.pos.distance_to(spot) > 5.0)
-			return
+	var spot = _restart_spot(p)
+	if spot != null:
+		m._steer_to(p, spot, p.pos.distance_to(spot) > 5.0 and p.stamina > 0.15)
+		return
 	if attacking[t]:
 		if pl.timer <= 0.0 or _run_finished(p, pl):
 			_think_attack(p, pl)
@@ -392,6 +393,76 @@ func _assign_marks(t: int, chasers: Array) -> void:
 		out[pick] = o
 		free.erase(pick)
 	marks[t] = out
+
+
+# ---------------------------------------------------------------- restarts
+
+## Where p stands while a hit-out, corner or shy is taken, or null in open
+## play. The spots are worked out once per restart, so everyone walks to a
+## set position and waits there, like a real team setting up.
+func _restart_spot(p):
+	var taker = m.set_piece_taker_now()
+	var kind: String = m.set_piece
+	if taker == null:
+		taker = m.shy_taker()
+		kind = "Shy"
+	if taker == null:
+		return null
+	if preset_for.size() != 3 or preset_for[0] != taker or preset_for[1] != kind \
+			or preset_for[2].distance_to(m.ball_pos) > 3.0:
+		_build_presets(taker, kind)
+	return preset.get(p)
+
+
+func _build_presets(taker, kind: String) -> void:
+	preset = {}
+	preset_for = [taker, kind, m.ball_pos]
+	var spot: Vector2 = m.ball_pos
+	var t: int = taker.team
+	var taken := []   # short options the taking side offers
+	if kind == "Shy":
+		# Two short options: one down the line, one infield. The rest of the
+		# team takes its shape round the shy.
+		var inward: float = 1.0 if spot.y < m.PITCH.y / 2.0 else -1.0
+		var line := Vector2(spot.x + m.attack_dir[t] * 10.0, spot.y + inward * 5.0)
+		var infield := Vector2(spot.x + m.attack_dir[t] * 2.0, spot.y + inward * 13.0)
+		for want in [line, infield]:
+			var best = null
+			for q in m.squads[t]:
+				if q.is_keeper() or q == taker or q == m.human or preset.has(q) or q.role == "FWD":
+					continue
+				if best == null or q.pos.distance_to(want) < best.pos.distance_to(want):
+					best = q
+			if best != null:
+				preset[best] = _in_pitch(want)
+				taken.append(want)
+	for q in m.players:
+		if q.is_keeper() or q == taker or q == m.human or preset.has(q):
+			continue
+		var s = null
+		if kind == "Corner":
+			s = _corner_spot(q)
+		if s == null:
+			s = m.home_at(q, spot)
+			if kind == "Hit-out" and q.team == t and q.position_code in ["LHB", "RHB", "LM", "RM", "LHF", "RHF"]:
+				# Width to give the taker somewhere to hit it.
+				s.y = lerp(s.y, 6.0 if q.home.y < 0.5 else m.PITCH.y - 6.0, 0.4)
+		preset[q] = s
+	# The other side picks up the short options goal-side.
+	for want in taken:
+		var best = null
+		for q in m.squads[1 - t]:
+			if q.is_keeper() or q == m.human or q.role == "FWD":
+				continue
+			if best == null or preset[q].distance_to(want) < preset[best].distance_to(want):
+				best = q
+		if best != null:
+			preset[best] = want + (m.own_goal(1 - t) - want).normalized() * 2.5
+	for q in preset:
+		var s: Vector2 = _in_pitch(preset[q])
+		if q.team != t and s.distance_to(spot) < m.FREE_HIT_BACK + 1.0:
+			s = spot + (s - spot).normalized() * (m.FREE_HIT_BACK + 1.0) if s.distance_to(spot) > 0.1 else spot + Vector2(-m.attack_dir[t] * 6.0, 0)
+		preset[q] = _legal(q.team, s)
 
 
 # ---------------------------------------------------------------- corners

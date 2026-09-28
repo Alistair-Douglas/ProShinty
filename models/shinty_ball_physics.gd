@@ -12,12 +12,16 @@ const GRAVITY := 9.81
 const AIR_DENSITY := 1.2
 const DRAG_CD := 0.45
 const GROUND_RESTITUTION := 0.45  ## share of vertical speed kept on a bounce
-const BOUNCE_FRICTION := 0.82     ## share of horizontal speed kept on a bounce
 const ROLL_DECEL := 1.3           ## m/s^2 of grass resistance
 const ROLL_DRAG := 0.22           ## extra slowing per second, proportional to speed
 const SPIN_DECAY := 0.5
 const ROLL_CURVE := 0.012         ## m/s^2 of sideways pull per rad/s of sidespin while rolling
 const ROLL_SPIN_DECAY := 1.4      ## sidespin dies faster once the ball grips the grass
+const GRASS_GRIP := 0.45          ## friction between ball and turf on a bounce
+const TURF_SOAK := 0.96           ## share of horizontal speed the grass gives back on landing
+const TURF_KICK := 0.05           ## rad: no pitch is flat, so a bounce kicks a little off line
+const BOBBLE_SPEED := 7.0         ## m/s: a ball rolling faster than this can bobble
+const BOBBLE_RATE := 0.25         ## bobbles per second at 15 m/s
 
 const _AREA := PI * RADIUS * RADIUS
 const K_DRAG := 0.5 * AIR_DENSITY * DRAG_CD * _AREA / MASS
@@ -41,7 +45,9 @@ func duplicate_state() -> ShintyBallPhysics:
 
 
 func is_airborne() -> bool:
-	return position.y > ground_y + RADIUS + 0.003 or velocity.y > 0.05
+	# Still falling counts too: a ball coming down within a hair of the grass
+	# has yet to land (and bounce), not started rolling.
+	return position.y > ground_y + RADIUS + 0.003 or absf(velocity.y) > 0.05
 
 
 func height() -> float:
@@ -132,21 +138,23 @@ func _integrate(h: float, events: Array) -> void:
 		if position.y < floor_y:
 			position.y = floor_y
 			var vy := -velocity.y
-			var flat := Vector3(velocity.x, 0, velocity.z)
 			if vy > 1.2:
 				events.append({"type": "bounce", "position": position, "speed": vy})
-				velocity = flat * BOUNCE_FRICTION + Vector3(0, vy * GROUND_RESTITUTION, 0)
-				var side := spin.y
-				spin = spin.lerp(Vector3.UP.cross(velocity) / RADIUS, 0.5)
-				spin.y = side * 0.7  # sidespin survives the bounce, so it kicks on
+				_ground_contact(vy, true)
 			else:
 				events.append({"type": "landed", "position": position})
-				velocity = flat * BOUNCE_FRICTION
+				_ground_contact(vy, false)
 	else:
 		position.y = floor_y
 		velocity.y = 0.0
 		var s := velocity.length()
 		var side := spin.y * exp(-ROLL_SPIN_DECAY * h)
+		if s > BOBBLE_SPEED and randf() < BOBBLE_RATE * s / 15.0 * h:
+			# A bump in the turf: the ball hops a few centimetres.
+			velocity.y = randf_range(0.3, 0.3 + s * 0.05)
+			velocity = velocity.rotated(Vector3.UP, randfn(0.0, TURF_KICK * 0.5))
+			position.y = floor_y + 0.004
+			return
 		if s > 0.0:
 			var ns := maxf(0.0, s - (ROLL_DECEL + ROLL_DRAG * s) * h)
 			velocity *= ns / s
@@ -159,3 +167,31 @@ func _integrate(h: float, events: Array) -> void:
 				velocity = Vector3.ZERO
 		position += velocity * h
 		spin = Vector3.UP.cross(velocity) / RADIUS + Vector3.UP * side
+
+
+## The ball meets the turf. The grass grips it where it touches, so a steep,
+## dropping ball checks up and picks up topspin, a low skimming one skids on,
+## backspin bites and topspin kicks it forward. A harder landing sinks into
+## the grass more (less bounce), and no pitch is perfectly flat.
+func _ground_contact(vy: float, bounce: bool) -> void:
+	var flat := Vector3(velocity.x, 0, velocity.z)
+	var r := Vector3(0, -RADIUS, 0)
+	var slip := flat + spin.cross(r)   # how fast the bottom of the ball slides over the grass
+	var slip_s := slip.length()
+	if slip_s > 0.001:
+		# Friction can at most bring the ball to a pure roll (2/7 of the slip
+		# for a solid ball); a glancing landing doesn't press hard enough.
+		var j := minf(GRASS_GRIP * (1.0 + GROUND_RESTITUTION) * vy, slip_s * 2.0 / 7.0)
+		var dv := -slip / slip_s * j
+		flat += dv
+		var side := spin.y
+		spin += r.cross(dv) * (5.0 / (2.0 * RADIUS * RADIUS))
+		spin.y = side
+	flat *= TURF_SOAK
+	if bounce:
+		var e := clampf(GROUND_RESTITUTION + 0.1 - 0.012 * vy, 0.28, 0.55) * randf_range(0.9, 1.1)
+		flat = flat.rotated(Vector3.UP, randfn(0.0, TURF_KICK))
+		velocity = flat + Vector3(0, vy * e, 0)
+		spin.y *= 0.7   # sidespin survives the bounce, so it kicks on
+	else:
+		velocity = flat

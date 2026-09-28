@@ -74,6 +74,8 @@ func _setup_input() -> void:
 	_bind("move_up", [KEY_W, KEY_UP], [], [JOY_AXIS_LEFT_Y, -1.0])
 	_bind("move_down", [KEY_S, KEY_DOWN], [], [JOY_AXIS_LEFT_Y, 1.0])
 	_bind("shoot", [KEY_SPACE], [JOY_BUTTON_X])
+	_bind("hit", [KEY_X], [], [JOY_AXIS_TRIGGER_RIGHT, 1.0])
+	_bind("shield", [KEY_Z], [], [JOY_AXIS_TRIGGER_LEFT, 1.0])
 	_bind("pass", [KEY_E], [JOY_BUTTON_A])
 	_bind("switch", [KEY_Q], [JOY_BUTTON_LEFT_SHOULDER])
 	_bind("block", [KEY_F], [JOY_BUTTON_Y])
