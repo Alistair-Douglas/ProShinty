@@ -49,7 +49,7 @@ const LONG_HIT_ANGLE := 32.0  # degrees: a full-power long hit is launched this 
 const LONG_HIT_BOOST := 1.2   # a full long hit goes this much faster than a full shot
 const BANGER_TIMING := 0.88   # hold shoot to at least this much of full power (no overswing)
 const BANGER_BOOST := 1.25    # and the ball flies this much faster than a normal full hit
-const JOG := 0.72            # running without sprint: this share of top speed
+const JOG := 0.6             # jogging (no sprint): this share of top speed
 const SHIELD_SPEED := 0.45   # shielding the ball: walking pace, body between ball and man
 const BATTLE_TIME := 0.8     # a stick battle for the ball lasts this long
 const BATTLE_SLOW := 0.35    # both players are near enough stood still while they fight for it
@@ -301,10 +301,9 @@ func _start_throw_up() -> void:
 	throw_up_t = 0.0
 	throw_up_swing = {}
 	for p in players:
-		var f: Vector2 = p.home
-		if not p.is_keeper() and p.position_code != "LM":
-			f.x = min(f.x * 0.55, 0.44)
-		p.pos = frac_to_world(p.team, f)
+		# Everyone else starts in their normal positions across the pitch,
+		# forwards up in the other half beside the backs marking them.
+		p.pos = frac_to_world(p.team, p.home)
 		p.throw_up = false
 		p.facing = Vector2(attack_dir[p.team], 0)
 		if p.position_code == "LM" and throw_up_pair.size() == p.team:
@@ -547,7 +546,7 @@ func _steer_to(p: Player, target: Vector2, sprint: bool) -> void:
 	if d < 0.5:
 		p.desired = Vector2.ZERO
 		return
-	var speed := p.top_speed() * (1.0 if sprint else 0.72)
+	var speed := p.top_speed() * (1.0 if sprint else JOG)
 	p.desired = off / d * speed * min(1.0, d / 3.0)
 	p.sprinting = sprint and d > 3.0
 
@@ -958,7 +957,10 @@ func _strike_speed(p: Player, dir: Vector2, speed: float, loft: float, skill_key
 	var skill := p.r(skill_key)
 	var swing_power := ShintyStrike.power_for_speed(speed * ShintyMatchAdapter.YARD, skill)
 	var kind := "pass" if skill_key == "passing" and loft < 3.0 and speed < 26.0 else "swing"
-	p.swing_req = {"dir": dir, "speed": speed, "loft": loft, "skill_key": skill_key, "kind": kind}
+	# How hard, as a share of this player's full hit: cleeks only work on
+	# swings of half power or more (a short swing has no arc to get under).
+	var share: float = clampf(speed / _full_speed(p), 0.0, 1.5)
+	p.swing_req = {"dir": dir, "speed": speed, "loft": loft, "skill_key": skill_key, "kind": kind, "share": share}
 	p.facing = dir
 	p.swing = 0.3
 	if p.shy_ready and carrier == p:
