@@ -2,13 +2,13 @@
 
 importer="wav"
 type="AudioStreamWAV"
-uid="uid://koy2fbyx04xu"
-path="res://.godot/imported/clack.wav-6f875984c42bf643de8a4096038de748.sample"
+uid="uid://c0kklwgkifnw8"
+path="res://.godot/imported/clack_plank.wav-41e68fbbf3d10989074d3db0c483960e.sample"
 
 [deps]
 
-source_file="res://audio/sfx/clack.wav"
-dest_files=["res://.godot/imported/clack.wav-6f875984c42bf643de8a4096038de748.sample"]
+source_file="res://audio/sfx/clack_plank.wav"
+dest_files=["res://.godot/imported/clack_plank.wav-41e68fbbf3d10989074d3db0c483960e.sample"]
 
 [params]
 
