@@ -532,42 +532,8 @@ func _caman() -> Node3D:
 	var cam := Node3D.new()
 	cam.name = "Caman"
 	skel.add_child(cam)
-	var L := ShintyPlayerModel.CAMAN_LENGTH
-	var wood := ShintyMesh.wood()
-	# Shaft: slightly oval, thinning towards the bas then flaring into it.
-	var pts := PackedVector3Array()
-	var rad := PackedVector2Array()
-	var shaft := [[0.0, 0.0165, 0.0145], [-0.3, 0.0158, 0.0138], [-0.6, 0.0148, 0.0135],
-		[-(L - 0.16), 0.0138, 0.0145], [-(L - 0.1), 0.0148, 0.02]]
-	for s in shaft:
-		pts.append(Vector3(0, s[0], 0))
-		rad.append(Vector2(s[1], s[2]))
-	# The bas: a curved wedge, both faces flat enough to strike with.
-	var bas := [[-(L - 0.07), 0.0, 0.017, 0.026], [-(L - 0.045), -0.008, 0.0185, 0.032],
-		[-(L - 0.025), -0.025, 0.019, 0.035], [-(L - 0.012), -0.05, 0.0185, 0.034],
-		[-(L - 0.006), -0.08, 0.017, 0.03], [-(L - 0.004), -0.105, 0.014, 0.024], [-(L - 0.004), -0.118, 0.01, 0.016]]
-	for b in bas:
-		pts.append(Vector3(0, b[0], b[1]))
-		rad.append(Vector2(b[2], b[3]))
-	var mi := MeshInstance3D.new()
-	mi.mesh = ShintyMesh.sweep(pts, rad, 12, 2.6, false, Vector3.RIGHT)
-	mi.material_override = wood
-	cam.add_child(mi)
-	# Grip tape on the handle and a knob at the end
-	var grip := MeshInstance3D.new()
-	grip.mesh = _loft([[0.004, 0.0185, 0.0165], [-0.3, 0.0178, 0.016]], 12, 2.0, true)
-	grip.material_override = ShintyMesh.tape()
-	cam.add_child(grip)
-	var knob := MeshInstance3D.new()
-	knob.mesh = _loft([[0.012, 0.012, 0.011], [0.0, 0.021, 0.019], [-0.012, 0.019, 0.017]], 12)
-	knob.material_override = ShintyMesh.tape()
-	cam.add_child(knob)
-	# Tape round the bas, as players do to protect it
-	if detail:
-		var bt := MeshInstance3D.new()
-		bt.mesh = _loft([[-(L - 0.1), 0.0152, 0.0205], [-(L - 0.07), 0.0175, 0.0265]], 12, 2.4, true)
-		bt.material_override = ShintyMesh.tape(Color("1d1d22"))
-		cam.add_child(bt)
+	# Shape, wood, tape and bands come from the club's design (ShintyCaman).
+	ShintyCaman.build(cam, m.caman_design, detail)
 	return cam
 
 

@@ -67,6 +67,9 @@ const ACTIONS := {
 	set(v): helmet_color = v; _dirty = true
 @export var wear_helmet := true:
 	set(v): wear_helmet = v; _dirty = true
+## The caman's look (ShintyCaman design); empty for the plain default.
+@export var caman_design := {}:
+	set(v): caman_design = v; _dirty = true
 @export var shirt_number := 0:
 	set(v): shirt_number = v; _dirty = true
 @export var is_keeper := false:
@@ -126,6 +129,8 @@ var _action_age := 0.0            # seconds since the current action started
 ## Configure from a player and team dictionary as found in data/teams.json.
 ## Optional player keys: height_cm, weight_kg, skin ("#rrggbb"), hand ("L"/"R").
 ## Optional team colour keys: primary, secondary, shorts, socks, helmet, keeper.
+## An optional team "caman" key holds the club's caman design (ShintyCaman),
+## whose helmet colour, if set, replaces the kit's.
 func setup(player: Dictionary, team: Dictionary = {}) -> void:
 	player_data = player
 	var body := body_from_stats(player)
@@ -145,6 +150,12 @@ func setup(player: Dictionary, team: Dictionary = {}) -> void:
 	shorts_color = kit["shorts"]
 	socks_color = kit["socks"]
 	helmet_color = kit["helmet"]
+	var design: Dictionary = team.get("caman", {}).duplicate()
+	if is_keeper:
+		design["shape"] = ShintyCaman.SHAPES.find("Keeper")  # the wide keeper's bas
+	caman_design = design
+	if str(caman_design.get("helmet", "")) != "":
+		helmet_color = Color(str(caman_design["helmet"]))
 	set_meta("kit_pattern", str(team.get("colors", {}).get("pattern", "")))
 	rebuild()
 

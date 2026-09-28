@@ -16,7 +16,10 @@ func _initialize() -> void:
 	var hub_button = func(i: int): return m.call().screens["hub"].get_meta("first").get_parent().get_child(i)
 	steps = [
 		# A lighter menu backdrop; loaded at run time, once the Game autoload exists.
-		[1, func(): load("res://ui/menu_backdrop.gd").lite = true; change_scene_to_file("res://scenes/main_menu.tscn")],
+		[1, func():
+			load("res://ui/menu_backdrop.gd").lite = true
+			root.get_node("Game").camans_path = "user://camans_menu_test.json"  # leave real designs alone
+			change_scene_to_file("res://scenes/main_menu.tscn")],
 		[8, func(): _shot("menu_hub"); print("focus: ", root.gui_get_focus_owner().get_class()); _key(KEY_ENTER)],
 		[6, func(): _shot("menu_kickoff_start"); print("screen: ", m.call().current); m.call().away_pick.grab_focus()],
 		[1, func(): _key(KEY_RIGHT)],
@@ -30,7 +33,23 @@ func _initialize() -> void:
 		[4, func(): hub_button.call(1).grab_focus()],
 		[1, func(): _key(KEY_ENTER)],
 		[6, func(): _shot("menu_squads"); _key(KEY_ESCAPE)],
+		# Caman designer: change the grip tape and double wrap, give it to a club.
 		[4, func(): hub_button.call(2).grab_focus()],
+		[1, func(): _key(KEY_ENTER)],
+		[8, func(): _shot("menu_camans"); print("screen: ", m.call().current); _key(KEY_DOWN)],
+		[1, func(): _key(KEY_RIGHT)],
+		[1, func(): _key(KEY_DOWN); _key(KEY_DOWN); _key(KEY_DOWN)],
+		[1, func(): _key(KEY_RIGHT); _key(KEY_DOWN)],
+		[1, func(): _key(KEY_RIGHT)],
+		[4, func(): m.call().design_save.grab_focus()],
+		[1, func(): _key(KEY_ENTER)],
+		[6, func():
+			var s = m.call()
+			var t: Dictionary = root.get_node("Game").teams[s.design_club.selected]
+			print("caman saved to %s: %s" % [t["name"], t.get("caman", {})])
+			_shot("menu_camans_saved")
+			_key(KEY_ESCAPE)],
+		[4, func(): hub_button.call(3).grab_focus()],
 		[1, func(): _key(KEY_ENTER)],
 		[6, func(): _shot("menu_controls"); _key(KEY_ESCAPE)],
 		[4, func(): hub_button.call(0).grab_focus()],

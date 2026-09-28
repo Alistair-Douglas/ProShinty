@@ -4,6 +4,8 @@ extends Control
 ##   kickoff   pick both clubs, the pitch, your side, difficulty and half length
 ##   squads    browse every club's players and ratings
 ##   controls  keyboard and controller buttons
+##   camans    the caman designer: build a stick on a bench by the pitch and
+##             give it to a club (the club's players carry it in matches)
 ## Play match goes through the loading screen (scenes/loading.tscn).
 
 const TeamData := preload("res://scripts/team_data.gd")
@@ -34,6 +36,13 @@ var squad_grid: GridContainer
 var squad_title: Label
 var squad_sub: Label
 
+# Caman designer
+var design := {}
+var design_rows := {}
+var design_club: ShintyStepper
+var design_save: Button
+var design_status: Label
+var _dragging := false
 
 
 func _ready() -> void:
@@ -68,6 +77,7 @@ func _ready() -> void:
 	_build_kickoff()
 	_build_squads()
 	_build_controls()
+	_build_designer()
 	_show("hub", true)
 	# Fade in over the first frames while the ground finishes building.
 	var fade := ColorRect.new()
@@ -131,6 +141,7 @@ const SCREEN_INFO := {
 	"kickoff": ["KICK OFF", "kickoff", "◀ ▶  Change       ▲ ▼  Move       Enter  Play       Esc  Back"],
 	"squads": ["SQUADS", "squads", "◀ ▶  Change club       Esc  Back"],
 	"controls": ["CONTROLS", "wide", "Esc  Back"],
+	"camans": ["CAMAN DESIGNER", "designer", "▲ ▼  Move       ◀ ▶  Change       Drag  Turn the caman       Esc  Back"],
 	"problem": ["", "", ""],
 }
 
@@ -147,7 +158,7 @@ func _show(name: String, instant := false) -> void:
 	if backdrop and info[1] != "":
 		backdrop.set_shot(info[1], instant)
 	var sm: ShaderMaterial = overlay.material
-	var shades := {"hub": [0.9, 0.35, 0.0], "kickoff": [0.0, 0.75, 0.15], "squads": [0.35, 0.3, 0.55], "controls": [0.3, 0.3, 0.5]}
+	var shades := {"hub": [0.9, 0.35, 0.0], "kickoff": [0.0, 0.75, 0.15], "squads": [0.35, 0.3, 0.55], "controls": [0.3, 0.3, 0.5], "camans": [0.75, 0.25, 0.0]}
 	var target: Array = shades.get(name, [0.0, 0.0, 0.8])
 	var tw := create_tween().set_parallel()
 	tw.tween_interval(0.01)
@@ -168,9 +179,15 @@ func _show(name: String, instant := false) -> void:
 
 
 func _unhandled_input(e: InputEvent) -> void:
-	if e.is_action_pressed("ui_cancel") and current in ["kickoff", "squads", "controls"]:
+	if e.is_action_pressed("ui_cancel") and current in ["kickoff", "squads", "controls", "camans"]:
 		_show("hub")
 		get_viewport().set_input_as_handled()
+	elif current == "camans" and backdrop and backdrop.bench:
+		# Drag anywhere off the panel to turn the caman on its stand.
+		if e is InputEventMouseButton and e.button_index == MOUSE_BUTTON_LEFT:
+			_dragging = e.pressed
+		elif e is InputEventMouseMotion and _dragging:
+			backdrop.bench.spin(e.relative.x * 0.012)
 
 
 # --- Hub ------------------------------------------------------------------------
@@ -178,7 +195,7 @@ func _unhandled_input(e: InputEvent) -> void:
 func _build_hub() -> void:
 	var s := _screen("hub")
 	var col := VBoxContainer.new()
-	col.position = Vector2(56, 176)
+	col.position = Vector2(56, 150)
 	col.add_theme_constant_override("separation", 14)
 	s.add_child(col)
 	var play := _tile(col, "PLAY MATCH", "Pick two clubs and take on the computer", func(): _show("kickoff"), true)
@@ -186,6 +203,9 @@ func _build_hub() -> void:
 		squad_pick.select(Game.home_index)
 		_refresh_squad()
 		_show("squads"))
+	_tile(col, "CAMAN DESIGNER", "Build a caman and give it to a club", func():
+		_open_designer()
+		_show("camans"))
 	_tile(col, "CONTROLS", "Keyboard, controller and graphics", func(): _show("controls"))
 	_tile(col, "QUIT", "Back to the desktop", func(): get_tree().quit())
 	s.set_meta("first", play)
@@ -237,7 +257,7 @@ func _last_result_card(r: Dictionary) -> Control:
 	sb.border_width_top = 3
 	sb.border_color = ShintyStyle.GOLD
 	p.add_theme_stylebox_override("panel", sb)
-	p.position = Vector2(56, 560)
+	p.position = Vector2(860, 572)
 	var v := VBoxContainer.new()
 	v.add_child(ShintyStyle.label("LAST MATCH", 16, "bold", ShintyStyle.GOLD))
 	v.add_child(ShintyStyle.label("%s  %d - %d  %s" % [str(r["home"]).to_upper(), r["score"][0], r["score"][1], str(r["away"]).to_upper()], 28, "black"))
@@ -493,6 +513,225 @@ func _build_controls() -> void:
 	back.focus_neighbor_right = gfx.get_path()
 	gfx.focus_neighbor_left = back.get_path()
 	s.set_meta("first", back)
+
+
+# --- Caman designer --------------------------------------------------------------------
+
+## Rows of the designer panel: [key, caption, kind]. Kinds: a list of names
+## from ShintyCaman, "colour", "club_colour" (the palette plus the club's own),
+## "wrap" (off/on) or "bands".
+const DESIGN_ROWS := [
+	["", "CAMAN"],
+	["shape", "Shape", "shapes"],
+	["wood", "Wood", "woods"],
+	["paint", "Paint", "colour"],
+	["", "GRIP"],
+	["grip", "Grip tape", "colour"],
+	["wrap", "Double wrap", "wrap"],
+	["grip2", "Second tape", "colour"],
+	["", "FINISH"],
+	["bas_tape", "Bas tape", "colour"],
+	["bands", "Painted bands", "bands"],
+	["band", "Band colour", "colour"],
+	["", "HELMET"],
+	["helmet", "Helmet", "club_colour"],
+]
+
+
+func _build_designer() -> void:
+	var s := _screen("camans")
+	var panel := PanelContainer.new()
+	var sb := ShintyStyle.box(ShintyStyle.PANEL)
+	sb.set_corner_radius_all(4)
+	sb.content_margin_left = 14
+	sb.content_margin_right = 14
+	sb.content_margin_top = 8
+	sb.content_margin_bottom = 12
+	sb.border_width_top = 3
+	sb.border_color = ShintyStyle.GOLD
+	panel.add_theme_stylebox_override("panel", sb)
+	panel.position = Vector2(56, 100)
+	panel.size = Vector2(420, 514)
+	s.add_child(panel)
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.follow_focus = true
+	panel.add_child(scroll)
+	var list := VBoxContainer.new()
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	list.add_theme_constant_override("separation", 2)
+	scroll.add_child(list)
+
+	var names: Array = ShintyCaman.PALETTE.map(func(c): return c[0])
+	var chips: Array = ShintyCaman.PALETTE.map(func(c): return Color(c[1]))
+	var first: Control = null
+	for row in DESIGN_ROWS:
+		if row[0] == "":
+			var h := ShintyStyle.label(row[1], 15, "bold", ShintyStyle.GOLD)
+			h.custom_minimum_size = Vector2(0, 22)
+			h.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
+			list.add_child(h)
+			continue
+		var r: ShintyOptionRow
+		match row[2]:
+			"shapes": r = ShintyOptionRow.new(row[1], ShintyCaman.SHAPES)
+			"woods": r = ShintyOptionRow.new(row[1], ShintyCaman.WOODS)
+			"wrap": r = ShintyOptionRow.new(row[1], ["Off", "On"])
+			"bands": r = ShintyOptionRow.new(row[1], ["None", "One", "Two", "Three"])
+			"colour": r = ShintyOptionRow.new(row[1], names, 0, chips)
+			"club_colour": r = ShintyOptionRow.new(row[1], ["Club colour"] + names, 0, [null] + chips)
+		r.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		r.set_meta("key", row[0])
+		r.set_meta("kind", row[2])
+		r.changed.connect(func(i): _design_row_changed(row[0], row[2], i))
+		list.add_child(r)
+		design_rows[row[0]] = r
+		if first == null:
+			first = r
+
+	# Who gets it: a club picker and the save button, bottom right.
+	var names_c: Array = Game.teams.map(func(t): return t["name"])
+	design_club = ShintyStepper.new("Give this caman to", names_c, Game.home_index)
+	design_club.position = Vector2(560, 586)
+	design_club.size = Vector2(330, 74)
+	design_club.changed.connect(func(_i): _design_club_changed())
+	s.add_child(design_club)
+	design_save = Button.new()
+	design_save.text = "SAVE TO CLUB"
+	design_save.add_theme_font_override("font", ShintyStyle.font("black"))
+	design_save.add_theme_font_size_override("font_size", 30)
+	design_save.position = Vector2(904, 596)
+	design_save.size = Vector2(320, 64)
+	ShintyStyle.focus_button(design_save)
+	design_save.pressed.connect(_save_design)
+	s.add_child(design_save)
+	design_status = ShintyStyle.label("", 17, "semibold", ShintyStyle.MUTED)
+	design_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	design_status.position = Vector2(700, 560)
+	design_status.size = Vector2(524, 26)
+	s.add_child(design_status)
+
+	var back := Button.new()
+	back.text = "BACK"
+	back.position = Vector2(56, 626)
+	back.size = Vector2(150, 44)
+	ShintyStyle.focus_button(back)
+	back.pressed.connect(func(): _show("hub"))
+	s.add_child(back)
+	var reset := Button.new()
+	reset.text = "RESET"
+	reset.position = Vector2(226, 626)
+	reset.size = Vector2(150, 44)
+	ShintyStyle.focus_button(reset)
+	reset.pressed.connect(_design_club_changed)
+	s.add_child(reset)
+	s.set_meta("reset", reset)
+
+	# Focus: down the panel, then to the buttons; right from the panel goes to the club.
+	var rows: Array = design_rows.values()
+	for r in rows:
+		r.focus_neighbor_right = design_club.get_path()
+	rows[0].focus_neighbor_top = back.get_path()
+	rows[-1].focus_neighbor_bottom = back.get_path()
+	back.focus_neighbor_top = rows[-1].get_path()
+	reset.focus_neighbor_top = rows[-1].get_path()
+	back.focus_neighbor_bottom = rows[0].get_path()
+	back.focus_neighbor_right = reset.get_path()
+	reset.focus_neighbor_left = back.get_path()
+	reset.focus_neighbor_right = design_club.get_path()
+	design_club.focus_neighbor_left = rows[0].get_path()
+	design_club.focus_neighbor_right = design_save.get_path()
+	design_club.focus_neighbor_top = rows[0].get_path()
+	design_club.focus_neighbor_bottom = design_save.get_path()
+	design_save.focus_neighbor_left = design_club.get_path()
+	design_save.focus_neighbor_top = design_club.get_path()
+	s.set_meta("first", first)
+
+
+## Opens the designer on the club you last picked, with its current caman.
+func _open_designer() -> void:
+	design_club.select(home_pick.selected if home_pick else Game.home_index)
+	_design_club_changed()
+
+
+## Loads the chosen club's caman into the designer (also what Reset does).
+func _design_club_changed() -> void:
+	design = Game.team_caman(design_club.selected).duplicate()
+	_design_refresh(true)
+
+
+func _design_row_changed(key: String, kind: String, i: int) -> void:
+	match kind:
+		"colour":
+			design[key] = "#" + ShintyCaman.PALETTE[i][1]
+		"club_colour":
+			design[key] = "" if i == 0 else "#" + ShintyCaman.PALETTE[i - 1][1]
+		"wrap":
+			design[key] = i == 1
+		_:
+			design[key] = i
+	# Picking a colour for a part that's switched off switches it on.
+	if key == "paint" and design["wood"] != ShintyCaman.WOODS.find("Painted"):
+		design["wood"] = ShintyCaman.WOODS.find("Painted")
+	elif key == "grip2":
+		design["wrap"] = true
+	elif key == "band" and design["bands"] == 0:
+		design["bands"] = 1
+	_design_refresh(false)
+
+
+## Puts `design` on the rows, the bench and the status line.
+func _design_refresh(saved: bool) -> void:
+	design = ShintyCaman.sanitize(design)
+	for key in design_rows:
+		var r: ShintyOptionRow = design_rows[key]
+		var v: Variant = design[key]
+		match str(r.get_meta("kind")):
+			"colour", "club_colour":
+				var idx := _palette_index(str(v))
+				if r.get_meta("kind") == "club_colour":
+					idx = 0 if str(v) == "" else idx + 1
+				r.selected = maxi(idx, 0)
+			"wrap":
+				r.selected = 1 if v else 0
+			_:
+				r.selected = int(v)
+	design_rows["paint"].inactive = design["wood"] != ShintyCaman.WOODS.find("Painted")
+	design_rows["grip2"].inactive = not design["wrap"]
+	design_rows["band"].inactive = design["bands"] == 0
+	var team: Dictionary = Game.teams[design_club.selected]
+	if backdrop:
+		backdrop.show_bench().set_design(design, team)
+	if saved:
+		var custom := team.has("caman")
+		design_status.text = ("%s's own caman" if custom else "%s's colours: not saved yet") % team["name"]
+	else:
+		design_status.text = "Changed: save to give it to %s" % team["name"]
+	design_status.add_theme_color_override("font_color", ShintyStyle.MUTED if saved else ShintyStyle.GOLD)
+
+
+## Nearest palette entry to a colour, so club colours land on a swatch.
+func _palette_index(hex: String) -> int:
+	if not Color.html_is_valid(hex):
+		return -1
+	var c := Color(hex)
+	var best := -1
+	var best_d := INF
+	for i in ShintyCaman.PALETTE.size():
+		var d := TeamData.colour_distance(c, Color(ShintyCaman.PALETTE[i][1]))
+		if d < best_d:
+			best_d = d
+			best = i
+	return best
+
+
+func _save_design() -> void:
+	Game.set_team_caman(design_club.selected, design)
+	var team: Dictionary = Game.teams[design_club.selected]
+	design_status.text = "Saved: %s's players will carry this caman" % team["name"]
+	design_status.add_theme_color_override("font_color", ShintyStyle.GOOD)
+	if home_pick:
+		_teams_changed()  # the players behind the menu pick it up too
 
 
 # --- Squads file problem ----------------------------------------------------------
