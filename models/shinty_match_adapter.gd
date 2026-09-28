@@ -128,6 +128,7 @@ class BallSim:
 	var _hails: Array = []
 	var _spin_pending := false
 	var _pending_spin := Vector3.ZERO
+	var post_hits: Array = []  ## speed (m/s) of every hit off a post or bar, for the sound
 
 	func _init(pitch: Vector2, goal_w_yards: float, crossbar_yards: float) -> void:
 		for end in [0, 1]:
@@ -175,6 +176,8 @@ class BallSim:
 			if e.has("hail"):
 				e["end"] = e["hail"].get_meta("end")
 				e.erase("hail")
+			if e["type"] == "post":
+				post_hits.append(e["speed"])
 		return events
 
 	func set_spin(spin: Vector3) -> void:
