@@ -127,7 +127,7 @@ func _run() -> void:
 		lefty_run.advance(1.0 / 60.0)
 	check(lefty_hits.size() == 1 and (lefty_hits[0] as Vector3).y < 0.08 and (lefty_hits[0] as Vector3).x < 0.0,
 		"a left-hander's running swing meets the ground ball on the left")
-	for a in ["pass", "volley", "tackle", "trap", "save_left", "save_right", "celebrate"]:
+	for a in ["pass", "volley", "tackle", "trap", "feet_trap", "save_left", "save_right", "celebrate"]:
 		var done := [false]
 		var cb := func(n): done[0] = true
 		striker.action_finished.connect(cb)

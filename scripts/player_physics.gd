@@ -228,8 +228,14 @@ static func update_stick(m, p, dt: float) -> void:
 		# Dribbling: the caman reaches out to meet the ball as the player runs
 		# onto it, taps it, and comes back to be carried while it rolls on.
 		var ball_at := Vector3(m.ball_pos.x, m.ball_pos.y, 0.0)
-		if m.is_dribbling(p) and ball_at.distance_to(rest) < 1.0 + 0.5 * m.dribble_assist(p):
-			target = ball_at
+		if m.is_dribbling(p):
+			var from_body: Vector2 = m.ball_pos - p.pos
+			if from_body.length() < m.DRIBBLE_REACH + 0.25:
+				target = ball_at   # the caman stays on the ball
+			else:
+				# Running onto it: the caman reaches out ahead, ready.
+				var out: Vector2 = p.pos + from_body.normalized() * TWO_HAND_REACH * 0.85
+				target = Vector3(out.x, out.y, 0.0)
 	elif p.shy_toss:
 		target = Vector3(p.pos.x + p.facing.x * m.SHY_ARM, p.pos.y + p.facing.y * m.SHY_ARM, OVERHEAD)
 	elif m.in_throw_up(p):
@@ -260,7 +266,7 @@ static func update_stick(m, p, dt: float) -> void:
 	var out := Vector2(p.stick.x - rest.x, p.stick.y - rest.y).length()
 	p.reach = clampf(maxf(out / 1.1, p.stick.z / 2.2), 0.0, 1.0)
 	if p == m.carrier:
-		p.reach = 0.6   # stick down on the ball
+		p.reach = 1.0   # the caman head right on the ball, not most of the way to it
 
 
 static func _clamp_reach(p, v: Vector3, keeper_area: bool) -> Vector3:

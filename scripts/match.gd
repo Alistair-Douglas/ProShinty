@@ -41,6 +41,14 @@ const THROW_UP_TOSS := 8.0   # yd/s: the referee's throw
 const THROW_UP_GAP := 0.8    # each centre stands this far from the spot
 const SET_PIECE_PAUSE := 2.2 # hit-outs and corners: play stops while players get set
 const SET_PIECE_MIN := 1.0   # a human taker can't hit it before this
+const FEET_HEIGHT := 0.35     # yards: a ball below this is stopped with the feet
+const FEET_EXTRA := 0.15      # feet planted either side reach a little wider than the body
+const BODY_STOP_SPEED := 12.0 # yd/s: a stop with the body or feet is sure below about this
+const DRIBBLE_REACH := 1.0    # yards from the body: the caman stays on a dribbled ball within this
+const LONG_HIT_ANGLE := 32.0  # degrees: a full-power long hit is launched this steeply
+const LONG_HIT_BOOST := 1.2   # a full long hit goes this much faster than a full shot
+const BANGER_TIMING := 0.88   # hold shoot to at least this much of full power (no overswing)
+const BANGER_BOOST := 1.25    # and the ball flies this much faster than a normal full hit
 const JOG := 0.72            # running without sprint: this share of top speed
 const SHIELD_SPEED := 0.45   # shielding the ball: walking pace, body between ball and man
 const BATTLE_TIME := 0.8     # a stick battle for the ball lasts this long
@@ -298,14 +306,20 @@ func _start_throw_up() -> void:
 			f.x = min(f.x * 0.55, 0.44)
 		p.pos = frac_to_world(p.team, f)
 		p.throw_up = false
+		p.facing = Vector2(attack_dir[p.team], 0)
 		if p.position_code == "LM" and throw_up_pair.size() == p.team:
-			# The two centres face each other over the spot, sticks raised.
-			p.pos = PITCH / 2.0 - Vector2(attack_dir[p.team] * THROW_UP_GAP, 0)
+			# The two centres stand either side of the spot, side-on to the
+			# goals like a golfer addressing the ball: each on the left of the
+			# spot as he looks up the pitch, facing it, his left shoulder
+			# towards the goal he attacks. Sticks raised over the ball.
+			var up_pitch := Vector2(attack_dir[p.team], 0)
+			var left := Vector2(0, -up_pitch.x)
+			p.pos = PITCH / 2.0 + left * THROW_UP_GAP
+			p.facing = -left
 			p.throw_up = true
 			throw_up_pair.append(p)
 		p.vel = Vector2.ZERO
 		p.desired = Vector2.ZERO
-		p.facing = Vector2(attack_dir[p.team], 0)
 		p.stagger = 0.0
 		p.lunge = 0.0
 		p.swing_t = -1.0
@@ -436,14 +450,15 @@ func _update_players(dt: float) -> void:
 		if p != carrier:
 			p.shielding = false
 			p.hold_t = 0.0
-	if human != null and human.is_keeper() and carrier != human:
-		human = _nearest_outfield(human_side, ball_pos, null)
+	if human != null and human.is_keeper() and carrier != human and gather_keeper != human:
+		human = _nearest_outfield(human_side, ball_pos, null)   # it's gone: back to an outfield player
 	for t in 2:
 		_ai_team(t, dt)
 	if human != null and state == State.PLAY:
 		_human_control(dt)
 	elif human != null:
 		human.desired = Vector2.ZERO
+	_respect_restart()
 	for p in players:
 		if p.is_keeper():
 			Body.keeper_reflex(self, p, dt)
@@ -477,6 +492,26 @@ func restart_taker() -> Player:
 	if protected_timer > 0.0 and carrier != null:
 		return carrier
 	return null
+
+
+## Opponents near a restart don't run at the taker: whatever their job, the
+## part of their run that goes into the 5 yards is dropped, so they stop at
+## the edge (or walk round it) and stand, instead of running on the spot
+## against it.
+func _respect_restart() -> void:
+	var taker := restart_taker()
+	if taker == null:
+		return
+	for o in squads[1 - taker.team]:
+		for c in [ball_pos, taker.pos]:
+			var off: Vector2 = o.pos - c
+			if off.length() > FREE_HIT_BACK + 1.5 or off.length() < 0.01:
+				continue
+			var out: Vector2 = off.normalized()
+			var inward: float = o.desired.dot(-out)
+			if inward > 0.0:
+				o.desired += out * inward
+				o.sprinting = false
 
 
 ## Until a restart is taken, no opponent may come within FREE_HIT_BACK yards
@@ -625,6 +660,11 @@ func _ai_shoot(p: Player) -> void:
 		side = -sign(keeper.pos.y - goal.y)
 	var aim := goal + Vector2(0, side * (GOAL_W / 2.0 - 0.6))
 	var d := p.pos.distance_to(goal)
+	if d > 14.0 and randf() < p.r("shooting") / 100.0 * 0.12:
+		# Now and then a good hitter really leathers one.
+		_strike_speed(p, (aim - p.pos).normalized(), _full_speed(p) * BANGER_BOOST, randf_range(0.5, 2.5), "shooting", 1.0)
+		shots[p.team] += 1
+		return
 	_strike(p, (aim - p.pos).normalized(), clamp(d / 30.0 + 0.45, 0.55, 1.0), randf_range(0.5, 3.0), "shooting")
 	shots[p.team] += 1
 
@@ -680,7 +720,8 @@ func _hit_long(p: Player) -> void:
 			best_x = x
 			best = m
 	var aim := target_goal(p.team) if best == null else best.pos
-	_strike(p, (aim - p.pos).normalized(), 0.85, 7.0, "passing")
+	var speed: float = lerp(10.0, _full_speed(p) * LONG_HIT_BOOST, 0.85)
+	_strike_speed(p, (aim - p.pos).normalized(), speed, _loft_at(speed, LONG_HIT_ANGLE - 4.0), "passing", 0.85)
 
 
 func _ai_keeper(k: Player, dt: float) -> void:
@@ -751,8 +792,13 @@ func _human_control(dt: float) -> void:
 		# Standing over a restart: the stick turns the aim smoothly, within
 		# a half circle (for a shy, from up the line round to down the line).
 		p.desired = Vector2.ZERO
-		if mv.length() > 0.15:
-			var want: float = clamp(restart_base.angle_to(mv), -PI / 2.0, PI / 2.0)
+		# The camera is behind the taker here, so the stick is read as the
+		# player sees it: left turns the aim left, right turns it right, up
+		# is straight ahead (not the pitch's own directions, which made left
+		# swing the aim round to the right).
+		var rel: Vector2 = restart_base * -raw.y + restart_base.rotated(PI / 2.0) * raw.x
+		if rel.length() > 0.15 and rel.normalized().dot(restart_base) > -0.9:
+			var want: float = clamp(restart_base.angle_to(rel), -PI / 2.0, PI / 2.0)
 			restart_aim = move_toward(restart_aim, want, RESTART_AIM_RATE * dt)
 		p.facing = restart_base.rotated(restart_aim)
 		aim = p.facing
@@ -840,7 +886,22 @@ func _human_shoot(p: Player, steer_in: Vector2, charged: float) -> void:
 	if carrier == p or _ball_in_reach(p):
 		shots[p.team] += 1
 	p.facing = aim
+	if charged >= BANGER_TIMING and charged <= 1.0:
+		# Timed to perfection at full power, no overswing: an absolute banger.
+		_strike_speed(p, aim, _full_speed(p) * BANGER_BOOST, loft * 0.7, "shooting", 1.0)
+		_say("What a hit!", 1.0)
+		return
 	_strike(p, aim, max(power, 0.2), loft, "shooting")
+
+
+## Ball speed of a full-power strike by this player.
+func _full_speed(p: Player) -> float:
+	return 20.0 + p.r("shooting") * 0.26
+
+
+## Vertical launch speed for a hit of `speed` at `degrees` above the grass.
+func _loft_at(speed: float, degrees: float) -> float:
+	return speed * tan(deg_to_rad(degrees))
 
 
 ## The long-hit button (and a restart): straight where the player is aiming,
@@ -849,7 +910,12 @@ func _human_hit(p: Player, aim: Vector2, charged: float) -> void:
 	var power: float = min(charged, 1.0)
 	p.overswing = max(0.0, charged - 1.0) / (OVERSWING_MAX - 1.0)
 	p.charged = power
-	_strike(p, aim, max(power, 0.2), power * 7.0, "shooting")
+	# A big hit goes up and comes down: the harder it's hit, the higher it's
+	# launched, so a full clearance is a proper parabola, not a skimmer.
+	# A long hit is the full swing: at full power it carries past halfway
+	# from a hit-out.
+	var speed: float = lerp(10.0, _full_speed(p) * LONG_HIT_BOOST, max(power, 0.2))
+	_strike_speed(p, aim, speed, _loft_at(speed, lerp(8.0, LONG_HIT_ANGLE, power)), "shooting", max(power, 0.2))
 
 
 func _human_pass(p: Player, aim: Vector2) -> void:
@@ -1155,8 +1221,9 @@ func _take_control(p: Player) -> void:
 	ball_vz = 0.0
 	gather_keeper = null
 	p.think = _reaction(p.team) + (0.6 if p.is_keeper() else 0.0)
-	# The computer distributes for your keeper; you take over whoever else wins it.
-	if p.team == human_side and not p.is_keeper():
+	# Whoever wins it on your side is yours, your keeper included: saves are
+	# automatic, but once the keeper has it you move and clear it yourself.
+	if p.team == human_side:
 		human = p
 
 
@@ -1382,20 +1449,23 @@ func _dribble(dt: float) -> void:
 	# Turning with the ball: the player gets the caman round to it sooner.
 	var turning: bool = dribble_vel.length() > 0.5 and dribble_vel.normalized().dot(dir) < 0.75
 	var tap_r: float = Body.CONTACT_R + 0.12 + (0.25 if turning else 0.1) * assist
-	if head.distance_to(ball_pos) < tap_r and dribble_vel.dot(dir) < run + 0.5:
-		# The tap: just firm enough to roll ahead of the player; better ball
-		# players keep it closer, and the player's touches are softer still.
-		var soft: float = lerp(1.45, 1.2, c.r("control") / 100.0)
-		soft = lerp(soft, 1.08, assist)
-		dribble_vel = dir * max(run * soft + lerp(1.0, 0.6, assist), 2.5)
+	var in_reach: bool = ball_pos.distance_to(c.pos) < DRIBBLE_REACH
+	if in_reach and head.distance_to(ball_pos) < tap_r and dribble_vel.dot(dir) < run + 0.5:
+		# The tap: just firm enough to roll a yard or so ahead, so the caman
+		# is back on it within a stride; better ball players keep it closer,
+		# and the player's touches are softer still.
+		var lead: float = lerp(2.0, 1.4, c.r("control") / 100.0)
+		lead = lerp(lead, 1.1, assist)
+		dribble_vel = dir * max(run + lead, 2.5)
 		dribble_taps += 1
 		return
-	if assist > 0.0 and dribble_vel.length() > 0.3:
-		# The player shepherds a rolling touch round with them as they turn.
+	var on_stick: bool = head.distance_to(ball_pos) < 0.5
+	if assist > 0.0 and on_stick and dribble_vel.length() > 0.3:
+		# The player's caman shepherds a rolling touch round as they turn.
 		var bend: float = dribble_vel.angle_to(dir)
 		dribble_vel = dribble_vel.rotated(clampf(bend, -3.0 * dt, 3.0 * dt))
 	var overrun: bool = (ball_pos - head).dot(dir) < -0.1
-	if assist > 0.0 and head.distance_to(ball_pos) < 1.8 \
+	if assist > 0.0 and on_stick \
 			and (overrun or (dribble_vel.length() > 0.5 and dribble_vel.normalized().dot(dir) < 0.3)):
 		# A sharp turn, or running past it: the player hooks the ball back
 		# round with the caman rather than letting it run away.
@@ -1437,7 +1507,7 @@ func _ball_touches(before: Vector3) -> void:
 	var best: Player = null
 	var best_d := INF
 	var best_keeper := false
-	var blocker: Player = null
+	var body: Player = null
 	for p in players:
 		if p.touch_block > 0.0 or p.stagger > 0.0:
 			continue
@@ -1454,20 +1524,15 @@ func _ball_touches(before: Vector3) -> void:
 			best = p
 			best_d = d
 			best_keeper = keeping
-		elif blocker == null and min(before.z, now.z) < Body.BODY_HEIGHT and p.team != last_team:
+		elif body == null and min(before.z, now.z) < Body.BODY_HEIGHT:
+			# Any player, either side, can stop the ball with the body or feet.
+			var low: bool = min(before.z, now.z) < FEET_HEIGHT
 			var bd: float = Body.path_distance(Vector3(p.pos.x, p.pos.y, now.z), before, now)
-			if bd < Body.BODY_BLOCK_R:
-				blocker = p
+			if bd < Body.BODY_BLOCK_R + (FEET_EXTRA if low else 0.0):
+				body = p
 	if best == null:
-		if blocker != null and sp > 4.0:
-			# Off the legs or body: it loses most of its pace and kicks off sideways.
-			var n := (ball_pos - blocker.pos).normalized()
-			ball_vel = (ball_vel * 0.25).bounce(n) if ball_vel.dot(n) < 0.0 else ball_vel * 0.4
-			ball_vel = ball_vel.rotated(randf_range(-0.6, 0.6))
-			ball_vz = max(0.0, ball_vz * 0.3)
-			blocker.touch_block = 0.3
-			last_team = blocker.team
-			events.append({"type": "block", "team": blocker.team})
+		if body != null and sp > 1.5:
+			_body_touch(body, sp)
 		return
 	var p := best
 	p.touch_block = 0.25
@@ -1507,6 +1572,41 @@ func _ball_touches(before: Vector3) -> void:
 		ball_vel = ball_vel.rotated(randf_range(-1.2, 1.2)) * 0.5
 		ball_vz = max(ball_vz, randf_range(0.0, 2.0))
 		last_team = p.team
+
+
+## The ball has hit a player's body or feet (legal for everyone in shinty).
+## Coming at them at a pace they can handle, they kill it: feet planted and
+## together for a ball along the ground, or off the body for one in the air,
+## and it drops dead in front of them to gather with the caman. Otherwise it
+## comes off them, losing most of its pace.
+func _body_touch(p: Player, sp: float) -> void:
+	var feet: bool = ball_z < FEET_HEIGHT
+	var at_them: bool = ball_vel.dot(p.pos - ball_pos) > 0.0
+	var limit: float = BODY_STOP_SPEED + p.r("control") * 0.12
+	if p.team == last_team and (sp >= limit or not at_them):
+		return   # a team-mate's hit: they get out of its way, or let it run
+	var chance: float = clamp(0.95 - sp / limit * 0.45 + (0.05 if feet else -0.15), 0.2, 0.95)
+	last_team = p.team
+	p.touch_block = 0.12
+	events.append({"type": "touch", "by": p, "at": ball_pos, "hands": false, "body": true})
+	if at_them and sp < limit and randf() < chance:
+		var front := (ball_pos - p.pos)
+		front = front.normalized() if front.length() > 0.05 else p.facing
+		ball_pos = p.pos + front * (Body.BODY_R + 0.12)
+		ball_vel = -front * 0.4 + p.vel * 0.6   # dead at their feet, moving with them
+		ball_vz = 0.0 if feet else min(ball_vz, 0.0)
+		ball_sim.set_spin(Vector3.ZERO)
+		anim(p, "feet_trap" if feet else "trap")
+		events.append({"type": "body_stop", "team": p.team, "feet": feet})
+		return
+	if sp > 4.0:
+		# Off the legs or body: it loses most of its pace and kicks off sideways.
+		var n := (ball_pos - p.pos).normalized()
+		ball_vel = (ball_vel * 0.25).bounce(n) if ball_vel.dot(n) < 0.0 else ball_vel * 0.4
+		ball_vel = ball_vel.rotated(randf_range(-0.6, 0.6))
+		ball_vz = max(0.0, ball_vz * 0.3)
+		p.touch_block = 0.3
+		events.append({"type": "block", "team": p.team})
 
 
 ## A save: the keeper smothers it with stick, hand or body and the ball drops

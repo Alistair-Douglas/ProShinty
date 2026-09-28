@@ -37,7 +37,7 @@ const SKIN_TONES := [
 
 ## Actions and their total duration in seconds (swing and pass scale with power).
 const ACTIONS := {
-	"swing": 0.78, "pass": 0.55, "volley": 0.62, "tackle": 0.55, "trap": 0.4,
+	"swing": 0.78, "pass": 0.55, "volley": 0.62, "tackle": 0.55, "trap": 0.4, "feet_trap": 0.55,
 	"save_left": 0.9, "save_right": 0.9, "celebrate": 1.6,
 	"shy": 2.0, "stumble": 0.7, "poke": 0.35, "block": 0.6, "cleek": 0.45, "barge": 0.4,
 }
@@ -804,6 +804,20 @@ func _action_pose(rot: Dictionary) -> Array:
 			var p3 := ready_p.lerp(Vector3(0.06, -0.2, -0.33), k)
 			var d3 := ready_d.slerp(Vector3(0.06, -0.8, -0.6).normalized(), k)
 			return [p3, d3, 0.0, hips_off]
+		&"feet_trap":
+			# The ball stopped with the feet: planted and together, knees soft,
+			# the caman lifted out of the way until it's dead.
+			var k := sin(clampf(t / _action_len, 0.0, 1.0) * PI)
+			_crouch(rot, 0.3 * k)
+			for side in ["Left", "Right"]:
+				var sgn := -1.0 if side == "Left" else 1.0
+				rot[side + "UpperLeg"] = rot[side + "UpperLeg"].lerp(Vector3(0.1, 0, -sgn * 0.04), k)
+				rot[side + "LowerLeg"] = rot[side + "LowerLeg"].lerp(Vector3(-0.3, 0, 0), k)
+				rot[side + "Foot"] = rot[side + "Foot"].lerp(Vector3(0.18, 0, 0), k)
+			rot["Spine"] += Vector3(-0.15 * k, 0, 0)
+			var p5 := ready_p.lerp(Vector3(0.22, 0.12, -0.2), k)
+			var d5 := ready_d.slerp(Vector3(0.35, -0.55, -0.76).normalized(), k)
+			return [p5, d5, 0.0, hips_off]
 		&"save_left", &"save_right":
 			var side := -1.0 if _action == &"save_left" else 1.0
 			var u := clampf(t / _action_len, 0.0, 1.0)
