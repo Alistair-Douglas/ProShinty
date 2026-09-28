@@ -41,6 +41,7 @@ const THROW_UP_TOSS := 8.0   # yd/s: the referee's throw
 const THROW_UP_GAP := 0.8    # each centre stands this far from the spot
 const SET_PIECE_PAUSE := 2.2 # hit-outs and corners: play stops while players get set
 const SET_PIECE_MIN := 1.0   # a human taker can't hit it before this
+const JOG := 0.72            # running without sprint: this share of top speed
 const SHIELD_SPEED := 0.45   # shielding the ball: walking pace, body between ball and man
 const BATTLE_TIME := 0.8     # a stick battle for the ball lasts this long
 const BATTLE_SLOW := 0.35    # both players are near enough stood still while they fight for it
@@ -727,7 +728,7 @@ func _human_control(dt: float) -> void:
 	var mv := _smooth_steer(p, raw, dt)
 	if mv.length() > 0.15:
 		# Analogue: a half-pushed stick jogs, a full one runs.
-		p.desired = mv.normalized() * p.top_speed() * (1.0 if sprint else 0.78) * clamp(mv.length(), 0.35, 1.0)
+		p.desired = mv.normalized() * p.top_speed() * (1.0 if sprint else JOG) * clamp(mv.length(), 0.35, 1.0)
 		p.sprinting = sprint
 	else:
 		p.desired = Vector2.ZERO

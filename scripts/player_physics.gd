@@ -32,6 +32,7 @@ const OVERHEAD := 2.6         ## height of the caman head in an overhead strike
 const RESTITUTION := 0.2      ## how bouncy body contact is
 const REACT_RADIUS := 3.2     ## start reaching for a loose ball this close
 const STICK_CLEAR := 0.1      ## caman shaft and head keep this far off other bodies
+const SPRINT_DRIVE := 1.6     ## extra acceleration while sprinting
 
 
 static func setup(p) -> void:
@@ -101,8 +102,13 @@ static func move(m, p, dt: float) -> void:
 	var balance := 0.4 if p.stagger > 0.0 else 1.0
 	var mass_k := pow(78.0 / maxf(p.mass, 40.0), 0.25)
 	var frac := clampf(speed / maxf(top, 0.1), 0.0, 1.0)
-	# Sprinting: acceleration falls away as you near top speed.
-	var accel: float = (8.5 + p.r("pace") * 0.045) * mass_k * maxf(0.2, 1.0 - frac) * balance
+	# Acceleration falls away as you near top speed. Sprinting drives
+	# harder (a footballer's burst), so kicking on from a jog builds up to
+	# full speed in about half a second instead of creeping there.
+	var build: float = maxf(0.2, 1.0 - frac)
+	if p.sprinting:
+		build = maxf(0.35, 1.0 - frac * frac) * SPRINT_DRIVE
+	var accel: float = (8.5 + p.r("pace") * 0.045) * mass_k * build * balance
 	var brake: float = (13.0 + p.r("pace") * 0.03) * mass_k * balance
 	# Turning: sharp at a jog, wide at full tilt.
 	var turn: float = (15.0 + p.r("control") * 0.03) * (1.0 - 0.45 * frac) * mass_k * balance
