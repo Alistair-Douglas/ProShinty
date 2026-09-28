@@ -10,11 +10,15 @@ extends RefCounted
 ##   support  - offer a short, open passing angle near the ball carrier
 ##   run      - sprint in behind the defence, into the gap between defenders
 ##   overlap  - a wide player bursts past the carrier down the touchline
-##   check    - a tightly marked forward comes short to lose their marker
+##   check    - a forward drops short towards the ball to receive it
 ##   hold     - keep width and shape, pushed up with the play
 ## Out of possession: one player covers behind whoever is pressing, a few
 ## pick up the most dangerous opponents goal-side, and the rest hold a compact
 ## zonal shape that shifts with the ball.
+## Forwards: shinty is man-marking, forward against back, so forwards hold
+## their positions up the park whoever has the ball. They don't track back,
+## support short or go wide on overlaps; the one thing they do is drop short
+## to take a pass, then go back out to their spot.
 ## Loose balls: the side whose nearest player will get there first starts
 ## shaping up to attack, the other side drops into its defensive shape.
 
@@ -24,6 +28,7 @@ const MAX_RUNNERS := 2        # forward runs at once, per team
 const SUPPORTERS := 2         # short options near the carrier
 const MARK_REFRESH := 0.4     # seconds between marking reassignments
 const MAX_MARKERS := 4        # man-marking the biggest threats; the rest is zonal
+const MAX_CHECKS := 1         # forwards dropping short at once, per team
 
 
 class Plan:
@@ -127,12 +132,29 @@ func _think_attack(p, pl: Plan) -> void:
 		pl.target = _support_spot(p, ball)
 		return
 
+	# Forwards: drop short to receive when a team-mate has it within passing
+	# range, otherwise stay in position (or, now and again, run in behind).
+	var dist_ball: float = p.pos.distance_to(ball)
+	if p.role == "FWD" and holder != null and holder.team == t and holder != p \
+			and dist_ball > 12.0 and dist_ball < 45.0 and ahead > 4.0 \
+			and pl.run_cooldown <= 0.0 and _count_jobs(t, Job.CHECK) < MAX_CHECKS and randf() < 0.45:
+		pl.job = Job.CHECK
+		var to_ball: Vector2 = (ball - p.pos).normalized()
+		var side := Vector2(-to_ball.y, to_ball.x) * (1.0 if randf() < 0.5 else -1.0)
+		pl.target = p.pos + to_ball * randf_range(6.0, 9.0) + side * 2.5
+		pl.sprint = true
+		pl.timer = 1.2 + randf() * 0.4
+		pl.run_cooldown = pl.timer + 2.0   # then back out to their spot
+		return
+
 	# Forward runs: forwards and midfielders level with or ahead of the ball,
 	# once the team is out of its own quarter. Quicker players go more often.
 	var runners := _count_jobs(t, Job.RUN) + _count_jobs(t, Job.OVERLAP)
 	var eager: float = 0.25 + p.r("pace") / 100.0 * 0.35
-	if p.role == "FWD" or p.role == "MID":
+	if p.role == "MID":
 		eager += 0.15
+	elif p.role == "FWD":
+		eager *= 0.5   # mostly they hold their spot
 	if p.role != "DEF" and runners < MAX_RUNNERS and pl.run_cooldown <= 0.0 \
 			and ball_frac > 0.25 and ahead > -8.0 and my_frac < 0.9 and randf() < eager:
 		pl.job = Job.RUN
@@ -143,7 +165,7 @@ func _think_attack(p, pl: Plan) -> void:
 		return
 
 	# Overlap: a wide player behind the ball on the same flank goes round it.
-	var wide: bool = p.position_code in ["LHB", "RHB", "LM", "RM", "LHF", "RHF"]
+	var wide: bool = p.position_code in ["LHB", "RHB", "LM", "RM"]
 	var same_side: bool = sign(p.pos.y - m.PITCH.y / 2.0) == sign(ball.y - m.PITCH.y / 2.0)
 	if wide and same_side and holder != null and ahead < -2.0 and ahead > -22.0 \
 			and runners < MAX_RUNNERS and pl.run_cooldown <= 0.0 and ball_frac > 0.3 \
@@ -154,17 +176,6 @@ func _think_attack(p, pl: Plan) -> void:
 		pl.sprint = true
 		pl.timer = 2.0 + randf()
 		pl.run_cooldown = pl.timer + 3.0
-		return
-
-	# Check back: a tightly marked forward comes short towards the ball.
-	var dist_ball: float = p.pos.distance_to(ball)
-	if p.role == "FWD" and m._nearest_opponent_dist(p) < 3.5 and dist_ball > 16.0 and randf() < 0.6:
-		pl.job = Job.CHECK
-		var to_ball: Vector2 = (ball - p.pos).normalized()
-		var side := Vector2(-to_ball.y, to_ball.x) * (1.0 if randf() < 0.5 else -1.0)
-		pl.target = p.pos + to_ball * 7.0 + side * 3.0
-		pl.sprint = true
-		pl.timer = 1.0 + randf() * 0.5
 		return
 
 	pl.job = Job.HOLD
@@ -224,8 +235,12 @@ func _run_spot(p, ball: Vector2) -> Vector2:
 	var goal_y: float = m.PITCH.y / 2.0
 	var best_y: float = p.pos.y
 	var best_s := -INF
+	var from_y: float = p.pos.y
+	if p.role == "FWD":
+		from_y = m.home_world(p).y   # a forward's run stays in their own channel
+		goal_y = lerp(from_y, goal_y, 0.4)
 	for i in 7:
-		var y: float = lerp(p.pos.y, goal_y, i / 6.0) + randf_range(-4.0, 4.0)
+		var y: float = lerp(from_y, goal_y, i / 6.0) + randf_range(-4.0, 4.0)
 		var spot := _in_pitch(Vector2(run_x, y))
 		var s: float = min(_space_at(1 - t, spot), 10.0) * 1.5 + min(_space_at(t, spot, p), 8.0) \
 			- abs(y - goal_y) * 0.08 + min(m._lane_clearance(t, ball, spot), 5.0)
@@ -260,7 +275,7 @@ func _pick_supporters(t: int, chasers: Array) -> void:
 	var ball: Vector2 = focus[t]
 	var ranked := []
 	for p in m.squads[t]:
-		if p.is_keeper() or p == focus_player[t] or p == m.human or p in chasers:
+		if p.is_keeper() or p == focus_player[t] or p == m.human or p in chasers or p.role == "FWD":
 			continue
 		var pl: Plan = plans[p]
 		if pl.job in [Job.RUN, Job.OVERLAP] and pl.timer > 0.0:
@@ -300,6 +315,8 @@ func _defend(p, pl: Plan) -> void:
 	pl.job = Job.HOLD
 	pl.target = _shape_spot(p)
 	pl.sprint = p.pos.distance_to(pl.target) > 12.0
+	if p.role == "FWD":
+		pl.sprint = p.pos.distance_to(pl.target) > 6.0   # get back out to your spot
 
 
 ## Formation spot squeezed towards the ball and pulled back towards our goal.
@@ -307,6 +324,8 @@ func _shape_spot(p) -> Vector2:
 	var t: int = p.team
 	var h: Vector2 = m.home_world(p)
 	var ball: Vector2 = focus[t]
+	if p.role == "FWD":
+		return _in_pitch(h)   # forwards stay up the park on their man
 	h.y = lerp(h.y, ball.y, 0.15)
 	h.x -= m.attack_dir[t] * (4.0 if p.role != "DEF" else 2.0)
 	return _in_pitch(h)
@@ -335,8 +354,8 @@ func _assign_marks(t: int, chasers: Array) -> void:
 	for p in m.squads[t]:
 		if p.is_keeper() or p == m.human or p in chasers or p == cover[t]:
 			continue
-		if p.role == "FWD" and m.own_frac(t, ball.x) > 0.45:
-			continue   # forwards stay up unless the ball is deep in our half
+		if p.role == "FWD":
+			continue   # forwards stay up the park; the backs mark them
 		if p.role == "MID" and m.own_frac(t, ball.x) > 0.6:
 			continue   # midfielders hold their zone while the ball is up the park
 		free.append(p)

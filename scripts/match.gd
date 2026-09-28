@@ -317,8 +317,11 @@ func home_world(p: Player) -> Vector2:
 	var f: Vector2 = p.home
 	if not p.is_keeper():
 		var bx := own_frac(p.team, ball_pos.x)
-		f.x = clamp(f.x + (bx - 0.5) * 0.5, 0.05, 0.94)
-		f.y = clamp(f.y + (ball_pos.y / PITCH.y - 0.5) * 0.3, 0.06, 0.94)
+		# Forwards are man-marked by the opposing backs and hold their line;
+		# everyone else shifts up and down the park with the ball.
+		var shift := 0.15 if p.role == "FWD" else 0.5
+		f.x = clamp(f.x + (bx - 0.5) * shift, 0.05, 0.94)
+		f.y = clamp(f.y + (ball_pos.y / PITCH.y - 0.5) * (0.12 if p.role == "FWD" else 0.3), 0.06, 0.94)
 		if carrier != null and carrier.team == p.team:
 			f.x = min(f.x + 0.05, 0.94)
 	return frac_to_world(p.team, f)
