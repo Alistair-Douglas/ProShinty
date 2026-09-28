@@ -32,6 +32,9 @@ const DRIBBLE_LOSE := 3.2    # yards: a touch this far from the carrier has got 
 const SHY_TOSS := 6.5        # yd/s: how hard a shy is thrown up
 const SHY_ARM := 0.8         # the shy is tossed an arm's length in front
 const SHY_ATTEMPTS := 3      # tries at a clean strike before the shy goes over
+const THROW_UP_SET := 1.2   # seconds the pair stand ready before the ball goes up
+const THROW_UP_TOSS := 8.0   # yd/s: the referee's throw
+const THROW_UP_GAP := 0.8    # each centre stands this far from the spot
 const SET_PIECE_PAUSE := 2.2 # hit-outs and corners: play stops while players get set
 const SET_PIECE_MIN := 1.0   # a human taker can't hit it before this
 
@@ -71,6 +74,7 @@ class Player:
 	var shy_ready := false   # taking a shy: the next hit is thrown up and struck overhead
 	var shy_toss := false    # ball thrown up, overhead strike coming
 	var shy_attempts := 0
+	var throw_up := false    # a centre contesting the throw-up, caman raised
 	var anim := {}           # latest one-off animation, for the view
 	var anim_seq := 0
 	var charged := 0.0       # human: how much of the backswing was held
@@ -135,6 +139,11 @@ var team_ai: TeamAI
 var set_piece := ""                # "Hit-out" or "Corner" while one is being taken
 var set_piece_taker: Player = null
 var set_piece_t := 0.0             # seconds since it was awarded
+var throw_up_pair: Array = []     # the two centres contesting the throw-up
+var throw_up_tossed := false
+var throw_up_t := 0.0              # seconds since the ball went up
+var throw_up_ideal := 0.0          # when it drops to where a caman meets it overhead
+var throw_up_swing := {}           # Player -> when they swing at it
 var dribble_vel := Vector2.ZERO    # a dribbled ball rolling ahead of its carrier
 var dribble_taps := 0
 
@@ -217,11 +226,7 @@ func step(dt: float) -> void:
 		referee.step(dt)
 	match state:
 		State.THROW_UP:
-			state_timer -= dt
-			_update_players(dt)
-			if state_timer <= 0.0:
-				ball_vz = 9.0
-				state = State.PLAY
+			_step_throw_up(dt)
 		State.PLAY:
 			_update_set_piece(dt)
 			if shy_taker() == null and set_piece_taker_now() == null:
@@ -263,18 +268,26 @@ func _start_throw_up() -> void:
 	carrier = null
 	last_team = -1
 	ball_pos = PITCH / 2.0
-	ball_z = 0.6
+	ball_z = 1.4   # in the referee's hand
 	ball_vel = Vector2.ZERO
 	ball_vz = 0.0
 	protected_timer = 0.0
 	_clear_set_piece()
+	throw_up_pair = []
+	throw_up_tossed = false
+	throw_up_t = 0.0
+	throw_up_swing = {}
 	for p in players:
 		var f: Vector2 = p.home
-		if p.position_code == "LM":
-			f = Vector2(0.485, 0.5)
-		elif not p.is_keeper():
+		if not p.is_keeper() and p.position_code != "LM":
 			f.x = min(f.x * 0.55, 0.44)
 		p.pos = frac_to_world(p.team, f)
+		p.throw_up = false
+		if p.position_code == "LM" and throw_up_pair.size() == p.team:
+			# The two centres face each other over the spot, sticks raised.
+			p.pos = PITCH / 2.0 - Vector2(attack_dir[p.team] * THROW_UP_GAP, 0)
+			p.throw_up = true
+			throw_up_pair.append(p)
 		p.vel = Vector2.ZERO
 		p.desired = Vector2.ZERO
 		p.facing = Vector2(attack_dir[p.team], 0)
@@ -895,6 +908,89 @@ func _contact(p: Player) -> void:
 			_say("Bending it " + ("left" if res["curve"] > 0.0 else "right"), 1.0)
 
 
+## The throw-up: the two centres stand face to face with their camans raised
+## overhead, the referee throws the ball up between them, and as it drops
+## both swing at it in the air. Whoever times it best knocks it away towards
+## their own side; swing together and the sticks clash and it drops dead.
+## The player (if one of the pair) times their own swing with the hit button.
+func _step_throw_up(dt: float) -> void:
+	for p in players:
+		p.desired = Vector2.ZERO
+		_move(p, dt)
+		Body.update_stick(self, p, dt)
+	if not throw_up_tossed:
+		state_timer -= dt
+		if state_timer <= 0.0:
+			_toss_throw_up()
+		return
+	throw_up_t += dt
+	ball_z += ball_vz * dt
+	ball_vz -= GRAVITY * dt
+	if human in throw_up_pair and not manual_step and Input.is_action_just_pressed("shoot"):
+		throw_up_swing[human] = throw_up_t
+	var last := 0.0
+	for p in throw_up_pair:
+		last = max(last, throw_up_swing.get(p, 0.0))
+	if throw_up_t >= last or ball_z < 0.8:
+		_resolve_throw_up()
+
+
+func _toss_throw_up() -> void:
+	throw_up_tossed = true
+	ball_vz = THROW_UP_TOSS
+	var a := 0.5 * GRAVITY
+	var c := Body.OVERHEAD - ball_z
+	throw_up_ideal = (THROW_UP_TOSS + sqrt(THROW_UP_TOSS * THROW_UP_TOSS - 4.0 * a * c)) / (2.0 * a)
+	for p in throw_up_pair:
+		# Better ball players read the drop better.
+		var sigma: float = lerp(0.16, 0.05, p.r("control") / 100.0) - _skill_mod(p.team) * 0.3
+		throw_up_swing[p] = throw_up_ideal + randfn(0.0, max(sigma, 0.03))
+	if human in throw_up_pair:
+		_say("Throw-up: press Hit as it drops", 1.6)
+
+
+func _resolve_throw_up() -> void:
+	state = State.PLAY
+	ball_pos = PITCH / 2.0
+	for p in throw_up_pair:
+		p.throw_up = false
+	var errs := []
+	for p in throw_up_pair:
+		errs.append(abs(throw_up_swing.get(p, 99.0) - throw_up_ideal))
+	if throw_up_pair.size() < 2:
+		ball_vz = min(ball_vz, 0.0)
+		return
+	var a: Player = throw_up_pair[0]
+	var b: Player = throw_up_pair[1]
+	for p in throw_up_pair:
+		p.touch_block = 0.3
+		anim(p, "cleek")
+	if errs[0] > 0.28 and errs[1] > 0.28:
+		# Both swung at fresh air: it drops between them.
+		ball_vz = min(ball_vz, 0.0)
+		events.append({"type": "throw_up_miss"})
+		return
+	if abs(errs[0] - errs[1]) < 0.015:
+		# Sticks together: they clash and the ball drops dead.
+		ball_vel = Vector2.from_angle(randf() * TAU) * randf_range(0.5, 2.5)
+		ball_vz = 0.0
+		events.append({"type": "throw_up_clash"})
+		return
+	var w: Player = a if errs[0] < errs[1] else b
+	var clean: float = clamp(1.0 - min(errs[0], errs[1]) / 0.28, 0.2, 1.0)
+	var dir := Vector2(attack_dir[w.team], 0).rotated(randf_range(-1.0, 1.0))
+	ball_vel = dir * lerp(4.0, 12.0, clean)
+	ball_vz = randf_range(0.5, 3.5)
+	last_team = w.team
+	events.append({"type": "strike", "by": w, "at": ball_pos})
+	events.append({"type": "throw_up_won", "team": w.team})
+
+
+## True for a centre in the throw-up while their caman is raised or swinging.
+func in_throw_up(p: Player) -> bool:
+	return state == State.THROW_UP and p in throw_up_pair
+
+
 ## The player standing over a hit-out or corner, or null once it's been hit
 ## (or lost).
 func set_piece_taker_now() -> Player:
@@ -1260,10 +1356,12 @@ func _restart(team: int, spot: Vector2, label: String) -> void:
 		# their positions and the camera comes round behind the taker.
 		set_piece = label
 		set_piece_taker = taker
-		taker.think = SET_PIECE_PAUSE
-		protected_timer = SET_PIECE_PAUSE
+		# A corner takes longer: everyone has to get up to the D.
+		var pause: float = SET_PIECE_PAUSE + (1.0 if label == "Corner" else 0.0)
+		taker.think = pause
+		protected_timer = pause
 		charge = -1.0
-	_say(label, 1.2 if set_piece == "" else SET_PIECE_PAUSE)
+	_say(label, 1.2 if set_piece == "" else protected_timer)
 	events.append({"type": label, "team": team, "taker": taker})
 
 

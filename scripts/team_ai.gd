@@ -105,6 +105,11 @@ func begin_team(t: int, dt: float, chasers: Array) -> void:
 func off_ball(p, dt: float) -> void:
 	var pl := _plan(p)
 	var t: int = p.team
+	if m.set_piece == "Corner" and m.set_piece_taker_now() != null:
+		var spot = _corner_spot(p)
+		if spot != null:
+			m._steer_to(p, _legal(t, spot), p.pos.distance_to(spot) > 5.0)
+			return
 	if attacking[t]:
 		if pl.timer <= 0.0 or _run_finished(p, pl):
 			_think_attack(p, pl)
@@ -387,6 +392,31 @@ func _assign_marks(t: int, chasers: Array) -> void:
 		out[pick] = o
 		free.erase(pick)
 	marks[t] = out
+
+
+# ---------------------------------------------------------------- corners
+
+## At a corner the attackers crowd the edge of the D (they can't be in it
+## before the ball) and the defenders fill it, goal-side. Returns null for
+## anyone who just keeps their shape.
+func _corner_spot(p):
+	var taker = m.set_piece_taker
+	var att: bool = p.team == taker.team
+	var goal: Vector2 = m.target_goal(taker.team)
+	var into := Vector2(-m.attack_dir[taker.team], 0)
+	var group := []
+	for q in m.squads[p.team]:
+		if q.is_keeper() or q == taker:
+			continue
+		if (att and q.role != "DEF") or (not att and q.role != "FWD"):
+			group.append(q)
+	var i := group.find(p)
+	if i < 0:
+		return null
+	var k: float = (i + 0.5) / group.size()
+	var ang := lerpf(-1.2, 1.2, k)
+	var r: float = m.D_RADIUS + 1.5 if att else lerpf(3.0, m.D_RADIUS - 1.5, fmod(k * 3.0, 1.0))
+	return goal + into.rotated(ang) * r
 
 
 # ---------------------------------------------------------------- helpers

@@ -144,10 +144,10 @@ func _update_camera(delta: float) -> void:
 		var goal := w(m.target_goal(set_piece_taker.team))
 		if m.set_piece == "Corner":
 			# From behind the corner flag, high enough to see the D and the goalmouth.
-			var to_goal := (goal - at).normalized()
-			var mouth := goal - Vector3(signf(goal.x), 0, 0) * 9.0
-			shy_eye = at - to_goal * 7.0 + Vector3(0, 6.0, 0)
-			shy_look = at.lerp(mouth, 0.7) + Vector3(0, 0.5, 0)
+			var d_centre := goal - Vector3(signf(goal.x), 0, 0) * 8.0
+			var to_d := (d_centre - at).normalized()
+			shy_eye = at - to_d * 6.0 + Vector3(0, 5.5, 0)
+			shy_look = at.lerp(d_centre, 0.6) + Vector3(0, 0.5, 0)
 		else:
 			# Hit-out: from behind the goal, over the keeper's shoulder, up the park.
 			var up_park := (goal - at).normalized()

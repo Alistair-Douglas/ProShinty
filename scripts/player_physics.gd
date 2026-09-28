@@ -199,6 +199,11 @@ static func update_stick(m, p, dt: float) -> void:
 			target = ball_at
 	elif p.shy_toss:
 		target = Vector3(p.pos.x + p.facing.x * m.SHY_ARM, p.pos.y + p.facing.y * m.SHY_ARM, OVERHEAD)
+	elif m.in_throw_up(p):
+		# Caman raised high over the spot; as the ball drops, go up to meet it.
+		target = Vector3(p.pos.x + p.facing.x * 0.45, p.pos.y + p.facing.y * 0.45, OVERHEAD)
+		if m.throw_up_tossed and m.throw_up_t > m.throw_up_swing.get(p, 99.0) - 0.15:
+			target = Vector3(m.ball_pos.x, m.ball_pos.y, clampf(m.ball_z, 1.5, OVERHEAD))
 	elif p.stagger <= 0.0:
 		var ball := Vector3(m.ball_pos.x, m.ball_pos.y, m.ball_z)
 		var ahead := ball + Vector3(m.ball_vel.x, m.ball_vel.y, m.ball_vz) * 0.1
@@ -230,7 +235,7 @@ static func _clamp_reach(p, v: Vector3, keeper_area: bool) -> Vector3:
 	var r := max_reach(p)
 	if flat.length() > r:
 		flat = flat.normalized() * r
-	var h := clampf(v.z, 0.0, maxf(max_height(p, flat.length(), keeper_area), OVERHEAD if p.shy_toss else 0.0))
+	var h := clampf(v.z, 0.0, maxf(max_height(p, flat.length(), keeper_area), OVERHEAD if (p.shy_toss or p.throw_up) else 0.0))
 	return Vector3(p.pos.x + flat.x, p.pos.y + flat.y, h)
 
 
