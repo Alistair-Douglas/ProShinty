@@ -1,0 +1,13 @@
+{
+  "note": "Made-up sponsors for the pitchside boards and shirts. None is a real company. To use real sponsors, add entries here with artwork in broadcast/sponsors/<id>.png (board, about 6.7:1) and <id>_shirt.png (white on transparent, about 3:1), or re-run tests/render_sponsors.gd to draw them from these fields.",
+  "sponsors": [
+    {"id": "corriemoy", "name": "Corriemoy", "tagline": "Spring Water", "shirt": "CORRIEMOY", "font": "Pacifico", "bg": "#0b5fa5", "fg": "#ffffff", "accent": "#8fd3ff"},
+    {"id": "auchtercairn", "name": "AUCHTERCAIRN", "tagline": "MOTORS", "shirt": "AUCHTERCAIRN", "font": "RussoOne", "bg": "#111418", "fg": "#ffcc00", "accent": "#ffffff"},
+    {"id": "glenbrannoch", "name": "Glenbrannoch", "tagline": "Scottish Oats", "shirt": "Glenbrannoch", "font": "BreeSerif", "bg": "#f3e3b5", "fg": "#6b3b12", "accent": "#b5651d"},
+    {"id": "bothybyte", "name": "bothybyte", "tagline": "BROADBAND", "shirt": "bothybyte", "font": "RussoOne", "bg": "#5b2a86", "fg": "#ffffff", "accent": "#4fe3c1"},
+    {"id": "drumvaich", "name": "Drumvaich", "tagline": "Dairies", "shirt": "Drumvaich", "font": "Pacifico", "bg": "#ffffff", "fg": "#1a5e2e", "accent": "#1a5e2e"},
+    {"id": "tartanline", "name": "TARTANLINE", "tagline": "COACHES", "shirt": "TARTANLINE", "font": "BarlowBlack", "bg": "#c8102e", "fg": "#ffffff", "accent": "#ffd23f"},
+    {"id": "ardvreck", "name": "Ardvreck", "tagline": "Timber", "shirt": "ARDVRECK", "font": "BreeSerif", "bg": "#2d4a22", "fg": "#f1d38a", "accent": "#f1d38a"},
+    {"id": "munrobag", "name": "MUNROBAG", "tagline": "OUTDOOR", "shirt": "MUNROBAG", "font": "BarlowBlack", "bg": "#f07c1a", "fg": "#111111", "accent": "#ffffff"}
+  ]
+}
