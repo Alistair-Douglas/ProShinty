@@ -1,7 +1,7 @@
 shader_type spatial;
 // Spectators drawn as MultiMeshes (see crowd.gd). Each mesh vertex says which
 // part it belongs to in UV.x (0 jacket, 1 trousers, 2 skin, 3 hair or hat,
-// 4 wheelchair, 5 scarf) and, for arm vertices, which arm in UV.y (-1 left,
+// 4 wheelchair and shoes, 5 scarf) and, for arm vertices, which arm in UV.y (-1 left,
 // +1 right) and the shoulder it swings about in UV2. Vertex alpha 0 means
 // the figure stays put when cheering (a wheelchair user).
 // Per spectator: COLOR is the jacket colour; INSTANCE_CUSTOM holds

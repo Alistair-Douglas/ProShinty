@@ -130,6 +130,14 @@ func _process(_d: float) -> bool:
 			_shot("judge_corner_far")
 			m.ball_pos = Vector2(m.PITCH.x - 0.5, m.PITCH.y / 2.0)
 			m._goal(0)
+			if out != "":
+				# Look at the far-side crowd celebrating.
+				_close = Camera3D.new()
+				view.add_child(_close)
+				_close.position = Vector3(-20.0, 4.0, -m.PITCH.y / 2.0 + 12.0)
+				_close.look_at(Vector3(-8.0, 1.0, -m.PITCH.y / 2.0 - 6.0))
+				_close.fov = 50.0
+				_close.make_current()
 			wait = 20
 		4:
 			var end := 0 if m.own_goal(1).x < m.PITCH.x / 2.0 else 1

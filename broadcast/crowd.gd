@@ -3,7 +3,7 @@ extends Node3D
 ## Spectators standing round the pitch: along both touchlines behind the ad
 ## boards and, fewer, behind each hail. Most wear one team's colours; there
 ## are children, and wheelchair users along the front. Every spectator is an
-## instance of one of two low-poly figures (about 200 triangles), drawn as a
+## instance of one of two low-poly figures (a few hundred triangles), drawn as a
 ## MultiMesh per side of the pitch, so the whole crowd costs a handful of draw
 ## calls and no shadows. They sway about, and when a team scores its
 ## supporters cheer with their arms up (cheer()).
@@ -213,19 +213,22 @@ static func _keep_clear(venue: int, hl: float, hw: float) -> Array:
 	return out
 
 
-## A spectator 1.75 m tall standing at the origin facing +Z. See
-## crowd.gdshader for what the vertex colour, UV and UV2 hold.
+## A spectator 1.75 m tall standing at the origin facing +Z: rounded limbs,
+## body and head from a few hundred triangles. See crowd.gdshader for what
+## the vertex colour, UV and UV2 hold.
 static func _standing_mesh() -> ArrayMesh:
 	var st := _begin()
-	var sh := Vector2(0.28, 1.43)
-	_box(st, Vector3(0, 0.44, 0), Vector3(0.34, 0.88, 0.22), 1.0)                 # legs
-	_box(st, Vector3(0, 1.17, 0), Vector3(0.44, 0.6, 0.27), 0.0)                  # body
+	var sh := Vector2(0.25, 1.4)
 	for s in [-1.0, 1.0]:
-		_box(st, Vector3(s * 0.28, 1.16, 0), Vector3(0.1, 0.56, 0.12), 0.0, s, sh)  # arm
-		_box(st, Vector3(s * 0.28, 0.84, 0.01), Vector3(0.08, 0.1, 0.09), 2.0, s, sh)
-	_box(st, Vector3(0, 1.45, 0.0), Vector3(0.26, 0.09, 0.3), 5.0)                # scarf
-	_box(st, Vector3(0, 1.575, 0.01), Vector3(0.19, 0.23, 0.21), 2.0)             # head
-	_box(st, Vector3(0, 1.71, -0.01), Vector3(0.21, 0.07, 0.23), 3.0)             # hair or hat
+		_tube(st, Vector3(s * 0.1, 0.07, 0.0), Vector3(s * 0.1, 0.9, 0.0), 0.075, 0.095, 1.0)       # leg
+		_blob(st, Vector3(s * 0.1, 0.04, 0.04), Vector3(0.055, 0.045, 0.12), 4.0)                   # shoe
+		_tube(st, Vector3(s * 0.25, 1.4, 0.0), Vector3(s * 0.29, 0.95, 0.03), 0.06, 0.05, 0.0, s, sh)  # arm
+		_blob(st, Vector3(s * 0.29, 0.91, 0.04), Vector3(0.045, 0.055, 0.045), 2.0, s, sh)            # hand
+	_tube(st, Vector3(0, 0.86, 0), Vector3(0, 1.44, 0), 0.19, 0.22, 0.0, 0.0, Vector2.ZERO, Vector2(1.0, 0.62))  # body
+	_blob(st, Vector3(0, 1.44, 0), Vector3(0.22, 0.06, 0.136), 0.0)                             # shoulders
+	_tube(st, Vector3(0, 1.43, 0), Vector3(0, 1.52, 0), 0.1, 0.085, 5.0)                        # scarf
+	_blob(st, Vector3(0, 1.62, 0.01), Vector3(0.1, 0.12, 0.11), 2.0)                            # head
+	_blob(st, Vector3(0, 1.645, -0.005), Vector3(0.107, 0.112, 0.114), 3.0, 0.0, Vector2.ZERO, true)  # hair or hat
 	return st.commit()
 
 
@@ -234,23 +237,90 @@ static func _standing_mesh() -> ArrayMesh:
 static func _wheelchair_mesh() -> ArrayMesh:
 	var st := _begin()
 	st.set_color(Color(1, 1, 1, 0))   # alpha 0: no jumping
-	var sh := Vector2(0.25, 1.05)
+	var sh := Vector2(0.24, 1.06)
 	_box(st, Vector3(0, 0.46, -0.04), Vector3(0.44, 0.05, 0.44), 4.0)             # seat
 	_box(st, Vector3(0, 0.74, -0.25), Vector3(0.42, 0.5, 0.04), 4.0)              # backrest
 	_box(st, Vector3(0, 0.1, 0.33), Vector3(0.3, 0.03, 0.14), 4.0)                # footplate
 	for s in [-1.0, 1.0]:
 		_wheel(st, Vector3(s * 0.27, 0.3, -0.08), 0.3, 0.035)
 		_box(st, Vector3(s * 0.15, 0.3, 0.24), Vector3(0.03, 0.4, 0.03), 4.0)     # front frame
-	_box(st, Vector3(0, 0.55, 0.1), Vector3(0.34, 0.16, 0.44), 1.0)               # thighs
-	_box(st, Vector3(0, 0.3, 0.3), Vector3(0.3, 0.44, 0.14), 1.0)                 # shins
-	_box(st, Vector3(0, 0.8, -0.08), Vector3(0.42, 0.56, 0.26), 0.0)              # body
-	for s in [-1.0, 1.0]:
-		_box(st, Vector3(s * 0.26, 0.8, -0.05), Vector3(0.1, 0.5, 0.12), 0.0, s, sh)
-		_box(st, Vector3(s * 0.26, 0.51, -0.04), Vector3(0.08, 0.1, 0.09), 2.0, s, sh)
-	_box(st, Vector3(0, 1.08, -0.08), Vector3(0.26, 0.09, 0.3), 5.0)
-	_box(st, Vector3(0, 1.2, -0.07), Vector3(0.19, 0.23, 0.21), 2.0)
-	_box(st, Vector3(0, 1.335, -0.09), Vector3(0.21, 0.07, 0.23), 3.0)
+		_tube(st, Vector3(s * 0.1, 0.55, -0.1), Vector3(s * 0.1, 0.55, 0.3), 0.09, 0.08, 1.0)   # thigh
+		_tube(st, Vector3(s * 0.1, 0.55, 0.3), Vector3(s * 0.1, 0.16, 0.33), 0.07, 0.06, 1.0)  # shin
+		_blob(st, Vector3(s * 0.1, 0.14, 0.38), Vector3(0.055, 0.045, 0.11), 4.0)
+		_tube(st, Vector3(s * 0.24, 1.06, -0.08), Vector3(s * 0.27, 0.66, 0.02), 0.06, 0.05, 0.0, s, sh)
+		_blob(st, Vector3(s * 0.27, 0.62, 0.03), Vector3(0.045, 0.055, 0.045), 2.0, s, sh)
+	_tube(st, Vector3(0, 0.5, -0.08), Vector3(0, 1.1, -0.08), 0.19, 0.21, 0.0, 0.0, Vector2.ZERO, Vector2(1.0, 0.62))
+	_blob(st, Vector3(0, 1.1, -0.08), Vector3(0.21, 0.06, 0.13), 0.0)
+	_tube(st, Vector3(0, 1.09, -0.08), Vector3(0, 1.18, -0.08), 0.1, 0.085, 5.0)
+	_blob(st, Vector3(0, 1.28, -0.07), Vector3(0.1, 0.12, 0.11), 2.0)
+	_blob(st, Vector3(0, 1.305, -0.085), Vector3(0.107, 0.112, 0.114), 3.0, 0.0, Vector2.ZERO, true)
 	return st.commit()
+
+
+## A tapered eight-sided tube from `a` to `b` (radius ra at a, rb at b), open
+## at the ends. `squash` scales the cross-section's x and z (for a body).
+static func _tube(st: SurfaceTool, a: Vector3, b: Vector3, ra: float, rb: float, part: float,
+		arm := 0.0, shoulder := Vector2.ZERO, squash := Vector2.ONE) -> void:
+	st.set_uv(Vector2(part, arm))
+	st.set_uv2(shoulder)
+	var axis := (b - a).normalized()
+	var side := Vector3.FORWARD if absf(axis.dot(Vector3.UP)) > 0.9 else Vector3.UP
+	var u := axis.cross(side).normalized()
+	var v := axis.cross(u).normalized()
+	if absf(axis.dot(Vector3.UP)) > 0.9:
+		u = Vector3.RIGHT
+		v = Vector3.BACK
+	var n := 8
+	for i in n:
+		var ring := []
+		for k in [i, i + 1]:
+			var t := TAU * float(k) / n
+			var d := u * cos(t) * squash.x + v * sin(t) * squash.y
+			ring.append([a + d * ra, b + d * rb, d.normalized()])
+		_quad(st, ring[0][0], ring[1][0], ring[1][1], ring[0][1], ring[0][2], ring[1][2])
+
+
+## An ellipsoid (or just its top half, for hair and hats) with radii `r`.
+static func _blob(st: SurfaceTool, c: Vector3, r: Vector3, part: float, arm := 0.0,
+		shoulder := Vector2.ZERO, top_only := false) -> void:
+	st.set_uv(Vector2(part, arm))
+	st.set_uv2(shoulder)
+	var lat := 4
+	var lon := 8
+	var first := lat / 2 if top_only else 0
+	for i in range(first, lat):
+		for j in lon:
+			var pts := []
+			for k in [[i, j], [i + 1, j], [i + 1, j + 1], [i, j + 1]]:
+				var th := PI * (float(k[0]) / lat - 0.5)
+				var ph := TAU * float(k[1]) / lon
+				var d := Vector3(cos(th) * cos(ph), sin(th), cos(th) * sin(ph))
+				pts.append([c + d * r, (d / r).normalized()])
+			_tri(st, pts[0], pts[1], pts[2], c)
+			_tri(st, pts[0], pts[2], pts[3], c)
+
+
+## A quad from two edges of a tube, wound to face away from its axis.
+static func _quad(st: SurfaceTool, a0: Vector3, a1: Vector3, b1: Vector3, b0: Vector3, n0: Vector3, n1: Vector3) -> void:
+	var mid := (a0 + a1 + b0 + b1) * 0.25 - (n0 + n1) * 0.5
+	_tri(st, [a0, n0], [a1, n1], [b1, n1], mid)
+	_tri(st, [a0, n0], [b1, n1], [b0, n0], mid)
+
+
+## One triangle of [position, normal] points, flipped if needed so its front
+## (clockwise in Godot) faces away from `inside`.
+static func _tri(st: SurfaceTool, p: Array, q: Array, r: Array, inside: Vector3) -> void:
+	var a: Vector3 = p[0]
+	var b: Vector3 = q[0]
+	var c: Vector3 = r[0]
+	if (b - a).cross(c - a).length_squared() < 1e-12:
+		return
+	var pts := [p, q, r]
+	if (b - a).cross(c - a).dot((a + b + c) / 3.0 - inside) > 0.0:
+		pts = [p, r, q]
+	for x in pts:
+		st.set_normal(x[1])
+		st.add_vertex(x[0])
 
 
 static func _begin() -> SurfaceTool:
