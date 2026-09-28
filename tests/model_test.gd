@@ -84,6 +84,16 @@ func _run() -> void:
 	root3d.add_child(lefty)
 	lefty.setup({"name": "Lefty", "number": 9, "hand": "L"}, teams[0])
 	lefty.advance(0.016)
+	check(_hook_y(striker) > 0.3, "standing after a swing, the hook faces up (%.2f)" % _hook_y(striker))
+	var blocker := ShintyPlayerModel.new()
+	blocker.manual_update = true
+	root3d.add_child(blocker)
+	blocker.setup(teams[0]["players"][4], teams[0])
+	blocker.set_reach(Vector3(0.2, 0.03, -0.9), 1.0)
+	blocker.play_action(&"block", 1.0)
+	for i in 15:
+		blocker.advance(1.0 / 60.0)
+	check(_hook_y(blocker) < -0.3, "blocking, the hook is turned down (%.2f)" % _hook_y(blocker))
 	check(lefty.get_strike_spot().x < 0.0 and lefty.get_caman_head_position().x < 0.0, "left-hander carries the caman on the left")
 
 	print("Carry and running swing")
@@ -91,17 +101,21 @@ func _run() -> void:
 	runner.manual_update = true
 	root3d.add_child(runner)
 	runner.setup(teams[0]["players"][10], teams[0])
+	var runner_start := [runner._seed, runner._phase, runner._time]
+	runner.shoulder_carry = false
 	runner.set_locomotion(Vector3(0, 0, -6.0))
 	for i in 60:
 		runner.advance(1.0 / 60.0)
 	var carried := runner.get_caman_head_position()
 	check(carried.y > 0.15 and carried.y < 0.8 and carried.z < -0.4, "running, the caman head is carried low out in front (%s)" % carried)
 	check(_top_hand_gap(runner) > 0.15, "running, the top hand is off the caman (%.2f m)" % _top_hand_gap(runner))
+	check(_hook_y(runner) > 0.3, "running, the hook of the caman faces up (%.2f)" % _hook_y(runner))
 	runner.look_at_point(runner.global_transform * Vector3(0, 0, -2.5))
 	for i in 40:
 		runner.advance(1.0 / 60.0)
 	check(_top_hand_gap(runner) < 0.12, "closing on the ball, both hands are on the caman (%.2f m)" % _top_hand_gap(runner))
 	runner.look_at_point(null)
+	check(_hook_y(runner) > 0.3, "carried two-handed, the hook faces up (%.2f)" % _hook_y(runner))
 	var run_hits := []
 	runner.strike.connect(func(pos, pow): run_hits.append(pos))
 	runner.play_action(&"swing", 1.0)
@@ -116,10 +130,30 @@ func _run() -> void:
 	lefty_run.manual_update = true
 	root3d.add_child(lefty_run)
 	lefty_run.setup({"name": "Lefty", "number": 9, "hand": "L"}, teams[0])
+	# Everyone runs a little out of step; line the lefty's stride up with the
+	# runner's for the comparison.
+	lefty_run._seed = runner_start[0]
+	lefty_run._phase = runner_start[1]
+	lefty_run._time = runner_start[2]
+	lefty_run.shoulder_carry = false
 	lefty_run.set_locomotion(Vector3(0, 0, -6.0))
 	for i in 60:
 		lefty_run.advance(1.0 / 60.0)
 	check(absf(lefty_run.get_caman_head_position().x + carried.x) < 0.1, "left-hander carries the caman the mirror way (%.2f vs %.2f)" % [lefty_run.get_caman_head_position().x, carried.x])
+	var shoulder := ShintyPlayerModel.new()
+	shoulder.manual_update = true
+	root3d.add_child(shoulder)
+	shoulder.setup(teams[0]["players"][10], teams[0])
+	shoulder.shoulder_carry = true
+	shoulder.set_locomotion(Vector3(0, 0, -6.0))
+	for i in 60:
+		shoulder.advance(1.0 / 60.0)
+	check(shoulder.get_caman_head_position().y > 1.5, "a shoulder carrier holds the caman up by the shoulder (head %.2f m)" % shoulder.get_caman_head_position().y)
+	var styles := {}
+	for t in teams:
+		for p in t["players"]:
+			styles[ShintyPlayerModel.carries_on_shoulder(p)] = true
+	check(styles.size() == 2, "some players carry on the shoulder, some by the waist")
 	var lefty_hits := []
 	lefty_run.strike.connect(func(pos, pow): lefty_hits.append(pos))
 	lefty_run.play_action(&"swing", 1.0)
@@ -221,6 +255,74 @@ func _run() -> void:
 	r = _shoot_at(hail, Vector3(0, 0.5, -26), Vector3(0, 1.0, -20), 20.0)
 	check(not r["goal"], "shot into the back of the net from behind is no goal")
 
+	print("Body physics")
+	# A knock rocks the trunk, which settles again.
+	var rock := _figure("Rocker", 4)
+	rock.set_locomotion(Vector3(0, 0, -4))
+	_step(rock, 1.0)
+	var calm := rock._sway.length()
+	rock.set_locomotion(Vector3(3, 0, -4))
+	var most := 0.0
+	for f in 30:
+		rock.advance(1.0 / 60.0)
+		most = maxf(most, rock._sway.length())
+	_step(rock, 2.0)
+	print("    trunk sway: running %.3f, knocked %.3f, after %.3f rad" % [calm, most, rock._sway.length()])
+	check(most > calm + 0.1, "a knock rocks the trunk")
+	check(rock._sway.length() < calm + 0.03, "and it settles again")
+	# Nobody moves in step with anyone else.
+	var a1 := _figure("Twin A", 2)
+	var a2 := _figure("Twin B", 3)
+	var apart := 0.0
+	for f in 360:
+		a1.advance(1.0 / 60.0)
+		a2.advance(1.0 / 60.0)
+		var hips1: Vector3 = a1._skel.get_bone_pose_position(a1._bone["Hips"])
+		var hips2: Vector3 = a2._skel.get_bone_pose_position(a2._bone["Hips"])
+		apart = maxf(apart, hips1.distance_to(hips2))
+	check(apart > 0.01, "two players standing don't sway in step (%.3f m apart)" % apart)
+	# A small knock is a stumble; a big one puts them on the grass and they get up.
+	for pw in [0.3, 1.0]:
+		var k := _figure("Faller %.1f" % pw, 5)
+		k.set_locomotion(Vector3(0, 0, -5))
+		_step(k, 1.0)
+		k.set_locomotion(Vector3(0, 0, -1))
+		k.advance(1.0 / 60.0)
+		k.play_action(&"stumble", pw)
+		var low := 9.0
+		var went_down := false
+		var t := 0.0
+		while k.is_busy() and t < 4.0:
+			k.advance(1.0 / 60.0)
+			t += 1.0 / 60.0
+			low = minf(low, _head_y(k))
+			went_down = went_down or k.is_down()
+		_step(k, 0.3)
+		print("    stumble %.1f: lowest head %.2f m, over after %.2f s, head then %.2f m" % [pw, low, t, _head_y(k)])
+		if pw < 0.5:
+			check(not went_down and low > 1.0, "a small knock is a stumble, not a fall")
+		else:
+			check(went_down and low < 0.5, "a big knock puts them on the grass")
+			check(t < 2.0, "and they're up within two seconds")
+			check(k._rag == null and _head_y(k) > 1.4, "standing again, ragdoll gone")
+	# Knocked down while running along: the body goes where the player goes.
+	var mover := _figure("Mover", 6)
+	mover.set_locomotion(Vector3(0, 0, -5))
+	_step(mover, 0.5)
+	mover.set_locomotion(Vector3(0, 0, -1.5))
+	mover.advance(1.0 / 60.0)
+	mover.play_action(&"stumble", 1.0)
+	for f in 50:
+		mover.position += Vector3(0, 0, -1.5) / 60.0
+		mover.advance(1.0 / 60.0)
+	var hips_w: Vector3 = mover._skel.global_transform * mover._skel.get_bone_global_pose(mover._bone["Hips"]).origin
+	check(Vector2(hips_w.x - mover.position.x, hips_w.z - mover.position.z).length() < 1.2,
+		"a fallen body stays with the player (%.2f m away)" % Vector2(hips_w.x - mover.position.x, hips_w.z - mover.position.z).length())
+	# Something else happening cuts the lie-down short.
+	mover.play_action(&"swing", 1.0)
+	_step(mover, 0.35)
+	check(mover._rag == null, "a new action takes the body back from the ragdoll")
+
 	print("Match adapter (yards)")
 	var fake := FakeMatch.new()
 	var sim := ShintyMatchAdapter.BallSim.new(Vector2(150, 75), 4.0, 3.33)
@@ -315,3 +417,25 @@ func _top_hand_gap(m: ShintyPlayerModel) -> float:
 	var wrist := sk.global_transform * sk.get_bone_global_pose(sk.find_bone(side + "Hand")).origin
 	var grip: Vector3 = m._caman.global_transform * Vector3(0, -ShintyPlayerModel.GRIP_TOP, 0)
 	return maxf(0.0, wrist.distance_to(grip) - ShintyPlayerModel.HAND_GRIP * m.height_cm / 180.0)
+
+
+## Which way the hook of the bas points: +1 straight up, -1 at the grass.
+func _hook_y(m: ShintyPlayerModel) -> float:
+	return (m._caman.global_transform.basis * Vector3(0, 0, -1)).normalized().y
+
+
+func _figure(name: String, number: int) -> ShintyPlayerModel:
+	var m := ShintyPlayerModel.new()
+	m.manual_update = true
+	root3d.add_child(m)
+	m.setup({"name": name, "number": number, "position": "LM"}, {})
+	return m
+
+
+func _step(m: ShintyPlayerModel, secs: float) -> void:
+	for f in int(secs * 60.0):
+		m.advance(1.0 / 60.0)
+
+
+func _head_y(m: ShintyPlayerModel) -> float:
+	return (m._skel.global_transform * m._skel.get_bone_global_pose(m._bone["Head"]).origin).y

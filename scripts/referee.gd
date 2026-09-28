@@ -21,6 +21,14 @@ extends RefCounted
 const FREE_HIT_YARDS := 5.0       ## opponents stand back this far
 const PENALTY_YARDS := 20.0       ## penalty hit, from the goal line
 const ADVANTAGE_SECONDS := 3.0
+## A poke that misses the ball can catch the carrier's caman or body instead.
+const TACKLE_FOUL := 0.07
+## A stick battle can turn into hacking at the other player's caman.
+const BATTLE_FOUL := 0.12
+## Chance of a yellow card for a foul of severity 1 (scaled down for milder
+## ones); a push in the back is booked more readily.
+const YELLOW_CHANCE := 0.3
+const RED_CHANCE := 0.01
 const RUN_SPEED := 7.0
 const FOUL_NAMES := {
 	"push": "push in the back", "hack": "hacking", "stick": "caman on the man",
@@ -37,8 +45,9 @@ var facing := Vector2.DOWN
 ## A save that drops the ball at their feet is fine; taking hold of it with
 ## the hands is a foul.
 var penalise_keeper_catch := true
-## Tests set this so every foul is seen.
+## Tests set these so every foul is seen and cards only come when certain.
 var always_sees := false
+var chance_cards := true
 
 var fouls := {}                   ## Player -> fouls committed
 var yellows := {}                 ## Player -> yellow cards
@@ -96,6 +105,10 @@ func _read_events() -> void:
 				_on_touch(e["by"], e["at"], e.get("hands", false))
 			"foul":
 				_on_foul(e)
+			"tackle":
+				_on_tackle(e)
+			"battle":
+				_on_battle()
 			"save":
 				if e.has("by"):
 					_touched(e["by"])
@@ -167,6 +180,37 @@ func _in_offside_position(p, ball_at: Vector2) -> bool:
 	return abs(goal.x - p.pos.x) < abs(goal.x - ball_at.x)
 
 
+## The physics reports the clear fouls (pushes, late blocks). A referee also
+## pulls up clumsy challenges: a poke that misses the ball, more so from
+## behind or when tired, sometimes catches the man or his caman.
+func _on_tackle(e: Dictionary) -> void:
+	if e.get("won", false):
+		return
+	var t = e["by"]
+	var o = e["on"]
+	var off: Vector2 = t.pos - o.pos
+	var behind := 0.0
+	if off.length() > 0.01 and o.facing.length() > 0.01:
+		behind = max(0.0, -o.facing.normalized().dot(off.normalized()))
+	var chance: float = TACKLE_FOUL * (1.6 - t.r("tackling") / 100.0) + behind * 0.12 + (1.0 - t.stamina) * 0.05
+	if randf() >= chance:
+		return
+	var kind := "push" if behind > 0.6 else "hack"
+	var severity: float = 0.15 + randf() * 0.55 + behind * 0.2
+	_on_foul({"kind": kind, "by": t, "on": o, "at": e.get("at", o.pos), "severity": severity})
+
+
+## Two players fighting for the ball with their sticks: now and then one
+## comes down on the other's caman.
+func _on_battle() -> void:
+	var b: Dictionary = m.battle
+	if b.is_empty() or randf() >= BATTLE_FOUL:
+		return
+	var t = b["t"] if randf() < 0.6 else b["o"]
+	var o = b["o"] if t == b["t"] else b["t"]
+	_on_foul({"kind": "hack", "by": t, "on": o, "at": o.pos, "severity": 0.2 + randf() * 0.4})
+
+
 func _on_foul(e: Dictionary) -> void:
 	var kind: String = e.get("kind", "foul")
 	if kind == "barge" or kind == "shoulder":
@@ -181,19 +225,36 @@ func _on_foul(e: Dictionary) -> void:
 	var team: int = 1 - p.team
 	fouls[p] = fouls.get(p, 0) + 1
 	var severity: float = e.get("severity", 0.3)
-	var card := ""
-	if severity > 0.97:
-		card = "red"
-	elif severity > 0.8 or fouls[p] == 3 or fouls[p] == 6:
-		card = "yellow"
+	var card := _card_for(p, kind, severity)
 	var in_d: bool = at.distance_to(m.own_goal(p.team)) < m.D_RADIUS
-	# Advantage: let play go on while the fouled team still has the ball.
-	if card == "" and not in_d and m.carrier != null and m.carrier.team == team:
+	# Advantage: only when the fouled team keeps the ball going forward in the
+	# opponents' half; otherwise the whistle goes.
+	var attacking: bool = m.carrier != null and m.carrier.team == team \
+		and m.own_frac(team, m.carrier.pos.x) > 0.5
+	if card == "" and not in_d and attacking:
 		_advantage = {"team": team, "offender": p, "at": at, "kind": kind, "timer": ADVANTAGE_SECONDS}
 		_log("advantage", team, kind)
 		m._say("Advantage %s" % m.teams[team]["name"], 1.2)
 		return
 	_whistle(p, team, at, kind, in_d, card)
+
+
+## Certain cards: a very bad foul is a red, a bad one or a third foul by a
+## player a yellow. Otherwise a yellow is a judgement call that gets likelier
+## the worse the foul, and a push in the back is punished harder.
+func _card_for(p, kind: String, severity: float) -> String:
+	if severity > 0.97:
+		return "red"
+	if severity > 0.8 or fouls[p] == 3:
+		return "yellow"
+	if not chance_cards:
+		return ""
+	var harsh := 1.4 if kind == "push" else 1.0
+	if randf() < RED_CHANCE * severity * harsh:
+		return "red"
+	if randf() < YELLOW_CHANCE * severity * severity * harsh:
+		return "yellow"
+	return ""
 
 
 func _whistle(p, team: int, at: Vector2, kind: String, in_d: bool, card: String) -> void:
