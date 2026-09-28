@@ -32,6 +32,7 @@ const DRIBBLE_LOSE := 3.2    # yards: a touch this far from the carrier has got 
 const SHY_TOSS := 6.5        # yd/s: how hard a shy is thrown up
 const SHY_ARM := 0.8         # the shy is tossed an arm's length in front
 const SHY_ATTEMPTS := 3      # tries at a clean strike before the shy goes over
+const SHY_HOLD := 0.35       # the ball is lifted in the hand this long before it leaves it
 const THROW_UP_SET := 1.2   # seconds the pair stand ready before the ball goes up
 const THROW_UP_TOSS := 8.0   # yd/s: the referee's throw
 const THROW_UP_GAP := 0.8    # each centre stands this far from the spot
@@ -145,6 +146,9 @@ var throw_up_tossed := false
 var throw_up_t := 0.0              # seconds since the ball went up
 var throw_up_ideal := 0.0          # when it drops to where a caman meets it overhead
 var throw_up_swing := {}           # Player -> when they swing at it
+var shy_lift: Player = null        # taking a shy with the ball still in the hand
+var shy_lift_t := 0.0
+var shy_lift_from := Vector3.ZERO
 var dribble_vel := Vector2.ZERO    # a dribbled ball rolling ahead of its carrier
 var dribble_taps := 0
 
@@ -809,16 +813,17 @@ func _throw_up_shy(p: Player) -> void:
 	p.shy_toss = true
 	p.shy_attempts += 1
 	carrier = null
-	ball_pos = p.pos + p.facing * SHY_ARM
-	ball_z = 1.4
-	# The toss is never perfect: a little drift, more for poorer ball control.
-	var wobble: float = lerp(0.25, 0.05, p.r("control") / 100.0)
-	ball_vel = Vector2(randfn(0.0, wobble), randfn(0.0, wobble))
-	ball_vz = SHY_TOSS + randfn(0.0, wobble)
+	# The ball is picked up and lifted in the free hand first (see
+	# _lift_shy), then leaves the hand an arm's length in front at 1.4 yd.
+	shy_lift = p
+	shy_lift_t = 0.0
+	shy_lift_from = Vector3(ball_pos.x, ball_pos.y, ball_z)
+	ball_vel = Vector2.ZERO
+	ball_vz = 0.0
 	# Strike when it comes back down to where the caman meets it overhead.
 	var a := 0.5 * GRAVITY
-	var c := Body.OVERHEAD - ball_z
-	p.swing_t = (SHY_TOSS + sqrt(SHY_TOSS * SHY_TOSS - 4.0 * a * c)) / (2.0 * a)
+	var c := Body.OVERHEAD - 1.4
+	p.swing_t = SHY_HOLD + (SHY_TOSS + sqrt(SHY_TOSS * SHY_TOSS - 4.0 * a * c)) / (2.0 * a)
 	# High and long, whatever the taker was going to do with it.
 	var req: Dictionary = p.swing_req
 	req["speed"] = max(req["speed"], 22.0)
@@ -1114,7 +1119,32 @@ func anim(p: Player, name: String, power: float = 1.0, from_charge: float = 0.0)
 	p.anim_seq += 1
 
 
+## The shy taker's hand brings the ball up in front and lets it go.
+func _lift_shy(dt: float) -> void:
+	var p := shy_lift
+	shy_lift_t += dt
+	var k: float = clamp(shy_lift_t / SHY_HOLD, 0.0, 1.0)
+	var e := k * k * (3.0 - 2.0 * k)
+	var hand := Vector3(p.pos.x + p.facing.x * SHY_ARM, p.pos.y + p.facing.y * SHY_ARM, 1.4)
+	var at := shy_lift_from.lerp(hand, e)
+	ball_pos = Vector2(at.x, at.y)
+	ball_z = at.z
+	ball_vel = Vector2.ZERO
+	ball_vz = 0.0
+	if k >= 1.0:
+		shy_lift = null
+		# The toss is never perfect: a little drift, more for poorer ball control.
+		var wobble: float = lerp(0.25, 0.05, p.r("control") / 100.0)
+		ball_vel = Vector2(randfn(0.0, wobble), randfn(0.0, wobble))
+		ball_vz = SHY_TOSS + randfn(0.0, wobble)
+
+
 func _update_ball(dt: float) -> void:
+	if shy_lift != null:
+		if shy_lift.shy_toss and shy_lift in players:
+			_lift_shy(dt)
+			return
+		shy_lift = null
 	if carrier != null and is_dribbling(carrier):
 		_dribble(dt)
 		return
@@ -1217,7 +1247,7 @@ func _ball_touches(before: Vector3) -> void:
 		if keeping:
 			# Hands and body: anywhere within the keeper's reach and height.
 			var body_d: float = Body.path_distance(Vector3(p.pos.x, p.pos.y, 0.0), Vector3(before.x, before.y, 0.0), Vector3(now.x, now.y, 0.0))
-			var hands: float = 0.9 + p.r("keeping") / 100.0 * 0.5 + (0.9 if p.lunge > 0.0 else 0.0)
+			var hands: float = 0.75 + p.r("keeping") / 100.0 * 0.45 + (0.8 if p.lunge > 0.0 else 0.0)
 			if body_d < hands and min(before.z, now.z) < KEEPER_REACH_HEIGHT:
 				d = min(d, body_d * Body.CONTACT_R / hands)
 		if d < reach and d < best_d:
@@ -1282,6 +1312,14 @@ func _ball_touches(before: Vector3) -> void:
 ## A save: the keeper smothers it with stick, hand or body and the ball drops
 ## dead at their feet, then they gather it. No rebounds.
 func _keeper_save(k: Player) -> void:
+	# The caman (or glove) is where the ball is stopped, not a yard short of it.
+	var flat := ball_pos - k.pos
+	var reach: float = Body.max_reach(k)
+	var at := k.pos + flat.limit_length(reach)
+	ball_pos = at
+	k.stick = Vector3(at.x, at.y, min(ball_z, KEEPER_REACH_HEIGHT))
+	if k.lunge <= 0.0:
+		anim(k, "trap")
 	var to_k := k.pos - ball_pos
 	ball_vel = to_k.normalized() * min(to_k.length(), 1.5) + ball_vel.normalized() * 0.3
 	ball_vz = min(ball_vz, 0.0)
