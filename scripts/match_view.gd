@@ -128,9 +128,10 @@ func _update_camera(delta: float) -> void:
 	var tv: Array = director.live_camera(delta)
 	var eye: Vector3 = tv[0]
 	var look: Vector3 = tv[1]
-	# Shy: play stops and the camera comes down behind the taker's shoulder,
-	# looking where they'll send it. It eases back once the ball is struck.
+	# Shy, hit-out or corner: play stops and the camera comes down behind the
+	# taker, looking where they'll send it. It eases back once the ball is struck.
 	var taker = m.shy_taker()
+	var set_piece_taker = m.set_piece_taker_now()
 	if taker != null:
 		var f := Vector3(taker.facing.x, 0.0, taker.facing.y)
 		var side := Vector3(-f.z, 0.0, f.x)
@@ -138,6 +139,21 @@ func _update_camera(delta: float) -> void:
 		shy_eye = at - f * 5.0 - side * 2.2 + Vector3(0, 2.4, 0)
 		shy_look = at + f * 9.0 + Vector3(0, 1.4, 0)
 		shy_blend = move_toward(shy_blend, 1.0, delta * 1.5)
+	elif set_piece_taker != null:
+		var at := w(set_piece_taker.pos)
+		var goal := w(m.target_goal(set_piece_taker.team))
+		if m.set_piece == "Corner":
+			# From behind the corner flag, high enough to see the D and the goalmouth.
+			var to_goal := (goal - at).normalized()
+			var mouth := goal - Vector3(signf(goal.x), 0, 0) * 9.0
+			shy_eye = at - to_goal * 7.0 + Vector3(0, 6.0, 0)
+			shy_look = at.lerp(mouth, 0.7) + Vector3(0, 0.5, 0)
+		else:
+			# Hit-out: from behind the goal, over the keeper's shoulder, up the park.
+			var up_park := (goal - at).normalized()
+			shy_eye = at - up_park * 9.0 + Vector3(0, 5.0, 0)
+			shy_look = at + up_park * 30.0 + Vector3(0, 1.0, 0)
+		shy_blend = move_toward(shy_blend, 1.0, delta * 1.2)
 	else:
 		shy_blend = move_toward(shy_blend, 0.0, delta * 0.8)
 	var k := shy_blend * shy_blend * (3.0 - 2.0 * shy_blend)

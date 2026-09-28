@@ -30,6 +30,8 @@ const CARRY_CATCH_UP := 6.0  # yd/s: how fast a gathered ball settles onto the s
 const SHY_TOSS := 6.5        # yd/s: how hard a shy is thrown up
 const SHY_ARM := 0.8         # the shy is tossed an arm's length in front
 const SHY_ATTEMPTS := 3      # tries at a clean strike before the shy goes over
+const SET_PIECE_PAUSE := 2.2 # hit-outs and corners: play stops while players get set
+const SET_PIECE_MIN := 1.0   # a human taker can't hit it before this
 
 enum State { THROW_UP, PLAY, GOAL, HALF_TIME, FULL_TIME }
 
@@ -128,6 +130,9 @@ var gather_keeper: Player = null   # a saved ball dropping to the keeper
 var foul_pending = null            # [offender, fouled] seen by the referee
 var gather_t := 0.0
 var team_ai: TeamAI
+var set_piece := ""                # "Hit-out" or "Corner" while one is being taken
+var set_piece_taker: Player = null
+var set_piece_t := 0.0             # seconds since it was awarded
 
 
 
@@ -214,8 +219,9 @@ func step(dt: float) -> void:
 				ball_vz = 9.0
 				state = State.PLAY
 		State.PLAY:
-			if shy_taker() == null:
-				clock += dt   # the clock stops while a shy is taken
+			_update_set_piece(dt)
+			if shy_taker() == null and set_piece_taker_now() == null:
+				clock += dt   # the clock stops while a shy, hit-out or corner is taken
 			_update_players(dt)
 			_take_penalty()
 			_update_ball(dt)
@@ -257,6 +263,7 @@ func _start_throw_up() -> void:
 	ball_vel = Vector2.ZERO
 	ball_vz = 0.0
 	protected_timer = 0.0
+	_clear_set_piece()
 	for p in players:
 		var f: Vector2 = p.home
 		if p.position_code == "LM":
@@ -498,8 +505,8 @@ func _ai_chase(p: Player, dt: float) -> void:
 func _ai_carrier(p: Player, dt: float) -> void:
 	if p.swing_t >= 0.0:
 		return   # mid-swing: committed
-	if p.shy_ready:
-		# A shy has to be taken: pass it to someone open or hit it long.
+	if p.shy_ready or p == set_piece_taker_now():
+		# A shy, hit-out or corner has to be taken: pass it to someone open or hit it long.
 		p.think -= dt
 		if p.think <= 0.0 and protected_timer <= 0.0 and not _ai_pass(p, false):
 			_hit_long(p)
@@ -659,6 +666,8 @@ func _human_control(dt: float) -> void:
 			charge = -1.0
 			return
 	var aim := mv.normalized() if mv.length() > 0.15 else p.facing
+	if p == set_piece_taker_now() and set_piece_t < SET_PIECE_MIN:
+		return   # play has stopped: let everyone get set first
 	if Input.is_action_just_pressed("shoot"):
 		# Also how you swing at an opponent's ball: beat their swing to it.
 		charge = 0.0
@@ -880,6 +889,29 @@ func _contact(p: Player) -> void:
 			_say(note[res["kind"]], 1.0)
 		elif abs(res["curve"]) > 5.0 and req["speed"] > 22.0:
 			_say("Bending it " + ("left" if res["curve"] > 0.0 else "right"), 1.0)
+
+
+## The player standing over a hit-out or corner, or null once it's been hit
+## (or lost).
+func set_piece_taker_now() -> Player:
+	if set_piece != "" and carrier == set_piece_taker and set_piece_taker != null:
+		return set_piece_taker
+	return null
+
+
+func _update_set_piece(dt: float) -> void:
+	if set_piece == "":
+		return
+	if set_piece_taker_now() == null:
+		_clear_set_piece()   # struck, or lost: back to open play
+		return
+	set_piece_t += dt
+
+
+func _clear_set_piece() -> void:
+	set_piece = ""
+	set_piece_taker = null
+	set_piece_t = 0.0
 
 
 ## The player taking a shy (lining it up or with the ball in the air), or null.
@@ -1159,7 +1191,16 @@ func _restart(team: int, spot: Vector2, label: String) -> void:
 	taker.shy_attempts = 0
 	taker.think = 0.9
 	protected_timer = 1.5
-	_say(label, 1.2)
+	_clear_set_piece()
+	if label == "Hit-out" or label == "Corner":
+		# Play stops: the taker stands over the ball, everyone else takes up
+		# their positions and the camera comes round behind the taker.
+		set_piece = label
+		set_piece_taker = taker
+		taker.think = SET_PIECE_PAUSE
+		protected_timer = SET_PIECE_PAUSE
+		charge = -1.0
+	_say(label, 1.2 if set_piece == "" else SET_PIECE_PAUSE)
 	events.append({"type": label, "team": team, "taker": taker})
 
 
@@ -1222,6 +1263,7 @@ func _place_taker(taker: Player, spot: Vector2, toward: Vector2) -> void:
 	ball_vel = Vector2.ZERO
 	ball_vz = 0.0
 	charge = -1.0
+	_clear_set_piece()
 	_take_control(taker)
 	taker.think = 1.8
 	protected_timer = 2.0
@@ -1255,6 +1297,7 @@ func _goal(team: int) -> void:
 	state_timer = GOAL_PAUSE
 	carrier = null
 	gather_keeper = null
+	_clear_set_piece()
 	ball_vel *= 0.15
 	ball_vz = 0.0
 	charge = -1.0
