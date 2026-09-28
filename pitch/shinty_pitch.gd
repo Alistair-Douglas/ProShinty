@@ -83,6 +83,13 @@ const GOAL_HEIGHT_YD := 3.3333  # 10 ft to the crossbar
 	set(v):
 		scenery_detail = v
 		_queue_rebuild()
+## Shadows and screen effects: LOW for older graphics, MEDIUM for laptops
+## with integrated graphics (Intel Iris Xe and up), HIGH for the full look
+## (8K shadow map, soft contact shadows, SSIL and screen-space reflections). Scenery amount is `scenery_detail`, set separately.
+@export var graphics_quality: Detail = Detail.HIGH:
+	set(v):
+		graphics_quality = v
+		_queue_rebuild()
 ## Simple white hails so the pitch looks right on its own. Turn off once the
 ## real goal models are placed at goal_transform().
 @export var show_placeholder_goals := true:
@@ -223,6 +230,7 @@ func _rebuild() -> void:
 		rng.seed = layout_seed
 		_build_water(root)
 		_layout.build(root, rng)
+		_batch_scenery(root)
 	if add_ground_collision:
 		_build_collision(s)
 	if include_environment:
@@ -421,14 +429,26 @@ func _build_environment() -> void:
 	sun.light_energy = p.sun_energy
 	sun.shadow_enabled = true
 	sun.shadow_blur = p.shadow_blur
-	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
-	sun.directional_shadow_max_distance = 320.0 * units_per_yard / YARD_M
-	sun.directional_shadow_split_1 = 0.05
-	sun.directional_shadow_split_2 = 0.15
-	sun.directional_shadow_split_3 = 0.4
 	sun.directional_shadow_blend_splits = true
 	sun.shadow_normal_bias = 1.2
-	sun.light_angular_distance = 0.5  # soft shadow edges (Forward+)
+	match graphics_quality:
+		Detail.LOW:
+			sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
+			sun.directional_shadow_max_distance = 130.0 * units_per_yard / YARD_M
+			sun.directional_shadow_split_1 = 0.3
+		Detail.MEDIUM:
+			sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
+			sun.directional_shadow_max_distance = 220.0 * units_per_yard / YARD_M
+			sun.directional_shadow_split_1 = 0.07
+			sun.directional_shadow_split_2 = 0.2
+			sun.directional_shadow_split_3 = 0.5
+		_:
+			sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
+			sun.directional_shadow_max_distance = 320.0 * units_per_yard / YARD_M
+			sun.directional_shadow_split_1 = 0.05
+			sun.directional_shadow_split_2 = 0.15
+			sun.directional_shadow_split_3 = 0.4
+			sun.light_angular_distance = 0.5  # soft shadow edges (Forward+)
 	_gen.add_child(sun)
 
 	var sky_mat := ShaderMaterial.new()
@@ -466,13 +486,13 @@ func _build_environment() -> void:
 	env.adjustment_saturation = 1.1
 	# Forward+ only (the Compatibility renderer warns about them).
 	if RenderingServer.get_current_rendering_method() == "forward_plus":
-		env.ssao_enabled = true
+		env.ssao_enabled = graphics_quality != Detail.LOW
 		env.ssao_radius = 1.2
 		env.ssao_intensity = 1.6
 		env.ssao_light_affect = 0.2
-		env.ssil_enabled = true
+		env.ssil_enabled = graphics_quality == Detail.HIGH
 		env.ssil_radius = 4.0
-		env.ssr_enabled = true
+		env.ssr_enabled = graphics_quality == Detail.HIGH
 		env.ssr_max_steps = 48
 	var we := WorldEnvironment.new()
 	we.name = "WorldEnvironment"
@@ -924,6 +944,127 @@ func add_cyl(parent: Node3D, pos: Vector3, radius: float, height: float, m: Mate
 	mi.position = pos
 	parent.add_child(mi)
 	return mi
+
+
+# --- Draw-call batching -------------------------------------------------------
+
+## Scenery is laid out in cells this size (metres) once it is built, so the
+## camera and each shadow cascade only draw the cells they can see.
+const BATCH_CELL := 60.0
+## How far from the pitch (metres) scenery still casts shadows, by quality.
+## Beyond it the shadow would be a few blurry pixels in the last cascade.
+const SHADOW_REACH := [15.0, 70.0, INF]
+
+
+## Cuts the scenery's draw calls without changing what it looks like: each big
+## MultiMesh (trees) is split into cells, and plain-material meshes (houses,
+## cars, walls, fences) are merged per cell and material. Far cells stop
+## casting shadows below HIGH quality.
+func _batch_scenery(root: Node3D) -> void:
+	var reach: float = SHADOW_REACH[graphics_quality]
+	for mmi in root.find_children("*", "MultiMeshInstance3D", true, false):
+		_split_multimesh(root, mmi, reach)
+	var groups := {}
+	for mi in root.find_children("*", "MeshInstance3D", true, false):
+		if not _batchable(mi):
+			continue
+		var xf := _relative_xform(root, mi)
+		var cell := _cell_of(xf * mi.mesh.get_aabb().get_center())
+		for surf in mi.mesh.get_surface_count():
+			var key := [cell, mi.material_override, mi.cast_shadow, _surface_layout(mi.mesh, surf)]
+			if not groups.has(key):
+				groups[key] = []
+			groups[key].append([mi.mesh, surf, xf])
+		mi.get_parent().remove_child(mi)
+		mi.queue_free()
+	for key in groups:
+		var st := SurfaceTool.new()
+		for item in groups[key]:
+			st.append_from(item[0], item[1], item[2])
+		var merged := MeshInstance3D.new()
+		merged.name = "Batch"
+		merged.mesh = st.commit()
+		merged.material_override = key[1]
+		merged.cast_shadow = key[2]
+		if _cell_distance(key[0]) > reach:
+			merged.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		root.add_child(merged)
+
+
+## Which vertex attributes a surface has; only like surfaces merge together.
+func _surface_layout(mesh: Mesh, surf: int) -> int:
+	var arrays := mesh.surface_get_arrays(surf)
+	var bits := 0
+	for i in arrays.size():
+		if arrays[i] != null and not (arrays[i] is Array and arrays[i].is_empty()):
+			bits |= 1 << i
+	return bits
+
+
+func _batchable(mi: MeshInstance3D) -> bool:
+	var m := mi.material_override as StandardMaterial3D
+	return mi.mesh != null and m != null and mi.is_visible_in_tree() and mi.get_child_count() == 0 \
+		and mi.visibility_range_end == 0.0 and m.transparency == BaseMaterial3D.TRANSPARENCY_DISABLED \
+		and m.billboard_mode == BaseMaterial3D.BILLBOARD_DISABLED and mi.get_script() == null
+
+
+func _relative_xform(root: Node3D, n: Node3D) -> Transform3D:
+	var xf := Transform3D.IDENTITY
+	while n != root:
+		xf = n.transform * xf
+		n = n.get_parent()
+	return xf
+
+
+func _cell_of(p: Vector3) -> Vector2i:
+	return Vector2i(floori(p.x / BATCH_CELL), floori(p.z / BATCH_CELL))
+
+
+## Metres from the pitch's edge to the nearest point of a cell.
+func _cell_distance(cell: Vector2i) -> float:
+	var lo := Vector2(cell) * BATCH_CELL
+	var hi := lo + Vector2.ONE * BATCH_CELL
+	var dx := maxf(0.0, maxf(lo.x - hl, -hl - hi.x))
+	var dz := maxf(0.0, maxf(lo.y - hw, -hw - hi.y))
+	return Vector2(dx, dz).length()
+
+
+func _split_multimesh(root: Node3D, mmi: MultiMeshInstance3D, reach: float) -> void:
+	var mm := mmi.multimesh
+	if mm == null or mm.instance_count < 64 or mm.transform_format != MultiMesh.TRANSFORM_3D:
+		return
+	var cells := {}
+	var base := _relative_xform(root, mmi)
+	for i in mm.instance_count:
+		var cell := _cell_of(base * mm.get_instance_transform(i).origin)
+		if not cells.has(cell):
+			cells[cell] = []
+		cells[cell].append(i)
+	if cells.size() < 2:
+		return
+	for cell in cells:
+		var list: Array = cells[cell]
+		var part := MultiMesh.new()
+		part.transform_format = MultiMesh.TRANSFORM_3D
+		part.use_colors = mm.use_colors
+		part.use_custom_data = mm.use_custom_data
+		part.mesh = mm.mesh
+		part.instance_count = list.size()
+		for j in list.size():
+			var i: int = list[j]
+			part.set_instance_transform(j, mm.get_instance_transform(i))
+			if mm.use_colors:
+				part.set_instance_color(j, mm.get_instance_color(i))
+			if mm.use_custom_data:
+				part.set_instance_custom_data(j, mm.get_instance_custom_data(i))
+		var chunk := mmi.duplicate(0) as MultiMeshInstance3D
+		chunk.name = "%s_%d_%d" % [mmi.name, cell.x, cell.y]
+		chunk.multimesh = part
+		if chunk.cast_shadow != GeometryInstance3D.SHADOW_CASTING_SETTING_OFF and _cell_distance(cell) > reach:
+			chunk.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		mmi.get_parent().add_child(chunk)
+	mmi.get_parent().remove_child(mmi)
+	mmi.queue_free()
 
 
 func _load_local(file: String) -> Resource:

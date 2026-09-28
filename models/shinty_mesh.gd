@@ -219,6 +219,22 @@ void fragment() {
 """
 
 
+## Plain-coloured parts baked together (see ShintyPlayerLook._bake): albedo in
+## the vertex colour (sRGB, alpha = clearcoat), roughness and metallic in UV2.
+const SOLID_VC_SHADER := """
+shader_type spatial;
+void fragment() {
+	vec3 c = COLOR.rgb;
+	ALBEDO = mix(pow((c + vec3(0.055)) * (1.0 / 1.055), vec3(2.4)), c * (1.0 / 12.92), lessThan(c, vec3(0.04045)));
+	ROUGHNESS = UV2.x;
+	METALLIC = UV2.y;
+	SPECULAR = mix(0.5, 0.8, UV2.y);
+	CLEARCOAT = COLOR.a;
+	CLEARCOAT_ROUGHNESS = 0.15;
+}
+"""
+
+
 static func _shader(key: String, code: String) -> Shader:
 	if not _cache.has(key):
 		var s := Shader.new()
@@ -286,6 +302,15 @@ static func ball_leather() -> ShaderMaterial:
 	var m := ShaderMaterial.new()
 	m.shader = _shader("ball_shader", BALL_SHADER)
 	_cache["ball"] = m
+	return m
+
+
+static func solid_vc() -> ShaderMaterial:
+	if _cache.has("solid_vc"):
+		return _cache["solid_vc"]
+	var m := ShaderMaterial.new()
+	m.shader = _shader("solid_vc_shader", SOLID_VC_SHADER)
+	_cache["solid_vc"] = m
 	return m
 
 

@@ -5,6 +5,7 @@ extends Node3D
 ## reads the match state, never changes it. One world unit is one yard; the
 ## centre spot is the origin.
 
+const TeamData := preload("res://scripts/team_data.gd")
 const PitchScene := preload("res://pitch/shinty_pitch.tscn")
 
 var m: Node  # the match (parent)
@@ -35,6 +36,9 @@ func _ready() -> void:
 	pitch.length_yd = m.PITCH.x
 	pitch.width_yd = m.PITCH.y
 	pitch.show_placeholder_goals = false  # our own hails below
+	var q: int = get_node("/root/Game").graphics_quality if has_node("/root/Game") else ShintyPitch.Detail.MEDIUM
+	pitch.graphics_quality = q
+	pitch.scenery_detail = ShintyPitch.Detail.LOW if q == ShintyPitch.Detail.LOW else ShintyPitch.Detail.MEDIUM
 	add_child(pitch)
 	_build_hails()
 	for p in m.players:
@@ -60,6 +64,10 @@ func _ready() -> void:
 	var tracked: Array = figures.values()
 	tracked.append(referee_figure)
 	director.setup(self, tracked, ball)
+	var audio := ShintyMatchAudio.new()
+	audio.name = "Audio"
+	audio.m = m
+	add_child(audio)
 	cam_x = m.ball_pos.x - m.PITCH.x / 2.0
 	_update_camera(1.0)
 
@@ -172,7 +180,7 @@ func _build_hails() -> void:
 
 
 func _build_player(p) -> Dictionary:
-	var f := ShintyMatchAdapter.build_player(self, p.data, ShintyMatchAdapter.team_from_colors(m.colors[p.team][0], m.colors[p.team][1]))
+	var f := ShintyMatchAdapter.build_player(self, p.data, {"colors": m.kits[p.team]})
 	var root: Node3D = f["root"]
 	var team: Dictionary = m.teams[p.team]
 	ShintyKitSponsor.apply(f["model"], ShintySponsors.shirt_texture(ShintySponsors.for_team(team)))
@@ -210,24 +218,25 @@ func _build_boards() -> void:
 
 
 ## Spectators round the ground and a goal judge behind each hail. The crowd
-## is thinner on lower graphics settings.
+## wears the colours of the kits the teams are playing in, and is thinner on
+## lower graphics settings.
 func _build_crowd() -> void:
 	crowd = ShintyCrowd.new()
 	crowd.name = "Crowd"
 	crowd.unit_scale = 1.0 / ShintyMatchAdapter.YARD
 	add_child(crowd)
-	var game := get_node_or_null("/root/Game")
-	var q: int = game.get("graphics_quality") if game != null and game.get("graphics_quality") != null else 1
-	crowd.build(pitch, m.colors, q)
+	crowd.build(pitch, m.colors, pitch.graphics_quality)
 	goal_judges = ShintyGoalJudges.new()
 	goal_judges.name = "GoalJudges"
 	add_child(goal_judges)
 	goal_judges.setup(m, self, crowd)
 
 
-## The referee: an all-black kit, no helmet and no caman.
+## The referee: black kit (a bright top if a team wears black), no helmet and
+## no caman.
 func _build_referee() -> Dictionary:
-	var kit := {"colors": {"primary": "#15161a", "secondary": "#15161a", "socks": "#15161a"}}
+	var top := TeamData.referee_colour(m.kits)
+	var kit := {"colors": {"primary": top, "secondary": "#15161a", "shorts": "#15161a", "socks": "#15161a"}}
 	var f := ShintyMatchAdapter.build_player(self, {"name": "Referee", "number": 0, "position": "REF", "pace": 60, "tackling": 40}, kit)
 	var model: ShintyPlayerModel = f["model"]
 	model.wear_helmet = false
@@ -245,6 +254,7 @@ func _mesh(mesh: Mesh, mat: Material) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
 	mi.mesh = mesh
 	mi.material_override = mat
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	return mi
 
 

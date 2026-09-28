@@ -186,7 +186,7 @@ func _build_hub() -> void:
 		squad_pick.select(Game.home_index)
 		_refresh_squad()
 		_show("squads"))
-	_tile(col, "CONTROLS", "Keyboard and controller", func(): _show("controls"))
+	_tile(col, "CONTROLS", "Keyboard, controller and graphics", func(): _show("controls"))
 	_tile(col, "QUIT", "Back to the desktop", func(): get_tree().quit())
 	s.set_meta("first", play)
 
@@ -482,6 +482,14 @@ func _build_controls() -> void:
 	ShintyStyle.focus_button(back)
 	back.pressed.connect(func(): _show("hub"))
 	s.add_child(back)
+	# Low / Medium / High: applies straight away and is remembered (Game.gd).
+	var gfx := ShintyStepper.new("Graphics", Game.GRAPHICS_NAMES, Game.graphics_quality)
+	gfx.position = Vector2(250, 586)
+	gfx.size = Vector2(300, 74)
+	gfx.changed.connect(func(i): Game.set_graphics_quality(i))
+	s.add_child(gfx)
+	back.focus_neighbor_right = gfx.get_path()
+	gfx.focus_neighbor_left = back.get_path()
 	s.set_meta("first", back)
 
 

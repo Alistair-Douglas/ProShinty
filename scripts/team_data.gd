@@ -142,3 +142,75 @@ static func starting_twelve(team: Dictionary) -> Array:
 			picked[pos] = true
 			out.append(p)
 	return out
+
+
+# ---------------------------------------------------------------- kits
+
+## Kits the away side can fall back on when both its own kits clash.
+const SPARE_KITS := [
+	{"primary": "#f4f4f4", "secondary": "#16161a", "shorts": "#16161a", "socks": "#f4f4f4"},
+	{"primary": "#16161a", "secondary": "#f4f4f4", "shorts": "#16161a", "socks": "#16161a"},
+	{"primary": "#f6c700", "secondary": "#16161a", "shorts": "#16161a", "socks": "#f6c700"},
+	{"primary": "#6cb4e4", "secondary": "#16254f", "shorts": "#16254f", "socks": "#6cb4e4"},
+]
+## Shirts closer than this (see colour_distance) are too alike to tell apart.
+const CLASH_DISTANCE := 0.8
+
+
+## A team's home kit: colors without the change kit or notes.
+static func home_kit(team: Dictionary) -> Dictionary:
+	var c: Dictionary = team.get("colors", {}).duplicate()
+	c.erase("away")
+	c.erase("source")
+	c.erase("placeholder")
+	return c
+
+
+## A team's change kit, or {} if it has none.
+static func away_kit(team: Dictionary) -> Dictionary:
+	var a = team.get("colors", {}).get("away", {})
+	return a if typeof(a) == TYPE_DICTIONARY else {}
+
+
+## The kits for a match, [home, away]. The home side wears its home kit; the
+## away side wears its home kit too unless the shirts clash, then its change
+## kit, then a spare.
+static func match_kits(home: Dictionary, away: Dictionary) -> Array:
+	var h := home_kit(home)
+	for k in [home_kit(away), away_kit(away)] + SPARE_KITS:
+		if not k.is_empty() and not kits_clash(h, k):
+			return [h, k]
+	return [h, SPARE_KITS[0]]
+
+
+## True if two kits' shirts look too alike. Hooped and striped shirts count
+## both of their colours.
+static func kits_clash(a: Dictionary, b: Dictionary) -> bool:
+	for x in shirt_colours(a):
+		for y in shirt_colours(b):
+			if colour_distance(x, y) < CLASH_DISTANCE:
+				return true
+	return false
+
+
+static func shirt_colours(kit: Dictionary) -> Array:
+	var out := [Color(str(kit.get("primary", "#cc2222")))]
+	if str(kit.get("pattern", "")) != "":
+		out.append(Color(str(kit.get("secondary", "#ffffff"))))
+	return out
+
+
+## How different two colours look (weighted RGB, 0 to about 3).
+static func colour_distance(a: Color, b: Color) -> float:
+	var rm := (a.r + b.r) / 2.0
+	return sqrt((2.0 + rm) * pow(a.r - b.r, 2) + 4.0 * pow(a.g - b.g, 2) + (3.0 - rm) * pow(a.b - b.b, 2))
+
+
+## Referee's shirt colour for a match: black, or a bright top if a team's
+## shirt is too close to black.
+static func referee_colour(kits: Array) -> String:
+	for c in ["#15161a", "#c6e21c", "#ff7ab8"]:
+		var ref := {"primary": c}
+		if not kits.any(func(k): return kits_clash(ref, k)):
+			return c
+	return "#15161a"
