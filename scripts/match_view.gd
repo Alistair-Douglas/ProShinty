@@ -42,7 +42,7 @@ func _ready() -> void:
 	bm.simulate = false
 	bm.auto_find_hails = false
 	bm.scale = Vector3.ONE * ShintyMatchAdapter.TO_YARDS
-	bm.display_scale = 4.0
+	bm.display_scale = 1.6  # a touch over real size (6.4 cm) so it reads on TV
 	ball = bm
 	add_child(ball)
 	camera = Camera3D.new()
