@@ -150,6 +150,29 @@ func goal_transform(end: int) -> Transform3D:
 	return Transform3D(Basis(Vector3.UP, yaw), goal_position(end))
 
 
+## Where this ground's pitchside ad boards go (see ShintyAdBoard.place_row):
+## an Array of rows [from, to, first], with `from` and `to` on the ground in
+## this node's units (boards face the pitch) and `first` the index of the
+## first sponsor. A venue can set its own with board_rows(); by default there
+## is a row along the far touchline, where the TV camera sees it, and one
+## behind each hail.
+func board_rows() -> Array:
+	var rows: Array
+	if _layout != null and _layout.has_method("board_rows"):
+		rows = _layout.board_rows()
+	else:
+		rows = [[Vector2(-hl, -hw - 3.7), Vector2(hl, -hw - 3.7), 0],
+			[Vector2(-hl - 4.6, -hw * 0.8), Vector2(-hl - 4.6, hw * 0.8), 3],
+			[Vector2(hl + 4.6, -hw * 0.8), Vector2(hl + 4.6, hw * 0.8), 5]]
+	var s := units_per_yard / YARD_M
+	var out := []
+	for r in rows:
+		var a: Vector2 = r[0]
+		var b: Vector2 = r[1]
+		out.append([Vector3(a.x, height_m(a.x, a.y), a.y) * s, Vector3(b.x, height_m(b.x, b.y), b.y) * s, r[2]])
+	return out
+
+
 ## Ground height in world units at a point in this node's space (0 on the pitch).
 func ground_height(p: Vector3) -> float:
 	var s := units_per_yard / YARD_M

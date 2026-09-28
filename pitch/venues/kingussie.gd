@@ -43,6 +43,15 @@ func extra_cloud() -> float:
 
 
 ## Thinner haze than Aberdour so the hills read on the horizon.
+## Ad boards hang on the rail (3.5 m out), with a gap in front of the
+## dugouts either side of halfway.
+func board_rows() -> Array:
+	var z := -hw - 3.35
+	var x := hl + 3.35
+	return [[Vector2(-hl, z), Vector2(-12.5, z), 0], [Vector2(12.5, z), Vector2(hl, z), 4],
+		[Vector2(-x, -hw * 0.8), Vector2(-x, hw * 0.8), 3], [Vector2(x, -hw * 0.8), Vector2(x, hw * 0.8), 5]]
+
+
 func fog_density() -> float:
 	return 0.00009
 
