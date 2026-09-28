@@ -101,6 +101,7 @@ func _run() -> void:
 	runner.manual_update = true
 	root3d.add_child(runner)
 	runner.setup(teams[0]["players"][10], teams[0])
+	runner.shoulder_carry = false
 	runner.set_locomotion(Vector3(0, 0, -6.0))
 	for i in 60:
 		runner.advance(1.0 / 60.0)
@@ -128,10 +129,25 @@ func _run() -> void:
 	lefty_run.manual_update = true
 	root3d.add_child(lefty_run)
 	lefty_run.setup({"name": "Lefty", "number": 9, "hand": "L"}, teams[0])
+	lefty_run.shoulder_carry = false
 	lefty_run.set_locomotion(Vector3(0, 0, -6.0))
 	for i in 60:
 		lefty_run.advance(1.0 / 60.0)
 	check(absf(lefty_run.get_caman_head_position().x + carried.x) < 0.1, "left-hander carries the caman the mirror way (%.2f vs %.2f)" % [lefty_run.get_caman_head_position().x, carried.x])
+	var shoulder := ShintyPlayerModel.new()
+	shoulder.manual_update = true
+	root3d.add_child(shoulder)
+	shoulder.setup(teams[0]["players"][10], teams[0])
+	shoulder.shoulder_carry = true
+	shoulder.set_locomotion(Vector3(0, 0, -6.0))
+	for i in 60:
+		shoulder.advance(1.0 / 60.0)
+	check(shoulder.get_caman_head_position().y > 1.5, "a shoulder carrier holds the caman up by the shoulder (head %.2f m)" % shoulder.get_caman_head_position().y)
+	var styles := {}
+	for t in teams:
+		for p in t["players"]:
+			styles[ShintyPlayerModel.carries_on_shoulder(p)] = true
+	check(styles.size() == 2, "some players carry on the shoulder, some by the waist")
 	var lefty_hits := []
 	lefty_run.strike.connect(func(pos, pow): lefty_hits.append(pos))
 	lefty_run.play_action(&"swing", 1.0)

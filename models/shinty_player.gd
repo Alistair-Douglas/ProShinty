@@ -74,6 +74,9 @@ const ACTIONS := {
 
 @export_group("Behaviour")
 ## Fewer meshes (no face guard bars, eyes or number) for distant players.
+## Running off the ball, carry the caman up by the shoulder instead of low
+## by the waist. setup() picks it per player.
+@export var shoulder_carry := false
 @export var low_detail := false:
 	set(v): low_detail = v; _dirty = true
 ## Turn to face the direction of travel automatically.
@@ -130,6 +133,7 @@ func setup(player: Dictionary, team: Dictionary = {}) -> void:
 	build = body["build"]
 	shirt_number = int(player.get("number", 0))
 	is_keeper = str(player.get("position", "")) == "GK"
+	shoulder_carry = carries_on_shoulder(player)
 	left_handed = str(player.get("hand", "R")).to_upper().begins_with("L")
 	if player.has("skin"):
 		skin_color = Color(str(player["skin"]))
@@ -174,6 +178,12 @@ static func body_from_stats(p: Dictionary) -> Dictionary:
 		b = clampf(b, 0.05, 0.95)
 		w = (20.0 + b * 10.0) * pow(h / 100.0, 2.0)
 	return {"height_cm": h, "build": b, "weight_kg": roundf(w)}
+
+
+## Whether a player carries the caman up by the shoulder when running (about
+## two in five do) rather than low by the waist. Stable for each player.
+static func carries_on_shoulder(p: Dictionary) -> bool:
+	return (_seed_of(p) / 7) % 5 < 2
 
 
 ## Kit colours for a team. Missing colours fall back to primary/secondary.
@@ -522,25 +532,29 @@ func _pose(_delta: float) -> void:
 	var idle := 1.0 - run
 	var breathe := sin(_time * 1.8) * 0.015
 	# Shinty stance is upright, not an ice hockey crouch: a slight bend, head up.
-	rot["Spine"] = Vector3(-0.08 * idle - 0.07 * run - 0.1 * sprint, 0, 0)
+	rot["Spine"] = Vector3(-0.08 * idle - 0.1 * run - 0.14 * sprint, 0, 0)
 	rot["Chest"] = Vector3(breathe, 0, 0)
 	rot["UpperChest"] = Vector3(-0.03 * idle, 0, 0)
 	rot["Neck"] = Vector3(0.08 * idle + 0.1 * run + 0.1 * sprint, 0, 0)
 	rot["Head"] = Vector3(0.04, 0, 0)
 
-	# Legs: run cycle blended with a slightly crouched stance
-	var amp := lerpf(0.35, 0.85, sprint)
-	var knee_amp := lerpf(0.8, 1.5, sprint)
+	# Legs: a football run cycle blended with a slightly crouched stance.
+	# The knee drives forward and up, the heel folds under the hip as the leg
+	# swings through, the leg reaches out before the foot lands and gives a
+	# little under the weight, then pushes off behind.
+	var amp := lerpf(0.45, 0.85, sprint)
+	var fold := lerpf(1.1, 2.0, sprint)
 	for side in ["Left", "Right"]:
 		var p := ph if side == "Left" else ph + PI
 		var sgn := -1.0 if side == "Left" else 1.0
-		var thigh_run := sin(p) * amp - 0.05
-		var knee_run := -(0.2 + knee_amp * maxf(0.0, cos(p)) * 0.85)
+		var thigh_run := sin(p) * amp + amp * 0.3
+		var swing_fold := pow(maxf(0.0, cos(p + 0.35)), 2.0)
+		var knee_run := -(0.15 + 0.3 * maxf(0.0, -cos(p)) + fold * swing_fold)
 		var thigh_idle := 0.12
 		var knee_idle := -0.24
 		rot[side + "UpperLeg"] = Vector3(lerpf(thigh_idle, thigh_run, run), 0, sgn * 0.05 * idle)
 		rot[side + "LowerLeg"] = Vector3(lerpf(knee_idle, knee_run, run), 0, 0)
-		rot[side + "Foot"] = Vector3(lerpf(0.12, -0.2 - 0.3 * sin(p), run), 0, 0)
+		rot[side + "Foot"] = Vector3(lerpf(0.12, -0.15 - 0.35 * maxf(0.0, -sin(p)) + 0.2 * swing_fold, run), 0, 0)
 	hips_off.y = -absf(cos(ph)) * 0.045 * run
 	rot["Hips"] = Vector3(0, sin(ph) * 0.12 * run, 0)
 	rot["Chest"] += Vector3(0, -sin(ph) * 0.1 * run, 0)
@@ -682,9 +696,16 @@ func _pose(_delta: float) -> void:
 		var bob := absf(cos(ph)) * 0.03 * run
 		var hand := Vector3(0.2 * mx, 0.04 + bob, -0.16 - 0.05 * pump)
 		var cd := Vector3(-0.55 * mx, -0.45 + 0.05 * pump, -0.7).normalized()
+		var face_c := Vector3(0.0, 1.0, -0.3)
+		if shoulder_carry:
+			# Up by the shoulder: hand at the chest, the caman standing up
+			# past the shoulder and a little back, the bas curling back.
+			hand = Vector3(0.2 * mx, 0.24 + bob, -0.2 - 0.05 * pump)
+			cd = Vector3(0.22 * mx, 0.9, 0.34 + 0.05 * pump).normalized()
+			face_c = Vector3(0.0, 0.3, 1.0)
 		var d_c: Vector3 = yaw_b * cd
 		var grip_c: Vector3 = hips_g.origin + yaw_b * hand
-		var carry_t := Transform3D(_caman_basis(d_c, yaw_b * Vector3(0.0, 1.0, -0.3)), grip_c - d_c * GRIP_LOW)
+		var carry_t := Transform3D(_caman_basis(d_c, yaw_b * face_c), grip_c - d_c * GRIP_LOW)
 		ct = ct.interpolate_with(carry_t, carry)
 		carry_top = hips_g.origin + yaw_b * Vector3(-0.17 * mx, 0.24 - 0.08 * pump + bob, -0.16 + 0.22 * pump)
 	# Keep both grips within arm's reach: slide the caman towards the shoulders.
