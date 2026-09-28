@@ -4,7 +4,7 @@ extends Node3D
 ## flag. They watch the match's events (they never change the match):
 ##
 ## - ball over the goal line wide (a hit-out): the judge at that end raises
-##   the flag straight up;
+##   the flag straight up and holds it until the hit-out is taken;
 ## - a corner: the flag goes up, then the judge points it at the corner flag
 ##   on the side the ball went out;
 ## - a goal: the flag waves overhead, and that team's supporters in the crowd
@@ -14,7 +14,10 @@ extends Node3D
 
 enum Call { NONE, RAISE, CORNER, GOAL }
 
-const HOLD := {Call.RAISE: 2.6, Call.CORNER: 3.4, Call.GOAL: 4.0}
+## Seconds a signal is held at least, and at most. A wide or corner signal
+## stays up through the match's set-piece pause, until the ball is struck.
+const HOLD_MIN := {Call.RAISE: 1.2, Call.CORNER: 1.6, Call.GOAL: 4.0}
+const HOLD_MAX := 8.0
 const FLAG_COLOR := Color(0.96, 0.96, 0.94)
 
 var m: Node       # the match
@@ -62,13 +65,22 @@ func step(delta: float) -> void:
 	var ball: Vector3 = get_parent().w(m.ball_pos, m.ball_z)
 	for j in judges:
 		j["t"] += delta
-		if j["signal"] != Call.NONE and j["t"] > HOLD[j["signal"]]:
+		if j["signal"] != Call.NONE and _done(j):
 			j["signal"] = Call.NONE
 		var model: ShintyPlayerModel = j["f"]["model"]
 		model.set_locomotion(Vector3.ZERO)
 		model.look_at_point(ball)
 		model.advance(delta)
 		_pose_arms(j, model)
+
+
+func _done(j: Dictionary) -> bool:
+	var t: float = j["t"]
+	if t < HOLD_MIN[j["signal"]]:
+		return false
+	if j["signal"] == Call.GOAL or t > HOLD_MAX:
+		return true
+	return str(m.get("set_piece")) == ""   # the hit-out or corner has been taken
 
 
 ## The signal a judge is giving now (for tests and the TV graphics).
