@@ -461,15 +461,40 @@ func _update_players(dt: float) -> void:
 			p.swing_t -= dt
 			if p.swing_t < 0.0:
 				_contact(p)
-	var guarded: Player = carrier
+	_hold_off_restart()
+
+
+## The player standing over a restart (a hit-out, corner, shy or free hit
+## not yet taken), or null in open play.
+func restart_taker() -> Player:
+	var t := set_piece_taker_now()
+	if t != null:
+		return t
 	for p in players:
-		if p.shy_toss:
-			guarded = p   # opponents stand off while a shy is taken
-	if (protected_timer > 0.0 and carrier != null) or (guarded != null and (guarded.shy_toss or guarded.shy_ready)):
-		for o in squads[1 - guarded.team]:
-			var off: Vector2 = o.pos - guarded.pos
-			if off.length() < 5.0:
-				o.pos = guarded.pos + off.normalized() * 5.0 if off.length() > 0.01 else guarded.pos + Vector2(0, 5)
+		if p.shy_toss or (p.shy_ready and carrier == p):
+			return p
+	if protected_timer > 0.0 and carrier != null:
+		return carrier
+	return null
+
+
+## Until a restart is taken, no opponent may come within FREE_HIT_BACK yards
+## of the ball (or of a shy taker). Anyone who tries is stopped at the edge,
+## however long the taker stands over it.
+func _hold_off_restart() -> void:
+	var taker := restart_taker()
+	if taker == null:
+		return
+	for o in squads[1 - taker.team]:
+		for c in [ball_pos, taker.pos]:
+			var off: Vector2 = o.pos - c
+			if off.length() >= FREE_HIT_BACK:
+				continue
+			var out: Vector2 = off.normalized() if off.length() > 0.01 else Vector2(-attack_dir[taker.team], 0)
+			o.pos = c + out * FREE_HIT_BACK
+			var inward: float = o.vel.dot(-out)
+			if inward > 0.0:
+				o.vel += out * inward   # stopped at the edge, not bounced off it
 
 
 func _move(p: Player, dt: float) -> void:
@@ -501,7 +526,8 @@ func _steer_dir(p: Player, dir: Vector2, sprint: bool) -> void:
 func _ai_team(t: int, dt: float) -> void:
 	var have := carrier != null and carrier.team == t
 	var chasers := []
-	if state == State.PLAY and not have:
+	var standing := restart_taker()
+	if state == State.PLAY and not have and (standing == null or standing.team == t):
 		var pt := _ball_intercept_point()
 		var ranked := []
 		for p in squads[t]:
