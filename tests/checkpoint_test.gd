@@ -186,6 +186,13 @@ func _drive_menu_matches() -> bool:
 			print("Checkpoint: %s" % ("all passed" if failures == 0 else "%d failures" % failures))
 			quit(1 if failures else 0)
 			return true
+		if scene.get("ready_to_play") == true and scene.is_processing_unhandled_input():
+			# The loading screen waits for a key once the match is loaded.
+			var key := InputEventKey.new()
+			key.keycode = KEY_SPACE
+			key.pressed = true
+			scene.call("_unhandled_input", key)
+			return false
 		if _menu_frames == 5:
 			if scene.get("home_pick") == null:
 				_fail("main menu has no team picker")

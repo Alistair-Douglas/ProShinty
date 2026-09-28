@@ -98,7 +98,18 @@ crests come from shinty.com and belong to the clubs.
 
 ## Project layout
 
-- `scenes/main_menu.tscn`, `scripts/main_menu.gd`: team and match setup.
+- `scenes/main_menu.tscn`, `scripts/main_menu.gd`: the main menu. A live 3D
+  scene of the chosen ground sits behind a hub (Play match, Squads, Controls,
+  Quit), a team select with crests and ratings, a squad browser and a
+  controls page. Keyboard, controller and mouse all work.
+- `scenes/loading.tscn`, `scripts/loading_screen.gd`: loading screen shown
+  before each match, with one of five pictures, a shinty fact or tip, the
+  match-up and a progress bar.
+- `ui/`: the menu look. `style.gd` (colours, fonts, theme), `crest.gd` (club
+  logo from `data/logos/<club id>.png`, or a shield with the club's initials in
+  its colours), `team_card.gd`, `stepper.gd`, `menu_backdrop.gd`, the tartan
+  and overlay shaders, the loading pictures in `ui/loading/`, and the Barlow
+  Condensed fonts (SIL Open Font License, `ui/fonts/OFL.txt`).
 - `scenes/match.tscn`, `scripts/match.gd`: the match rules, ball physics and AI.
   The simulation runs on a flat pitch in yards; nothing in it depends on 3D.
 - `scripts/referee.gd`: the referee. It reads the match's events and
@@ -114,7 +125,22 @@ crests come from shinty.com and belong to the clubs.
   scenery, sky and lighting; each ground's layout is in `pitch/venues/`. See
   `docs/pitch.md`. The match uses it in yards (`units_per_yard = 1`) with its
   own placeholder goals turned off, at the ground picked in the menu.
-- `scripts/hud.gd`: scoreboard, power bar and messages on top of the 3D view.
+- `scripts/hud.gd`: controlled-player info, power bar and messages on top of
+  the 3D view.
+- `broadcast/`: the TV coverage. `tv_director.gd` runs the gantry camera
+  (`tv_camera.gd`) and, after a goal, a replay from two angles with slow
+  motion at the finish (`replay.gd` records what the view draws; the match is
+  held while it plays, and Space, E or Enter skips it). `tv_graphics.gd` draws
+  the score bug and clock, LIVE/REPLAY mark, GOAL banner, half-time and
+  full-time straps and the replay swipe.
+- Sponsors: `data/sponsors.json` lists them (all made up, none is a real
+  company), with artwork in `broadcast/sponsors/` drawn by
+  `tests/render_sponsors.gd`. `ShintyAdBoard` (`broadcast/ad_board.tscn`) is a
+  pitchside board, LED or printed; `ShintyAdBoard.place_row()` lines them up
+  and the match view puts them along the far touchline and behind each goal.
+  `ShintyKitSponsor.apply(model, texture)` prints a sponsor on a player's
+  shirt; each club gets one from its `"sponsor"` id in `teams.json`, or a
+  steady pick from the list.
 - `scripts/game.gd`: autoload with menu choices and control bindings.
 - `scripts/team_data.gd`: loads squads and calculates overall ratings.
 - `tests/sim_test.gd`: plays six computer-vs-computer matches headless.
@@ -125,7 +151,16 @@ crests come from shinty.com and belong to the clubs.
   numbers, for tuning the team AI.
 - `tests/play_test.gd`: drives the real game with simulated key presses and
   saves screenshots (needs a display).
-- `tests/menu_test.gd`: clicks through the menu dropdowns and Play button.
+- `tests/menu_test.gd`: drives every menu screen, the loading screen and
+  into a match, saving screenshots (needs a display).
+- `tests/tv_test.gd`: plays a match, scores, and checks the GOAL graphic and
+  the replay (needs a display). `tests/sponsor_test.gd` checks shirt prints
+  and boards.
+- `tests/loading_test.gd`: shows each loading picture and saves a screenshot.
+- `tests/render_loading_art.gd`: re-renders the loading pictures in
+  `ui/loading/` from the game's own pitch and player models, so they can be
+  remade when the models improve. Run:
+  `xvfb-run -s "-screen 0 1920x1080x24" godot --path . --resolution 1920x1080 -s tests/render_loading_art.gd`
 - `tests/checkpoint_test.gd`: whole-game check. Plays matches between random
   clubs, then a full match through the menu at each ground with a bot at the
   controls, and fails if the ball or players leave the pitch, play gets stuck,

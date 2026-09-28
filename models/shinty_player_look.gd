@@ -70,6 +70,10 @@ static func _bake(skeleton: Skeleton3D, cam: Node3D) -> void:
 			if not surfaces.has(key):
 				surfaces[key] = _Part.new()
 			var xf: Transform3D = base * c.transform
+			# Remember the size of what hung here (in the holder's space) for
+			# code that fits things to the body, like ShintyKitSponsor.
+			var local: AABB = c.transform * c.mesh.get_aabb()
+			holder.set_meta("mesh_aabb", holder.get_meta("mesh_aabb").merge(local) if holder.has_meta("mesh_aabb") else local)
 			surfaces[key].add(c.mesh, xf, bone, mat)
 			var size: Vector3 = c.mesh.get_aabb().size
 			if maxf(size.x, maxf(size.y, size.z)) > 0.03:  # eyes, studs and laces cast nothing you'd see

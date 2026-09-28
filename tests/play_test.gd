@@ -5,6 +5,7 @@ extends SceneTree
 var frame := 0
 var out_dir := "user://"
 var match_node: Node = null
+var _pressed := false
 
 
 func _initialize() -> void:
@@ -21,6 +22,15 @@ func _shot(name: String) -> void:
 
 
 func _process(_delta: float) -> bool:
+	# Wait on the loading screen, then press a key to start the match.
+	if frame >= 20 and current_scene and current_scene.name == "Loading":
+		if current_scene.ready_to_play and not _pressed:
+			_pressed = true
+			var e := InputEventKey.new()
+			e.keycode = KEY_SPACE
+			e.pressed = true
+			root.push_input(e)
+		return false
 	frame += 1
 	if frame == 20:
 		assert(root.has_node("Game"), "Game autoload missing")

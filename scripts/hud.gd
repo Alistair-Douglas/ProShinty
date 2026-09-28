@@ -1,18 +1,25 @@
 extends Control
-## Scoreboard, controlled-player info, power bar and messages over the 3D match.
+## Controlled-player info, power bar and messages over the 3D match. The score
+## bug, clock, cards and goal graphics are TV graphics (broadcast/tv_graphics.gd).
 
 const TeamData := preload("res://scripts/team_data.gd")
 
 var match_node: Node
 var view: Node
 var font: Font
-var crests: Array = []
+var tv: ShintyTVGraphics
 
 
 func _ready() -> void:
 	font = ThemeDB.fallback_font
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	process_mode = Node.PROCESS_MODE_ALWAYS  # keeps drawing while a replay holds the match
+	tv = ShintyTVGraphics.new()
+	tv.match_node = match_node
+	add_child(tv)
+	if view != null and view.get("director") != null:
+		view.director.graphics = tv
 
 
 func _process(_delta: float) -> void:
@@ -22,32 +29,15 @@ func _process(_delta: float) -> void:
 func _draw() -> void:
 	var m := match_node
 	var teams: Array = m.teams
-	var colors: Array = m.colors
-	if crests.is_empty():
-		crests = [TeamData.logo(teams[0]), TeamData.logo(teams[1])]
 	var screen := get_viewport_rect().size
 	var w := screen.x
-	var bar := Rect2(Vector2(w / 2.0 - 260, 12), Vector2(520, 44))
-	draw_rect(bar, Color(0, 0, 0, 0.6))
-	draw_rect(Rect2(bar.position, Vector2(10, 44)), colors[0][0])
-	draw_rect(Rect2(bar.end - Vector2(10, 44), Vector2(10, 44)), colors[1][0])
-	# Crests sit just outside each end of the scoreboard.
-	for side in 2:
-		if crests[side] != null:
-			var x := bar.position.x - 52 if side == 0 else bar.end.x + 4
-			draw_texture_rect(crests[side], Rect2(Vector2(x, bar.position.y - 2), Vector2(48, 48)), false)
-	var line := "%s  %d - %d  %s" % [teams[0]["name"].to_upper(), m.score[0], m.score[1], teams[1]["name"].to_upper()]
-	if font.get_string_size(line, HORIZONTAL_ALIGNMENT_LEFT, -1, 22).x > 430:
-		# Long club names (Camanachd Dhun Eideann) don't fit: use the short ones.
-		line = "%s  %d - %d  %s" % [teams[0].get("short", teams[0]["name"]), m.score[0], m.score[1], teams[1].get("short", teams[1]["name"])]
-	draw_string(font, bar.position + Vector2(0, 30), line, HORIZONTAL_ALIGNMENT_CENTER, 440, 22, Color.WHITE)
-	draw_string(font, bar.position + Vector2(440, 30), "%d'" % m.match_minute(), HORIZONTAL_ALIGNMENT_CENTER, 70, 20, Color(1, 0.9, 0.4))
-	_draw_cards(bar)
+	if tv.replay_active:
+		return  # a replay shows only the TV graphics
 	var human = m.human
 	if human != null:
 		var d: Dictionary = human.data
 		var info := "You: #%d %s  (%s, OVR %d)" % [human.number, d.get("name", ""), human.position_code, int(d.get("overall", 0))]
-		_panel_text(Vector2(20, 70), info, 15)
+		_panel_text(Vector2(28, screen.y - 44), info, 15)
 		draw_rect(Rect2(Vector2(w - 190, 76), Vector2(150, 8)), Color(0, 0, 0, 0.5))
 		draw_rect(Rect2(Vector2(w - 190, 76), Vector2(150 * human.stamina, 8)), Color(0.3, 0.85, 0.4))
 		draw_string(font, Vector2(w - 250, 85), "Stamina", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color.WHITE)
@@ -70,7 +60,7 @@ func _draw() -> void:
 	elif m.state == m.State.FULL_TIME:
 		centre_text = "Full time: %s %d - %d %s" % [teams[0]["name"], m.score[0], m.score[1], teams[1]["name"]]
 		sub = "Press Space or Enter for the menu"
-	elif m.message_timer > 0.0:
+	elif m.message_timer > 0.0 and not m.message.begins_with("GOAL"):  # the TV graphics show goals
 		var lines: PackedStringArray = m.message.split("\n", true, 1)
 		centre_text = lines[0]
 		if lines.size() > 1:
@@ -84,19 +74,6 @@ func _draw() -> void:
 		draw_string(font, box.position + Vector2(0, 38), centre_text, HORIZONTAL_ALIGNMENT_CENTER, box.size.x, size, Color.WHITE)
 		if sub != "":
 			draw_string(font, box.position + Vector2(0, 66), sub, HORIZONTAL_ALIGNMENT_CENTER, box.size.x, 15, Color(1, 1, 1, 0.8))
-
-
-## Yellow and red cards under each team's end of the scoreboard.
-func _draw_cards(bar: Rect2) -> void:
-	var ref = match_node.referee
-	for t in 2:
-		var n := 0
-		for colour in ["yellow", "red"]:
-			var c := Color(1.0, 0.85, 0.1) if colour == "yellow" else Color(0.9, 0.1, 0.1)
-			for i in ref.team_cards(t, colour):
-				var x: float = bar.position.x + 14.0 + n * 12.0 if t == 0 else bar.end.x - 24.0 - n * 12.0
-				draw_rect(Rect2(Vector2(x, bar.end.y + 4.0), Vector2(9, 13)), c)
-				n += 1
 
 
 func _panel_text(pos: Vector2, text: String, font_size: int) -> void:

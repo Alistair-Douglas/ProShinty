@@ -1,6 +1,7 @@
 extends Node3D
 ## Draws the match in 3D: the chosen ground and its scenery (pitch/shinty_pitch.tscn),
-## hails, players with camans, the ball and a broadcast-style camera. It only
+## hails, players with camans and shirt sponsors, pitchside ad boards, the ball
+## and the TV coverage (camera and replays, see broadcast/tv_director.gd). It only
 ## reads the match state, never changes it. One world unit is one yard; the
 ## centre spot is the origin.
 
@@ -18,6 +19,7 @@ var cam_zoom := 1.0
 var shy_blend := 0.0      # 0 = broadcast camera, 1 = shy camera
 var shy_look := Vector3.ZERO
 var shy_eye := Vector3.ZERO
+var director: ShintyTVDirector
 
 const SKIN := Color(0.93, 0.76, 0.62)
 const WOOD := Color(0.55, 0.36, 0.18)
@@ -51,6 +53,13 @@ func _ready() -> void:
 	camera.far = 6000.0  # the far shore of the Forth
 	camera.current = true
 	add_child(camera)
+	_build_boards()
+	director = ShintyTVDirector.new()
+	director.name = "TVDirector"
+	add_child(director)
+	var tracked: Array = figures.values()
+	tracked.append(referee_figure)
+	director.setup(self, tracked, ball)
 	cam_x = m.ball_pos.x - m.PITCH.x / 2.0
 	_update_camera(1.0)
 
@@ -62,6 +71,9 @@ func w(v: Vector2, height: float = 0.0) -> Vector3:
 # ---------------------------------------------------------------- per frame
 
 func _process(delta: float) -> void:
+	if director.playing:
+		director.step(delta)
+		return
 	for p in figures:
 		if p in m.players:
 			_update_player(p, figures[p], delta)
@@ -70,6 +82,7 @@ func _process(delta: float) -> void:
 	_update_referee(delta)
 	ball.position = w(m.ball_pos, m.ball_z + ShintyBallPhysics.RADIUS * ShintyMatchAdapter.TO_YARDS)
 	_update_camera(delta)
+	director.after_frame(delta)
 
 
 func _update_player(p, f: Dictionary, delta: float) -> void:
@@ -114,11 +127,10 @@ func _update_referee(delta: float) -> void:
 
 
 func _update_camera(delta: float) -> void:
-	var target_x: float = clamp(m.ball_pos.x - m.PITCH.x / 2.0, -58.0, 58.0)
-	cam_x = lerp(cam_x, target_x, min(1.0, delta * 2.5))
-	var depth: float = m.ball_pos.y - m.PITCH.y / 2.0
-	var look := Vector3(cam_x, 0.0, clamp(depth * 0.55, -14.0, 14.0))
-	var eye := look + Vector3(0, 21.0 * cam_zoom, 30.0 * cam_zoom)
+	# The TV gantry camera: pans and zooms from high in the stand.
+	var tv: Array = director.live_camera(delta)
+	var eye: Vector3 = tv[0]
+	var look: Vector3 = tv[1]
 	# Shy: play stops and the camera comes down behind the taker's shoulder,
 	# looking where they'll send it. It eases back once the ball is struck.
 	var taker = m.shy_taker()
@@ -134,6 +146,7 @@ func _update_camera(delta: float) -> void:
 	var k := shy_blend * shy_blend * (3.0 - 2.0 * shy_blend)
 	camera.position = eye.lerp(shy_eye, k)
 	camera.look_at(look.lerp(shy_look, k), Vector3.UP)
+	camera.fov = lerpf(tv[2], 45.0, k)
 
 
 ## Screen position of a pitch point, for the HUD.
@@ -160,6 +173,8 @@ func _build_hails() -> void:
 func _build_player(p) -> Dictionary:
 	var f := ShintyMatchAdapter.build_player(self, p.data, ShintyMatchAdapter.team_from_colors(m.colors[p.team][0], m.colors[p.team][1]))
 	var root: Node3D = f["root"]
+	var team: Dictionary = m.teams[p.team]
+	ShintyKitSponsor.apply(f["model"], ShintySponsors.shirt_texture(ShintySponsors.for_team(team)))
 	var ring := _mesh(_torus(0.75, 0.95), _mat(Color(1, 0.92, 0.2), true))
 	ring.position = Vector3(0, 0.04, 0)
 	root.add_child(ring)
@@ -179,6 +194,22 @@ func _build_player(p) -> Dictionary:
 	root.position = w(p.pos)
 	f.merge({"ring": ring, "arrow": arrow, "tag": tag, "phase": 0.0, "anim_seq": 0})
 	return f
+
+
+## Pitchside advertising boards: along the far touchline, where the TV camera
+## sees them, and behind each goal. A ground can place its own instead with
+## ShintyAdBoard.place_row().
+func _build_boards() -> void:
+	var holder := Node3D.new()
+	holder.name = "AdBoards"
+	add_child(holder)
+	var hl: float = m.PITCH.x / 2.0
+	var hw: float = m.PITCH.y / 2.0
+	var s := 1.0 / ShintyMatchAdapter.YARD  # yards per metre
+	ShintyAdBoard.place_row(holder, Vector3(-hl, 0, -hw - 4.0), Vector3(hl, 0, -hw - 4.0), Vector3.ZERO, s, 6.0, true, 0)
+	for end in [-1.0, 1.0]:
+		ShintyAdBoard.place_row(holder, Vector3(end * (hl + 5.0), 0, -hw * 0.8), Vector3(end * (hl + 5.0), 0, hw * 0.8),
+			Vector3.ZERO, s, 6.0, true, 3 if end < 0 else 5)
 
 
 ## The referee: an all-black kit, no helmet and no caman.
