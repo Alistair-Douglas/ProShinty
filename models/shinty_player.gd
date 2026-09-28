@@ -24,6 +24,9 @@ const GRIP_TOP := 0.05     ## distance of the top hand from the butt of the cama
 const GRIP_LOW := 0.24     ## distance of the lower hand from the butt
 const HAND_GRIP := 0.065   ## wrist to the middle of the grip
 const HEAD_LOCAL := Vector3(0.0, -CAMAN_LENGTH + 0.015, -0.055)  ## caman head centre in caman space
+## Ready stance, hips space: butt of the caman and its direction to the head.
+const READY_P := Vector3(0.12, 0.0, -0.3)
+const READY_D := Vector3(0.14, -0.55, -0.82)
 
 ## Keeper shirts, picked to stand out from the team's own colours.
 const KEEPER_CHOICES := [Color("f2c400"), Color("2e9e4f"), Color("f07c1a"), Color("26262b"), Color("8e44ad")]
@@ -109,6 +112,10 @@ var _reach := 0.0                 # smoothed 0..1
 var _free_hand = null             # skeleton-space target for a hand off the caman
 var _free_low = null              # the same for the lower hand (one-handed reach)
 var _one_hand := false
+var _carry := 0.0                 # smoothed 0..1: caman carried one-handed on the run
+var _carry_from := 0.0            # _carry when the current action started
+var _carry_fade := 0.15           # seconds the stick takes to come off the shoulder
+var _action_age := 0.0            # seconds since the current action started
 
 
 # --- Public API -------------------------------------------------------------
@@ -234,6 +241,9 @@ func play_action(action: StringName, power: float = 1.0, contact_height: float =
 		_action_len *= lerpf(0.75, 1.0, _action_power)
 	_struck = false
 	_charging = false
+	_carry_from = _carry
+	_action_age = 0.0
+	_carry_fade = _swing_times()[0] if _is_hit_action(action) else 0.15
 
 
 ## Seconds from play_action() to the strike signal, so match logic can launch
@@ -259,6 +269,7 @@ func play_hit_now(action: StringName = &"swing", power: float = 1.0, contact_hei
 	play_action(action, power, contact_height)
 	if _is_hit_action(_action):
 		_action_t = _swing_times()[0]
+		_carry_fade = (_contact_time() - _action_t) * 0.8
 
 
 ## Hold the caman back while the hit button is held. Call release_swing() to hit.
@@ -272,6 +283,7 @@ func release_swing(power: float) -> void:
 	play_action(&"swing", power)
 	# Skip the part of the backswing already done while charging.
 	_action_t = _swing_times()[0] * from_charge
+	_carry_fade = (_contact_time() - _action_t) * 0.8
 	_charge = 0.0
 
 
@@ -363,12 +375,19 @@ func advance(delta: float) -> void:
 		rotation.y = lerp_angle(rotation.y, target_yaw, clampf(delta * 10.0, 0.0, 1.0))
 	var stride := lerpf(1.3, 3.4, clampf(_speed / 8.0, 0.0, 1.0)) * height_cm / 180.0
 	_phase = fmod(_phase + delta * _speed / stride * TAU, TAU)
+	# Running off the ball, the caman goes up on the shoulder in one hand.
+	# Standing, reaching for the ball or doing anything with it, both hands.
+	var carry_goal := 0.0
+	if _action == &"" and not _charging and _charge <= 0.0:
+		carry_goal = _ease((_speed - 1.2) / 1.6) * (1.0 - clampf(_reach * 5.0, 0.0, 1.0))
+	_carry = move_toward(_carry, carry_goal, delta * (2.5 if carry_goal > _carry else 6.0))
 	if _charging:
 		_charge = minf(1.0, _charge + delta / 0.35)
 	elif _action == &"":
 		_charge = maxf(0.0, _charge - delta * 4.0)
 	if _action != &"":
 		_action_t += delta
+		_action_age += delta
 		if not _struck and _is_hit_action(_action) and _action_t >= _contact_time():
 			_struck = true
 			_pose(0.0)
@@ -498,10 +517,11 @@ func _pose(_delta: float) -> void:
 	# Ready stance / idle breathing
 	var idle := 1.0 - run
 	var breathe := sin(_time * 1.8) * 0.015
-	rot["Spine"] = Vector3(-0.22 * idle - 0.12 * run - 0.16 * sprint, 0, 0)
+	# Shinty stance is upright, not an ice hockey crouch: a slight bend, head up.
+	rot["Spine"] = Vector3(-0.08 * idle - 0.07 * run - 0.1 * sprint, 0, 0)
 	rot["Chest"] = Vector3(breathe, 0, 0)
-	rot["UpperChest"] = Vector3(-0.08 * idle, 0, 0)
-	rot["Neck"] = Vector3(0.2 * idle + 0.2 * run + 0.15 * sprint, 0, 0)
+	rot["UpperChest"] = Vector3(-0.03 * idle, 0, 0)
+	rot["Neck"] = Vector3(0.08 * idle + 0.1 * run + 0.1 * sprint, 0, 0)
 	rot["Head"] = Vector3(0.04, 0, 0)
 
 	# Legs: run cycle blended with a slightly crouched stance
@@ -512,11 +532,11 @@ func _pose(_delta: float) -> void:
 		var sgn := -1.0 if side == "Left" else 1.0
 		var thigh_run := sin(p) * amp - 0.05
 		var knee_run := -(0.2 + knee_amp * maxf(0.0, cos(p)) * 0.85)
-		var thigh_idle := 0.22
-		var knee_idle := -0.42
+		var thigh_idle := 0.12
+		var knee_idle := -0.24
 		rot[side + "UpperLeg"] = Vector3(lerpf(thigh_idle, thigh_run, run), 0, sgn * 0.05 * idle)
 		rot[side + "LowerLeg"] = Vector3(lerpf(knee_idle, knee_run, run), 0, 0)
-		rot[side + "Foot"] = Vector3(lerpf(0.2, -0.2 - 0.3 * sin(p), run), 0, 0)
+		rot[side + "Foot"] = Vector3(lerpf(0.12, -0.2 - 0.3 * sin(p), run), 0, 0)
 	hips_off.y = -absf(cos(ph)) * 0.045 * run
 	rot["Hips"] = Vector3(0, sin(ph) * 0.12 * run, 0)
 	rot["Chest"] += Vector3(0, -sin(ph) * 0.1 * run, 0)
@@ -529,8 +549,10 @@ func _pose(_delta: float) -> void:
 	_free_hand = null
 
 	# Caman carry pose (in hips-relative skeleton space, right-handed)
-	var cam_p := _lerp3(Vector3(0.13, -0.08, -0.28), Vector3(0.2, -0.02, -0.22), run)
-	var cam_d := _lerp3(Vector3(0.25, -0.85, -0.45), Vector3(0.25, -0.62, -0.72), run).normalized()
+	# Two hands at the waist, the head held up off the grass out in front at
+	# about knee height (a hockey player would have it flat on the ice).
+	var cam_p := _lerp3(READY_P, Vector3(0.18, 0.05, -0.26), run)
+	var cam_d := _lerp3(READY_D, Vector3(0.2, -0.45, -0.87), run).normalized()
 	cam_p.y += sin(ph * 2.0) * 0.025 * run
 	var twist := 0.0
 
@@ -635,10 +657,30 @@ func _pose(_delta: float) -> void:
 				var dn := rd.normalized()
 				var rt := Transform3D(_caman_basis(dn, yaw_b * face_dir), tgt - dn * head_len)
 				ct = ct.interpolate_with(rt, _reach)
+	# Running off the ball the caman is carried in the lower hand, up by that
+	# shoulder with the shaft sloping up and back so the head rides behind it,
+	# and the top hand is free to pump like a runner's. When a swing starts the
+	# stick comes off the shoulder and the top hand joins it by the top of the
+	# backswing, so the hit itself is always two-handed.
+	var carry := _carry
+	if _action != &"":
+		carry = _carry_from * (1.0 - _ease(_action_age / maxf(0.01, _carry_fade)))
+	var carry_top = null
+	if carry > 0.001:
+		var mx := -1.0 if left_handed else 1.0
+		var pump := sin(ph) * run   # > 0: front (left) leg forward
+		var bob := absf(cos(ph)) * 0.03 * run
+		var hand := Vector3(0.21 * mx, 0.15 + bob, -0.2 - 0.06 * pump)
+		var cd := Vector3(0.3 * mx, 0.72, 0.62 + 0.06 * pump).normalized()
+		var d_c: Vector3 = yaw_b * cd
+		var grip_c: Vector3 = hips_g.origin + yaw_b * hand
+		var carry_t := Transform3D(_caman_basis(d_c, yaw_b * Vector3(0.3 * mx, 0.0, 1.0)), grip_c - d_c * GRIP_LOW)
+		ct = ct.interpolate_with(carry_t, carry)
+		carry_top = hips_g.origin + yaw_b * Vector3(-0.17 * mx, 0.24 - 0.08 * pump + bob, -0.16 + 0.22 * pump)
 	# Keep both grips within arm's reach: slide the caman towards the shoulders.
 	for iter in 3:
 		var grips := [[top_side, GRIP_TOP], [low_side, GRIP_LOW]]
-		if _free_hand != null:
+		if _free_hand != null or carry > 0.5:
 			grips = [[low_side, GRIP_LOW]]
 		elif _free_low != null:
 			grips = [[top_side, GRIP_TOP]]
@@ -667,8 +709,11 @@ func _pose(_delta: float) -> void:
 		if left_handed:
 			fh.x = -fh.x
 		free_target = hips_g.origin + yaw_b * fh
-	_solve_arm(top_side, free_target if free_target != null else top)
-	_solve_arm(low_side, _free_low if _free_low != null else low)
+	if free_target == null and carry_top != null:
+		free_target = top.lerp(carry_top, carry)
+	# A runner's free arm swings with the elbow tucked down and back.
+	_solve_arm(top_side, free_target if free_target != null else top, carry if carry_top != null else 0.0)
+	_solve_arm(low_side, _free_low if _free_low != null else low, carry if carry_top != null else 0.0)
 
 
 ## Returns [caman position, caman direction, twist, hips offset] for the
@@ -676,8 +721,8 @@ func _pose(_delta: float) -> void:
 func _action_pose(rot: Dictionary) -> Array:
 	var t := _action_t
 	var hips_off := Vector3.ZERO
-	var ready_p := Vector3(0.13, -0.08, -0.28)
-	var ready_d := Vector3(0.25, -0.85, -0.45).normalized()
+	var ready_p := READY_P
+	var ready_d := READY_D.normalized()
 	match _action:
 		&"swing", &"pass", &"volley":
 			var times := _swing_times()
@@ -692,33 +737,49 @@ func _action_pose(rot: Dictionary) -> Array:
 			var p: Vector3
 			var d: Vector3
 			var twist: float
+			# Like a golf swing: the shoulders turn well back, the hips
+			# half as far, and the weight goes onto the back foot; the
+			# hands lead the head down (wrists cocked, then released into
+			# the ball) as the weight comes onto the front foot; the finish
+			# is high over the front shoulder with the chest to the target.
+			var top_twist := -0.9 * size
+			var fin_twist := 0.85 * size
+			var shift := 0.0     # hips: + over the back foot, - the front
 			if t < t0:
 				var k := _ease(t / t0)
 				p = ready_p.lerp(back[0], k)
 				d = ready_d.slerp(back[1], k)
-				twist = -0.55 * size * k
+				twist = top_twist * k
+				shift = k
 				_crouch(rot, 0.75 * k)
 			elif t < t1:
 				var k := (t - t0) / (t1 - t0)
 				k = k * k  # accelerate into the ball
-				p = back[0].lerp(contact[0], k)
-				d = back[1].slerp(contact[1], k)
-				twist = lerpf(-0.55 * size, 0.1, k)
+				p = back[0].lerp(contact[0], minf(1.0, k * 1.25))
+				d = back[1].slerp(contact[1], pow(k, 1.5))  # the head lags the hands
+				twist = lerpf(top_twist, 0.1, k)
+				shift = 1.0 - 1.6 * k
 				_crouch(rot, 0.75)
+				rot["Spine"] += Vector3(-0.3 * k, 0, 0)  # down to the ball
 				_step(rot, k)
 			elif t < t2:
 				var k := _ease_out((t - t1) / (t2 - t1))
 				p = contact[0].lerp(follow[0], k)
 				d = contact[1].slerp(follow[1], k)
-				twist = lerpf(0.1, 0.5 * size, k)
+				twist = lerpf(0.1, fin_twist, k)
+				shift = -0.6 - 0.4 * k
 				_crouch(rot, 0.75 * (1.0 - k * 0.5))
+				rot["Spine"] += Vector3(-0.3 * (1.0 - k), 0, 0)
 				_step(rot, 1.0)
 			else:
 				var k := _ease((t - t2) / maxf(0.01, _action_len - t2))
 				p = follow[0].lerp(ready_p, k)
 				d = follow[1].slerp(ready_d, k)
-				twist = lerpf(0.5 * size, 0.0, k)
+				twist = lerpf(fin_twist, 0.0, k)
+				shift = -(1.0 - k)
 				_step(rot, 1.0 - k)
+			rot["Hips"] += Vector3(0, twist * 0.3, 0)
+			hips_off += Vector3(0.03, 0.0, 0.05) * shift * size
 			if h > 0.3:
 				hips_off.y += 0.0
 			return [p, d, twist, hips_off]
@@ -865,22 +926,24 @@ func _action_pose(rot: Dictionary) -> Array:
 
 
 func _backswing(size: float) -> Array:
-	var p := Vector3(0.14, -0.08, -0.26).lerp(Vector3(0.3, 0.36, 0.02), size)
-	var d := Vector3(0.25, -0.85, -0.45).normalized().slerp(Vector3(0.4, 0.55, 0.73).normalized(), size)
+	# Top: hands up by the back shoulder, wrists cocked, the caman pointing up
+	# and back behind the head.
+	var p := Vector3(0.14, -0.08, -0.26).lerp(Vector3(0.3, 0.5, 0.02), size)
+	var d := Vector3(0.25, -0.85, -0.45).normalized().slerp(Vector3(0.12, 0.72, 0.68).normalized(), size)
 	return [p, d]
 
 
 func _contact(h: float) -> Array:
 	var k := clampf(h / 1.4, 0.0, 1.0)
-	var p := Vector3(0.1, -0.2, -0.22).lerp(Vector3(0.12, 0.3, -0.3), k)
+	var p := Vector3(0.1, -0.25, -0.22).lerp(Vector3(0.12, 0.3, -0.3), k)
 	var d := Vector3(0.18, -0.93, -0.32).normalized().slerp(Vector3(0.75, -0.05, -0.66).normalized(), k)
 	return [p, d]
 
 
 func _follow(size: float, h: float) -> Array:
 	var k := clampf(h / 1.4, 0.0, 1.0)
-	var p := Vector3(-0.05, -0.05, -0.3).lerp(Vector3(-0.22, 0.28, -0.25), size)
-	var d := Vector3(-0.2, -0.75, -0.63).normalized().slerp(Vector3(-0.5, 0.6, -0.62).normalized(), size)
+	var p := Vector3(-0.05, -0.05, -0.3).lerp(Vector3(-0.2, 0.45, -0.2), size)
+	var d := Vector3(-0.2, -0.75, -0.63).normalized().slerp(Vector3(-0.45, 0.85, -0.05).normalized(), size)
 	p = p.lerp(Vector3(-0.25, 0.3, -0.2), k * 0.5)
 	return [p, d]
 
@@ -949,7 +1012,8 @@ func _arm_reach(side: String) -> float:
 
 
 ## Two-bone IK in skeleton space: bend the arm so the hand reaches `target`.
-func _solve_arm(side: String, target: Vector3) -> void:
+## `tuck` 0..1 brings the elbow in to the side (a runner's arm) instead of out.
+func _solve_arm(side: String, target: Vector3, tuck: float = 0.0) -> void:
 	var ua: int = _bone[side + "UpperArm"]
 	var la: int = _bone[side + "LowerArm"]
 	var hd: int = _bone[side + "Hand"]
@@ -962,7 +1026,7 @@ func _solve_arm(side: String, target: Vector3) -> void:
 	var dir := to_t.normalized()
 	var sgn := -1.0 if side == "Left" else 1.0
 	# Elbows point down and out, a little backwards.
-	var pole := parent_g.basis * Vector3(sgn * 0.8, -1.0, 0.35)
+	var pole := parent_g.basis * Vector3(sgn * lerpf(0.8, 0.2, tuck), -1.0, lerpf(0.35, 0.8, tuck))
 	var perp := pole - dir * pole.dot(dir)
 	if perp.length() < 0.001:
 		perp = parent_g.basis * Vector3(0, 0, 1)
