@@ -27,6 +27,8 @@ const PENALTY_SPOT := 20.0   # penalty hit, yards from the goal line
 const FREE_HIT_BACK := 5.0   # opponents stand this far off a set piece
 const OVERSWING_MAX := 1.35  # hit meter past full power
 const CARRY_CATCH_UP := 6.0  # yd/s: how fast a gathered ball settles onto the stick
+const DRIBBLE_ROLL_DECEL := 4.0  # yd/s^2: a tapped ball slowing on the grass
+const DRIBBLE_LOSE := 3.2    # yards: a touch this far from the carrier has got away
 const SHY_TOSS := 6.5        # yd/s: how hard a shy is thrown up
 const SHY_ARM := 0.8         # the shy is tossed an arm's length in front
 const SHY_ATTEMPTS := 3      # tries at a clean strike before the shy goes over
@@ -133,6 +135,8 @@ var team_ai: TeamAI
 var set_piece := ""                # "Hit-out" or "Corner" while one is being taken
 var set_piece_taker: Player = null
 var set_piece_t := 0.0             # seconds since it was awarded
+var dribble_vel := Vector2.ZERO    # a dribbled ball rolling ahead of its carrier
+var dribble_taps := 0
 
 
 
@@ -1020,6 +1024,10 @@ func anim(p: Player, name: String, power: float = 1.0, from_charge: float = 0.0)
 
 
 func _update_ball(dt: float) -> void:
+	if carrier != null and is_dribbling(carrier):
+		_dribble(dt)
+		return
+	dribble_vel = Vector2.ZERO
 	if carrier != null:
 		# The ball rides on the carrier's caman. When a player has just
 		# gathered it, it runs onto the stick rather than jumping there.
@@ -1042,6 +1050,61 @@ func _update_ball(dt: float) -> void:
 		return
 	if state == State.PLAY:
 		_ball_touches(before)
+
+
+## Running with the ball, the carrier plays it like a footballer: a gentle
+## tap along the ground a yard or two ahead, run onto it, tap it again. The
+## caman only drags the ball (it rides on the stick) when standing, lining up
+## a hit or at a restart.
+func is_dribbling(p: Player) -> bool:
+	return p == carrier and state == State.PLAY and protected_timer <= 0.0 and p.swing_t < 0.0 \
+		and not p.shy_ready and set_piece_taker_now() == null and p.stagger <= 0.0 \
+		and (p.vel.length() > 1.5 or dribble_vel.length() > 0.5)
+
+
+func _dribble(dt: float) -> void:
+	var c := carrier
+	var spd := dribble_vel.length()
+	if spd > 0.0:
+		dribble_vel = dribble_vel / spd * max(0.0, spd - DRIBBLE_ROLL_DECEL * dt)
+	ball_pos += dribble_vel * dt
+	ball_vel = dribble_vel
+	ball_z = 0.0
+	ball_vz = 0.0
+	var want: Vector2 = c.desired if c.desired.length() > 0.5 else c.facing
+	var dir := want.normalized()
+	var run: float = max(c.vel.dot(dir), 0.0)
+	var head := Vector2(c.stick.x, c.stick.y)
+	if head.distance_to(ball_pos) < Body.CONTACT_R + 0.12 and dribble_vel.dot(dir) < run + 0.5:
+		# The tap: just firm enough to roll ahead of the player; better ball
+		# players keep it closer.
+		var soft: float = lerp(1.45, 1.2, c.r("control") / 100.0)
+		dribble_vel = dir * max(run * soft + 1.0, 2.5)
+		dribble_taps += 1
+		return
+	var loose: bool = head.distance_to(ball_pos) > 0.8
+	if loose:
+		# Between touches the ball is there to be nicked by an opponent's caman.
+		for o in squads[1 - c.team]:
+			if o.touch_block > 0.0 or o.stagger > 0.0:
+				continue
+			if Vector2(o.stick.x, o.stick.y).distance_to(ball_pos) >= Body.CONTACT_R:
+				continue
+			if randf() > 0.25 + (o.r("tackling") - c.r("control")) / 250.0:
+				o.touch_block = 0.5   # got a touch on it but the carrier kept it
+				continue
+			carrier = null
+			c.touch_block = 0.3
+			events.append({"type": "touch", "by": o, "at": ball_pos, "hands": false})
+			events.append({"type": "nicked", "team": o.team})
+			_take_control(o)
+			anim(o, "trap")
+			return
+	if ball_pos.distance_to(c.pos) > DRIBBLE_LOSE:
+		# Overran it or turned away: it's a loose ball now.
+		carrier = null
+		c.touch_block = 0.15
+		events.append({"type": "lost_touch", "team": c.team})
 
 
 ## Who gets to the ball this step. Outfield players touch it only with the
