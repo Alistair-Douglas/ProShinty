@@ -193,20 +193,16 @@ func _build_player(p) -> Dictionary:
 	return f
 
 
-## Pitchside advertising boards: along the far touchline, where the TV camera
-## sees them, and behind each goal. A ground can place its own instead with
-## ShintyAdBoard.place_row().
+## Pitchside advertising boards where the ground puts them (usually along the
+## far touchline, where the TV camera sees them, and behind each goal; see
+## ShintyPitch.board_rows()).
 func _build_boards() -> void:
 	var holder := Node3D.new()
 	holder.name = "AdBoards"
 	add_child(holder)
-	var hl: float = m.PITCH.x / 2.0
-	var hw: float = m.PITCH.y / 2.0
 	var s := 1.0 / ShintyMatchAdapter.YARD  # yards per metre
-	ShintyAdBoard.place_row(holder, Vector3(-hl, 0, -hw - 4.0), Vector3(hl, 0, -hw - 4.0), Vector3.ZERO, s, 6.0, true, 0)
-	for end in [-1.0, 1.0]:
-		ShintyAdBoard.place_row(holder, Vector3(end * (hl + 5.0), 0, -hw * 0.8), Vector3(end * (hl + 5.0), 0, hw * 0.8),
-			Vector3.ZERO, s, 6.0, true, 3 if end < 0 else 5)
+	for r in pitch.board_rows():
+		ShintyAdBoard.place_row(holder, r[0], r[1], Vector3.ZERO, s, 6.0, true, r[2])
 
 
 ## The referee: an all-black kit, no helmet and no caman.
