@@ -84,6 +84,16 @@ func _run() -> void:
 	root3d.add_child(lefty)
 	lefty.setup({"name": "Lefty", "number": 9, "hand": "L"}, teams[0])
 	lefty.advance(0.016)
+	check(_hook_y(striker) > 0.3, "standing after a swing, the hook faces up (%.2f)" % _hook_y(striker))
+	var blocker := ShintyPlayerModel.new()
+	blocker.manual_update = true
+	root3d.add_child(blocker)
+	blocker.setup(teams[0]["players"][4], teams[0])
+	blocker.set_reach(Vector3(0.2, 0.03, -0.9), 1.0)
+	blocker.play_action(&"block", 1.0)
+	for i in 15:
+		blocker.advance(1.0 / 60.0)
+	check(_hook_y(blocker) < -0.3, "blocking, the hook is turned down (%.2f)" % _hook_y(blocker))
 	check(lefty.get_strike_spot().x < 0.0 and lefty.get_caman_head_position().x < 0.0, "left-hander carries the caman on the left")
 
 	print("Carry and running swing")
@@ -97,11 +107,13 @@ func _run() -> void:
 	var carried := runner.get_caman_head_position()
 	check(carried.y > 0.15 and carried.y < 0.8 and carried.z < -0.4, "running, the caman head is carried low out in front (%s)" % carried)
 	check(_top_hand_gap(runner) > 0.15, "running, the top hand is off the caman (%.2f m)" % _top_hand_gap(runner))
+	check(_hook_y(runner) > 0.3, "running, the hook of the caman faces up (%.2f)" % _hook_y(runner))
 	runner.look_at_point(runner.global_transform * Vector3(0, 0, -2.5))
 	for i in 40:
 		runner.advance(1.0 / 60.0)
 	check(_top_hand_gap(runner) < 0.12, "closing on the ball, both hands are on the caman (%.2f m)" % _top_hand_gap(runner))
 	runner.look_at_point(null)
+	check(_hook_y(runner) > 0.3, "carried two-handed, the hook faces up (%.2f)" % _hook_y(runner))
 	var run_hits := []
 	runner.strike.connect(func(pos, pow): run_hits.append(pos))
 	runner.play_action(&"swing", 1.0)
@@ -315,3 +327,8 @@ func _top_hand_gap(m: ShintyPlayerModel) -> float:
 	var wrist := sk.global_transform * sk.get_bone_global_pose(sk.find_bone(side + "Hand")).origin
 	var grip: Vector3 = m._caman.global_transform * Vector3(0, -ShintyPlayerModel.GRIP_TOP, 0)
 	return maxf(0.0, wrist.distance_to(grip) - ShintyPlayerModel.HAND_GRIP * m.height_cm / 180.0)
+
+
+## Which way the hook of the bas points: +1 straight up, -1 at the grass.
+func _hook_y(m: ShintyPlayerModel) -> float:
+	return (m._caman.global_transform.basis * Vector3(0, 0, -1)).normalized().y

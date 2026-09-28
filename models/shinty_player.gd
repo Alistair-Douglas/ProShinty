@@ -633,7 +633,13 @@ func _pose(_delta: float) -> void:
 	# So is a block: the stick is turned so its back sits over the ball.
 	var back_face := _action == &"shy" or _action == &"block"
 	var face_dir := Vector3(0.0, 0.3, 1.0) if back_face else Vector3(0.0, -0.3, -1.0)
-	var cb := _caman_basis(d_sk, yaw_b * face_dir)
+	if _action == &"block":
+		face_dir = Vector3(0.0, -1.0, 0.2)   # hook turned down over the ball
+	# The hook of the bas faces up, as a shinty player carries it, except for
+	# a block and through a hit, where the face turns to meet the ball.
+	var up := 0.0 if back_face else _hook_up()
+	var face_w: Vector3 = yaw_b * face_dir + Vector3.UP * 2.0 * up
+	var cb := _caman_basis(d_sk, face_w)
 	var ct := Transform3D(cb, p_sk)
 	var top_side := "Right" if left_handed else "Left"
 	var low_side := "Left" if left_handed else "Right"
@@ -649,7 +655,7 @@ func _pose(_delta: float) -> void:
 			var arm := _arm_reach(top_side) * 0.97
 			var butt := sh + to_t.normalized() * minf(arm, maxf(0.1, to_t.length() - head_len * 0.5))
 			var dn := (tgt - butt).normalized()
-			var rt := Transform3D(_caman_basis(dn, yaw_b * Vector3(0.0, -0.3, -1.0)), butt - dn * GRIP_TOP)
+			var rt := Transform3D(_caman_basis(dn, yaw_b * Vector3(0.0, -0.3, -1.0) + Vector3.UP * 2.0 * up), butt - dn * GRIP_TOP)
 			ct = ct.interpolate_with(rt, _reach)
 			# The free arm swings out the other way for balance.
 			var out := -1.0 if top_side == "Right" else 1.0
@@ -659,7 +665,7 @@ func _pose(_delta: float) -> void:
 			var rd := tgt - anchor
 			if rd.length() > 0.05:
 				var dn := rd.normalized()
-				var rt := Transform3D(_caman_basis(dn, yaw_b * face_dir), tgt - dn * head_len)
+				var rt := Transform3D(_caman_basis(dn, face_w), tgt - dn * head_len)
 				ct = ct.interpolate_with(rt, _reach)
 	# Running off the ball the caman is carried in the lower hand, low and
 	# across the front of the body with the head out in front just off the
@@ -678,7 +684,7 @@ func _pose(_delta: float) -> void:
 		var cd := Vector3(-0.55 * mx, -0.45 + 0.05 * pump, -0.7).normalized()
 		var d_c: Vector3 = yaw_b * cd
 		var grip_c: Vector3 = hips_g.origin + yaw_b * hand
-		var carry_t := Transform3D(_caman_basis(d_c, yaw_b * Vector3(-0.3 * mx, -1.0, -0.2)), grip_c - d_c * GRIP_LOW)
+		var carry_t := Transform3D(_caman_basis(d_c, yaw_b * Vector3(0.0, 1.0, -0.3)), grip_c - d_c * GRIP_LOW)
 		ct = ct.interpolate_with(carry_t, carry)
 		carry_top = hips_g.origin + yaw_b * Vector3(-0.17 * mx, 0.24 - 0.08 * pump + bob, -0.16 + 0.22 * pump)
 	# Keep both grips within arm's reach: slide the caman towards the shoulders.
@@ -991,6 +997,17 @@ func _mirror_rot(rot: Dictionary) -> Dictionary:
 			name = "Left" + name.substr(5)
 		out[name] = e
 	return out
+
+
+## 1 = turn the hook up; 0 = leave the face square to the ball. A hit turns
+## it square over the backswing and back up after the follow-through.
+func _hook_up() -> float:
+	if not _is_hit_action(_action):
+		return 1.0
+	var times := _swing_times()
+	if _action_t < times[1]:
+		return 1.0 - _ease(_action_t / maxf(0.01, times[0]))
+	return _ease((_action_t - times[2]) / maxf(0.01, _action_len - times[2]))
 
 
 func _caman_basis(dir: Vector3, face: Vector3) -> Basis:
