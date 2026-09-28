@@ -45,7 +45,9 @@ func duplicate_state() -> ShintyBallPhysics:
 
 
 func is_airborne() -> bool:
-	return position.y > ground_y + RADIUS + 0.003 or velocity.y > 0.05
+	# Still falling counts too: a ball coming down within a hair of the grass
+	# has yet to land (and bounce), not started rolling.
+	return position.y > ground_y + RADIUS + 0.003 or absf(velocity.y) > 0.05
 
 
 func height() -> float:
