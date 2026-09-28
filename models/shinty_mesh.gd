@@ -101,6 +101,80 @@ static func loft(rings: Array, segments: int = 16, squareness: float = 2.0, open
 	return sweep(pts, rad, segments, squareness, open_ends, Vector3.RIGHT, arc_from, arc_to)
 
 
+## A closed shape along -Z whose sections are flat underneath and rounded on
+## top, like a boot or a sole. Stations are [z, half_width, bottom_y, top_y,
+## x_offset] from heel to toe; `top_sq` and `bottom_sq` are the superellipse
+## exponents of the upper and lower halves (2 = round, higher = squarer).
+static func shoe(stations: Array, segments: int = 16, top_sq: float = 2.3, bottom_sq: float = 6.0) -> ArrayMesh:
+	var n := stations.size()
+	var ring := segments + 1
+	var verts := PackedVector3Array()
+	var uvs := PackedVector2Array()
+	var idx := PackedInt32Array()
+	var along := 0.0
+	for i in n:
+		var st: Array = stations[i]
+		var hw: float = st[1]
+		var yb: float = st[2]
+		var yt: float = st[3]
+		var ox: float = st[4] if st.size() > 4 else 0.0
+		if i > 0:
+			along += absf(st[0] - stations[i - 1][0])
+		var mid := (yb + yt) / 2.0
+		var hh := (yt - yb) / 2.0
+		for j in ring:
+			# Start at the bottom centre so the UV seam hides under the sole.
+			var a := -PI / 2 + TAU * float(j) / segments
+			var c := cos(a)
+			var s := sin(a)
+			var e := 2.0 / (top_sq if s > 0.0 else bottom_sq)
+			verts.append(Vector3(ox + signf(c) * pow(absf(c), e) * hw, mid + signf(s) * pow(absf(s), e) * hh, st[0]))
+			uvs.append(Vector2(float(j) / segments * (hw + hh) * 3.2, along))
+	for i in n - 1:
+		for j in segments:
+			var a0 := i * ring + j
+			var b0 := a0 + ring
+			idx.append_array([a0, a0 + 1, b0, a0 + 1, b0 + 1, b0])
+	# Close heel and toe with a fan round the section centre.
+	for end in [0, n - 1]:
+		var st: Array = stations[end]
+		var ci := verts.size()
+		verts.append(Vector3(st[4] if st.size() > 4 else 0.0, (st[2] + st[3]) / 2.0, st[0]))
+		uvs.append(Vector2(0, along if end == n - 1 else 0.0))
+		var base: int = end * ring
+		for j in segments:
+			if end == 0:
+				idx.append_array([ci, base + j, base + j + 1])
+			else:
+				idx.append_array([ci, base + j + 1, base + j])
+	# Smooth normals from the faces (the seam vertices share a position, so
+	# average by position to hide it).
+	var norms := PackedVector3Array()
+	norms.resize(verts.size())
+	for t in range(0, idx.size(), 3):
+		var p0 := verts[idx[t]]
+		var fn := (verts[idx[t + 1]] - p0).cross(verts[idx[t + 2]] - p0)
+		for k in 3:
+			norms[idx[t + k]] += fn
+	for i in n:
+		var s0 := i * ring
+		var joined := norms[s0] + norms[s0 + segments]
+		norms[s0] = joined
+		norms[s0 + segments] = joined
+	# Godot's front faces wind clockwise, so the face cross products point in.
+	for i in norms.size():
+		norms[i] = -norms[i].normalized()
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = verts
+	arrays[Mesh.ARRAY_NORMAL] = norms
+	arrays[Mesh.ARRAY_TEX_UV] = uvs
+	arrays[Mesh.ARRAY_INDEX] = idx
+	var m := ArrayMesh.new()
+	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	return m
+
+
 # --- Materials -------------------------------------------------------------------
 
 static var _cache := {}
