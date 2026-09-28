@@ -337,14 +337,19 @@ func own_goal(team: int) -> Vector2:
 
 
 func home_world(p: Player) -> Vector2:
+	return home_at(p, ball_pos)
+
+
+## Formation spot for p with the ball at `ball` (see home_world).
+func home_at(p: Player, ball: Vector2) -> Vector2:
 	var f: Vector2 = p.home
 	if not p.is_keeper():
-		var bx := own_frac(p.team, ball_pos.x)
+		var bx := own_frac(p.team, ball.x)
 		# Forwards are man-marked by the opposing backs and hold their line;
 		# everyone else shifts up and down the park with the ball.
 		var shift := 0.15 if p.role == "FWD" else 0.5
 		f.x = clamp(f.x + (bx - 0.5) * shift, 0.05, 0.94)
-		f.y = clamp(f.y + (ball_pos.y / PITCH.y - 0.5) * (0.12 if p.role == "FWD" else 0.3), 0.06, 0.94)
+		f.y = clamp(f.y + (ball.y / PITCH.y - 0.5) * (0.12 if p.role == "FWD" else 0.3), 0.06, 0.94)
 		if carrier != null and carrier.team == p.team:
 			f.x = min(f.x + 0.05, 0.94)
 	return frac_to_world(p.team, f)
@@ -1183,6 +1188,12 @@ func is_dribbling(p: Player) -> bool:
 		and (p.vel.length() > 1.5 or dribble_vel.length() > 0.5)
 
 
+## How much help a dribbler gets: 1 for the player's own man (softer
+## touches, a quicker stick when turning, harder to nick), 0 for the computer.
+func dribble_assist(p: Player) -> float:
+	return 1.0 if p == human else 0.0
+
+
 func _dribble(dt: float) -> void:
 	var c := carrier
 	var spd := dribble_vel.length()
@@ -1196,12 +1207,30 @@ func _dribble(dt: float) -> void:
 	var dir := want.normalized()
 	var run: float = max(c.vel.dot(dir), 0.0)
 	var head := Vector2(c.stick.x, c.stick.y)
-	if head.distance_to(ball_pos) < Body.CONTACT_R + 0.12 and dribble_vel.dot(dir) < run + 0.5:
+	var assist := dribble_assist(c)
+	# Turning with the ball: the player gets the caman round to it sooner.
+	var turning: bool = dribble_vel.length() > 0.5 and dribble_vel.normalized().dot(dir) < 0.75
+	var tap_r: float = Body.CONTACT_R + 0.12 + (0.25 if turning else 0.1) * assist
+	if head.distance_to(ball_pos) < tap_r and dribble_vel.dot(dir) < run + 0.5:
 		# The tap: just firm enough to roll ahead of the player; better ball
-		# players keep it closer.
+		# players keep it closer, and the player's touches are softer still.
 		var soft: float = lerp(1.45, 1.2, c.r("control") / 100.0)
-		dribble_vel = dir * max(run * soft + 1.0, 2.5)
+		soft = lerp(soft, 1.08, assist)
+		dribble_vel = dir * max(run * soft + lerp(1.0, 0.6, assist), 2.5)
 		dribble_taps += 1
+		return
+	if assist > 0.0 and dribble_vel.length() > 0.3:
+		# The player shepherds a rolling touch round with them as they turn.
+		var bend: float = dribble_vel.angle_to(dir)
+		dribble_vel = dribble_vel.rotated(clampf(bend, -3.0 * dt, 3.0 * dt))
+	var overrun: bool = (ball_pos - head).dot(dir) < -0.1
+	if assist > 0.0 and head.distance_to(ball_pos) < 1.8 \
+			and (overrun or (dribble_vel.length() > 0.5 and dribble_vel.normalized().dot(dir) < 0.3)):
+		# A sharp turn, or running past it: the player hooks the ball back
+		# round with the caman rather than letting it run away.
+		ball_pos = ball_pos.move_toward(head, (c.vel.length() + CARRY_CATCH_UP) * dt)
+		dribble_vel = dribble_vel.move_toward(c.vel, 30.0 * dt)
+		ball_vel = dribble_vel
 		return
 	var loose: bool = head.distance_to(ball_pos) > 0.8
 	if loose:
@@ -1211,7 +1240,7 @@ func _dribble(dt: float) -> void:
 				continue
 			if Vector2(o.stick.x, o.stick.y).distance_to(ball_pos) >= Body.CONTACT_R:
 				continue
-			if randf() > 0.25 + (o.r("tackling") - c.r("control")) / 250.0:
+			if randf() > (0.25 + (o.r("tackling") - c.r("control")) / 250.0) * (1.0 - 0.5 * assist):
 				o.touch_block = 0.5   # got a touch on it but the carrier kept it
 				continue
 			carrier = null
@@ -1221,7 +1250,7 @@ func _dribble(dt: float) -> void:
 			_take_control(o)
 			anim(o, "trap")
 			return
-	if ball_pos.distance_to(c.pos) > DRIBBLE_LOSE:
+	if ball_pos.distance_to(c.pos) > DRIBBLE_LOSE + 0.5 * assist:
 		# Overran it or turned away: it's a loose ball now.
 		carrier = null
 		c.touch_block = 0.15
@@ -1381,7 +1410,7 @@ func _restart(team: int, spot: Vector2, label: String) -> void:
 	# A shy is thrown up and struck overhead (see _throw_up_shy).
 	taker.shy_ready = label == "Shy"
 	taker.shy_attempts = 0
-	taker.think = 0.9
+	taker.think = 0.9 if label != "Shy" else 1.8   # a shy: let everyone get to their spots
 	protected_timer = 1.5
 	_clear_set_piece()
 	if label == "Hit-out" or label == "Corner":

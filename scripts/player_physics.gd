@@ -195,7 +195,7 @@ static func update_stick(m, p, dt: float) -> void:
 		# Dribbling: the caman reaches out to meet the ball as the player runs
 		# onto it, taps it, and comes back to be carried while it rolls on.
 		var ball_at := Vector3(m.ball_pos.x, m.ball_pos.y, 0.0)
-		if m.is_dribbling(p) and ball_at.distance_to(rest) < 1.0:
+		if m.is_dribbling(p) and ball_at.distance_to(rest) < 1.0 + 0.5 * m.dribble_assist(p):
 			target = ball_at
 	elif p.shy_toss:
 		target = Vector3(p.pos.x + p.facing.x * m.SHY_ARM, p.pos.y + p.facing.y * m.SHY_ARM, OVERHEAD)
