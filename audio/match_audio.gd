@@ -65,7 +65,7 @@ func _on_event(e: Dictionary) -> void:
 		"touch":
 			if not e.get("hands", false):
 				play(TAP, randf_range(-12.0, -7.0), randf_range(0.92, 1.08))
-		"clash", "stick_block", "cleek", "block", "late_block":
+		"clash", "battle", "stick_block", "cleek", "block", "late_block":
 			play(CLACK, -4.0, randf_range(0.93, 1.07))
 		"save":
 			play(TAP, -6.0, 0.8)

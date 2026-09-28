@@ -72,6 +72,10 @@ static func move(m, p, dt: float) -> void:
 	var top: float = p.top_speed() * lerpf(0.8, 1.0, p.stamina)
 	if p == m.carrier:
 		top *= 0.88
+		if p.shielding:
+			top *= m.SHIELD_SPEED
+	if m.in_battle(p):
+		top *= m.BATTLE_SLOW
 	if p.swing_t >= 0.0:
 		top *= 0.55   # planting the feet for the hit
 	if p.stagger > 0.0:
@@ -112,6 +116,8 @@ static func move(m, p, dt: float) -> void:
 	# The body turns at a limited rate too. Keepers, and anyone jogging or
 	# standing, keep their eyes on the ball; runners face where they run.
 	var look: Vector2 = p.desired
+	if p.shielding and p == m.carrier:
+		look = shield_dir(m, p)   # back into the man, ball on the far side
 	var to_ball: Vector2 = m.ball_pos - p.pos
 	if p != m.carrier and p.swing_t < 0.0 and to_ball.length() > 0.5 and to_ball.length() < 30.0 \
 			and (p.is_keeper() or p.desired.length() < 3.0):
@@ -124,6 +130,21 @@ static func move(m, p, dt: float) -> void:
 		p.stamina = maxf(0.0, p.stamina - dt * 0.06 * (1.5 - p.r("stamina") / 100.0))
 	else:
 		p.stamina = minf(1.0, p.stamina + dt * 0.04)
+
+
+## Shielding: the way to keep the ball, directly away from the nearest
+## opponent (or where the player is going if nobody is close).
+static func shield_dir(m, p) -> Vector2:
+	var best = null
+	var best_d := 6.0
+	for o in m.squads[1 - p.team]:
+		var d: float = o.pos.distance_to(p.pos)
+		if d < best_d:
+			best_d = d
+			best = o
+	if best == null or best_d < 0.01:
+		return p.desired.normalized() if p.desired.length() > 0.3 else p.facing
+	return (p.pos - best.pos) / best_d
 
 
 # ---------------------------------------------------------------- contact
@@ -163,6 +184,8 @@ static func collide(m) -> void:
 ## their limit they stumble, and a stumbling ball carrier loses the ball.
 static func _knock(m, p, dv: float, by) -> void:
 	var hold: float = 3.0 + (p.r("tackling") * 0.6 + p.r("control") * 0.4) / 100.0 * 3.0
+	if p.shielding and p == m.carrier:
+		hold *= 1.35   # braced, holding the ball up
 	if p.stagger > 0.0:
 		hold *= 0.6
 	if dv > hold:
@@ -190,7 +213,11 @@ static func update_stick(m, p, dt: float) -> void:
 	var target := rest
 	var keeper_area: bool = p.is_keeper() and p.pos.distance_to(m.own_goal(p.team)) < 14.0
 	p.stick_target = null
-	if p == m.carrier:
+	if p == m.carrier and p.shielding:
+		# Holding it up: the ball kept on the stick, on the far side of the body.
+		var away: Vector2 = shield_dir(m, p)
+		target = Vector3(p.pos.x + away.x * 0.75, p.pos.y + away.y * 0.75, 0.0)
+	elif p == m.carrier:
 		target = rest + Vector3(p.facing.x, p.facing.y, 0.0) * 0.08
 		# Dribbling: the caman reaches out to meet the ball as the player runs
 		# onto it, taps it, and comes back to be carried while it rolls on.

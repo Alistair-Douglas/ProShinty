@@ -41,6 +41,9 @@ const THROW_UP_TOSS := 8.0   # yd/s: the referee's throw
 const THROW_UP_GAP := 0.8    # each centre stands this far from the spot
 const SET_PIECE_PAUSE := 2.2 # hit-outs and corners: play stops while players get set
 const SET_PIECE_MIN := 1.0   # a human taker can't hit it before this
+const SHIELD_SPEED := 0.45   # shielding the ball: walking pace, body between ball and man
+const BATTLE_TIME := 0.8     # a stick battle for the ball lasts this long
+const BATTLE_SLOW := 0.35    # both players are near enough stood still while they fight for it
 
 enum State { THROW_UP, PLAY, GOAL, HALF_TIME, FULL_TIME }
 
@@ -90,6 +93,8 @@ class Player:
 	var counter_age := 0.0
 	var read_swing := -1     # AI: the opponent swing already reacted to
 	var overswing := 0.0     # human: 0..1 past full power
+	var shielding := false   # carrier holding the ball up, body between it and the man
+	var hold_t := 0.0        # AI: how long to keep holding it up
 
 	func r(key: String) -> float:
 		return float(data.get(key, 50))
@@ -123,6 +128,9 @@ var attack_dir := [1, -1]
 var protected_timer := 0.0
 var paused := false
 var charge := -1.0
+## A stick battle for the carrier's ball: {"t": tackler, "o": carrier,
+## "time": s, "effort": {player: extra}}. Empty when there isn't one.
+var battle := {}
 const SHOOT_RANGE := 70.0   # the shoot button aims at goal from within this many yards
 var charge_kind := "shoot"   # which button is being held: "shoot" (at goal) or "hit" (long)
 var steer := Vector2.ZERO   # smoothed human steering direction
@@ -424,6 +432,9 @@ func _update_players(dt: float) -> void:
 		p.lunge = max(0.0, p.lunge - dt)
 		Counters.tick(p, dt)
 		p.sprinting = false
+		if p != carrier:
+			p.shielding = false
+			p.hold_t = 0.0
 	if human != null and human.is_keeper() and carrier != human:
 		human = _nearest_outfield(human_side, ball_pos, null)
 	for t in 2:
@@ -443,6 +454,7 @@ func _update_players(dt: float) -> void:
 		_restart(fouled.team, fouled.pos, "Free hit")
 		_say("Foul: push in the back", 1.5)
 		return
+	_update_battle(dt)
 	for p in players:
 		Body.update_stick(self, p, dt)
 		if p.swing_t >= 0.0:
@@ -531,8 +543,10 @@ func _ai_chase(p: Player, dt: float) -> void:
 
 
 func _ai_carrier(p: Player, dt: float) -> void:
-	if p.swing_t >= 0.0:
-		return   # mid-swing: committed
+	if p.swing_t >= 0.0 or in_battle(p):
+		return   # mid-swing or fighting for it: committed
+	p.hold_t = max(0.0, p.hold_t - dt)
+	p.shielding = p.hold_t > 0.0
 	if p.shy_ready or p == set_piece_taker_now():
 		# A shy, hit-out or corner has to be taken: pass it to someone open or hit it long.
 		p.think -= dt
@@ -553,6 +567,10 @@ func _ai_carrier(p: Player, dt: float) -> void:
 				return
 		if pressure < 4.0 and randf() < 0.6 and _ai_pass(p, false):
 			return
+		if pressure < 2.5 and p.hold_t <= 0.0 and randf() < 0.4:
+			# Nothing on: hold it up, back into the man, and wait for support.
+			p.hold_t = randf_range(0.8, 1.8)
+			p.shielding = true
 		if randf() < 0.12 and _ai_pass(p, true):
 			return
 		if own_frac(p.team, p.pos.x) < 0.3 and pressure < 6.0 and randf() < 0.5:
@@ -694,6 +712,14 @@ func _human_control(dt: float) -> void:
 			charge = -1.0
 			return
 	var aim := mv.normalized() if mv.length() > 0.15 else p.facing
+	p.shielding = carrier == p and Input.is_action_pressed("shield") and p.swing_t < 0.0
+	if in_battle(p):
+		# Fighting for the ball: every press of a stick button is more effort.
+		charge = -1.0
+		for a in ["shoot", "hit", "pass", "shield", "barge"]:
+			if Input.is_action_just_pressed(a):
+				battle["effort"][p] = min(battle["effort"].get(p, 0.0) + 6.0, 24.0)
+		return
 	if p == set_piece_taker_now() or (p.shy_ready and carrier == p):
 		# Standing over a restart: the stick turns the aim smoothly, within
 		# a half circle (for a shy, from up the line round to down the line).
@@ -1111,7 +1137,7 @@ func _take_control(p: Player) -> void:
 ## It has to physically reach the ball, and a carrier shielding the ball with
 ## their body is much harder to take it from.
 func _try_tackle(t: Player, o: Player) -> void:
-	if t.cooldown > 0.0 or protected_timer > 0.0 or carrier != o or t.stagger > 0.0:
+	if t.cooldown > 0.0 or protected_timer > 0.0 or carrier != o or t.stagger > 0.0 or not battle.is_empty():
 		return
 	t.swing = 0.25
 	t.lunge = 0.35
@@ -1124,30 +1150,102 @@ func _try_tackle(t: Player, o: Player) -> void:
 	var shielded := _dist_to_segment(o.pos, t.pos, ball_pos) < Body.BODY_R * 1.2
 	if shielded:
 		chance *= 0.45   # the ball is on the far side of the carrier's body
+	if o.shielding:
+		chance *= 0.7    # braced for it, and strong on the ball
 	chance *= lerp(1.0, 0.6, clamp((d - 1.2) / 1.0, 0.0, 1.0))
-	var won := randf() < chance
+	# Rarely a clean steal: a poke that gets there usually starts a battle.
+	var roll := randf()
+	var won := roll < chance * 0.3
 	events.append({"type": "tackle", "by": t, "on": o, "won": won, "at": o.pos})
+	if not won and roll < chance:
+		battle = {"t": t, "o": o, "time": 0.0, "effort": {}}
+		events.append({"type": "battle", "team": t.team, "at": ball_pos})
+		t.cooldown = 0.2
+		return
 	if not won and shielded and randf() < 0.06:
 		# Reaching through the carrier's body for the ball: caman on the man.
 		events.append({"type": "foul", "kind": "hack", "by": t, "on": o, "at": o.pos, "severity": 0.3})
 	if won:
-		carrier = null
-		o.touch_block = 0.5
-		o.cooldown = 0.4
-		o.swing_t = -1.0
-		last_team = t.team
-		# The ball never jumps between sticks: the poke knocks it loose and it
-		# rolls. Usually the tackler hooks it back towards their own caman to
-		# collect; sometimes it's poked away into space.
-		if randf() < 0.6:
-			var to_stick := Vector2(t.stick.x, t.stick.y) - ball_pos
-			ball_vel = to_stick.normalized() * clamp(to_stick.length() * 3.0, 2.0, 5.0) + t.vel * 0.5
-			t.touch_block = 0.0
-		else:
-			ball_vel = (ball_pos - t.pos).normalized().rotated(randf_range(-0.7, 0.7)) * randf_range(4.0, 8.0)
-		ball_vz = 0.0
+		_steal(t, o)
 	else:
-		t.cooldown = 0.7
+		t.cooldown = 1.0
+
+
+## The tackler has taken it: the ball is knocked off the carrier's stick.
+func _steal(t: Player, o: Player) -> void:
+	carrier = null
+	o.touch_block = 0.5
+	o.cooldown = 0.4
+	o.swing_t = -1.0
+	o.shielding = false
+	last_team = t.team
+	# The ball never jumps between sticks: the poke knocks it loose and it
+	# rolls. Usually the tackler hooks it back towards their own caman to
+	# collect; sometimes it's poked away into space.
+	if randf() < 0.6:
+		var to_stick := Vector2(t.stick.x, t.stick.y) - ball_pos
+		ball_vel = to_stick.normalized() * clamp(to_stick.length() * 3.0, 2.0, 5.0) + t.vel * 0.5
+		t.touch_block = 0.0
+	else:
+		ball_vel = (ball_pos - t.pos).normalized().rotated(randf_range(-0.7, 0.7)) * randf_range(4.0, 8.0)
+	ball_vz = 0.0
+
+
+func in_battle(p: Player) -> bool:
+	return not battle.is_empty() and (battle["t"] == p or battle["o"] == p)
+
+
+## Two sticks on the ball: they lean in and fight for it. Strength, ball
+## control, tackling and holding it up decide it, and so does effort (the
+## player hammering a stick button). The carrier usually keeps it, or it
+## squirts loose for a 50/50; only now and then does the tackler come away
+## with it cleanly.
+func _update_battle(dt: float) -> void:
+	if battle.is_empty():
+		return
+	var t: Player = battle["t"]
+	var o: Player = battle["o"]
+	if state != State.PLAY or carrier != o or t.stagger > 0.0 or o.stagger > 0.0 \
+			or t.pos.distance_to(ball_pos) > Body.max_reach(t) + 0.4:
+		battle = {}   # knocked off, or the carrier got away from them
+		t.cooldown = max(t.cooldown, 0.6)
+		return
+	battle["time"] += dt
+	if battle["time"] < BATTLE_TIME:
+		return
+	var eff: Dictionary = battle["effort"]
+	if t != human:
+		eff[t] = randf_range(0.0, 14.0)
+	if o != human:
+		eff[o] = randf_range(0.0, 14.0)
+	var so: float = o.r("control") * 0.55 + o.r("tackling") * 0.2 + (o.mass - 75.0) * 0.8 \
+		+ (18.0 if o.shielding else 0.0) + eff.get(o, 0.0) + _skill_mod(o.team) * 100.0
+	var st: float = t.r("tackling") * 0.6 + t.r("control") * 0.15 + (t.mass - 75.0) * 0.8 \
+		+ eff.get(t, 0.0) + _skill_mod(t.team) * 100.0
+	var diff: float = (so - st) / 40.0 + randfn(0.0, 0.5)
+	battle = {}
+	if diff > -0.1:
+		# The carrier rides it and keeps the ball.
+		t.cooldown = 1.2
+		t.touch_block = 0.6
+		events.append({"type": "battle_kept", "team": o.team})
+	elif diff < -0.8:
+		events.append({"type": "battle_won", "team": t.team})
+		_steal(t, o)
+	else:
+		# Neither gets it: the ball squirts out between them.
+		carrier = null
+		last_team = t.team
+		o.touch_block = 0.25
+		t.touch_block = 0.25
+		o.shielding = false
+		var across := (o.pos - t.pos).orthogonal().normalized()
+		if randf() < 0.5:
+			across = -across
+		ball_vel = across.rotated(randf_range(-0.6, 0.6)) * randf_range(3.0, 6.0)
+		ball_vz = 0.0
+		events.append({"type": "battle_loose", "team": o.team})
+		events.append({"type": "clash", "team": t.team})
 
 
 ## The carrier has been knocked off the ball: it squirts away.
@@ -1230,6 +1328,7 @@ func _update_ball(dt: float) -> void:
 func is_dribbling(p: Player) -> bool:
 	return p == carrier and state == State.PLAY and protected_timer <= 0.0 and p.swing_t < 0.0 \
 		and not p.shy_ready and set_piece_taker_now() == null and p.stagger <= 0.0 \
+		and not p.shielding and not in_battle(p) \
 		and (p.vel.length() > 1.5 or dribble_vel.length() > 0.5)
 
 
@@ -1285,7 +1384,7 @@ func _dribble(dt: float) -> void:
 				continue
 			if Vector2(o.stick.x, o.stick.y).distance_to(ball_pos) >= Body.CONTACT_R:
 				continue
-			if randf() > (0.25 + (o.r("tackling") - c.r("control")) / 250.0) * (1.0 - 0.5 * assist):
+			if randf() > (0.2 + (o.r("tackling") - c.r("control")) / 250.0) * (1.0 - 0.5 * assist):
 				o.touch_block = 0.5   # got a touch on it but the carrier kept it
 				continue
 			carrier = null
