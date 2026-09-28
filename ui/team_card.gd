@@ -5,6 +5,8 @@ extends Control
 ## the arrows, or scroll) to change club.
 
 signal changed(index: int)
+## Same as picking from a dropdown (OptionButton), for tests that drive the menu.
+signal item_selected(index: int)
 
 const TeamData := preload("res://scripts/team_data.gd")
 
@@ -18,6 +20,9 @@ var selected := 0:
 	set(v):
 		selected = posmod(v, maxi(teams.size(), 1))
 		_refresh()
+
+var item_count: int:
+	get: return teams.size()
 
 var _crest: ShintyCrest
 var _lines := {}
@@ -36,6 +41,7 @@ func _init(p_side := "HOME", p_teams: Array = [], p_selected := 0) -> void:
 	focus_entered.connect(queue_redraw)
 	focus_exited.connect(queue_redraw)
 	selected = p_selected
+	item_selected.connect(func(i): changed.emit(i))
 
 
 func select(i: int) -> void:

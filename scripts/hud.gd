@@ -68,7 +68,10 @@ func _draw() -> void:
 	if centre_text != "":
 		var box := Rect2(Vector2(w / 2.0 - 330, screen.y / 2.0 - 40), Vector2(660, 80 if sub != "" else 56))
 		draw_rect(box, Color(0, 0, 0, 0.65))
-		draw_string(font, box.position + Vector2(0, 38), centre_text, HORIZONTAL_ALIGNMENT_CENTER, box.size.x, 28, Color.WHITE)
+		var size := 28
+		while size > 16 and font.get_string_size(centre_text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x > box.size.x - 20:
+			size -= 2   # e.g. full time between two long club names
+		draw_string(font, box.position + Vector2(0, 38), centre_text, HORIZONTAL_ALIGNMENT_CENTER, box.size.x, size, Color.WHITE)
 		if sub != "":
 			draw_string(font, box.position + Vector2(0, 66), sub, HORIZONTAL_ALIGNMENT_CENTER, box.size.x, 15, Color(1, 1, 1, 0.8))
 

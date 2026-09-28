@@ -161,6 +161,14 @@ crests come from shinty.com and belong to the clubs.
   `ui/loading/` from the game's own pitch and player models, so they can be
   remade when the models improve. Run:
   `xvfb-run -s "-screen 0 1920x1080x24" godot --path . --resolution 1920x1080 -s tests/render_loading_art.gd`
+- `tests/checkpoint_test.gd`: whole-game check. Plays matches between random
+  clubs, then a full match through the menu at each ground with a bot at the
+  controls, and fails if the ball or players leave the pitch, play gets stuck,
+  or a match never finishes.
+  Run: `godot --headless --fixed-fps 60 --path . -s tests/checkpoint_test.gd` (add `-- quick` for a shorter run)
+- `tests/run_all.sh`: runs all the headless tests, as GitHub does on every
+  pull request (`.github/workflows/tests.yml`).
+  Run: `GODOT=/path/to/godot tests/run_all.sh quick`
 - `models/`: 3D player, ball and hail models plus the hitting and ball-flight
   physics (`ShintyPlayerModel`, `ShintyBallModel`, `ShintyHailModel`,
   `ShintyStrike`, `ShintyBallPhysics`, `ShintyMatchAdapter`). See
