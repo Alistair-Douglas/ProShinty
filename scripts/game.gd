@@ -11,6 +11,11 @@ var difficulty := 1  # 0 easy, 1 normal, 2 hard
 var half_minutes := 3  # real minutes per half
 var venue := -1  # ShintyPitch.Venue; -1 until picked = the home team's ground
 var last_result := {}
+## 0 Low, 1 Medium, 2 High (ShintyPitch.Detail). Saved between runs.
+var graphics_quality := 1
+
+const SETTINGS_PATH := "user://settings.cfg"
+const GRAPHICS_NAMES := ["Low", "Medium", "High"]
 
 
 func _ready() -> void:
@@ -18,6 +23,38 @@ func _ready() -> void:
 	if teams.size() > 1:
 		away_index = 1
 	_setup_input()
+	var cfg := ConfigFile.new()
+	if cfg.load(SETTINGS_PATH) == OK and cfg.has_section_key("graphics", "quality"):
+		graphics_quality = clampi(int(cfg.get_value("graphics", "quality")), 0, 2)
+	elif RenderingServer.get_video_adapter_type() == RenderingDevice.DEVICE_TYPE_DISCRETE_GPU:
+		graphics_quality = 2  # first run on a gaming GPU: the full look
+	_apply_graphics()
+
+
+func set_graphics_quality(q: int, remember := true) -> void:
+	graphics_quality = clampi(q, 0, 2)
+	_apply_graphics()
+	if not remember:
+		return
+	var cfg := ConfigFile.new()
+	cfg.load(SETTINGS_PATH)
+	cfg.set_value("graphics", "quality", graphics_quality)
+	cfg.save(SETTINGS_PATH)
+
+
+## Renderer-wide settings; the pitch reads graphics_quality for its sun and
+## screen effects when a match starts (see match_view.gd).
+func _apply_graphics() -> void:
+	var q := graphics_quality
+	var vp := get_viewport()
+	vp.msaa_3d = [Viewport.MSAA_DISABLED, Viewport.MSAA_2X, Viewport.MSAA_4X][q]
+	# Low draws the 3D view at 80% and upscales it with FSR; menus stay sharp.
+	vp.scaling_3d_mode = Viewport.SCALING_3D_MODE_FSR if q == 0 else Viewport.SCALING_3D_MODE_BILINEAR
+	vp.scaling_3d_scale = 0.8 if q == 0 else 1.0
+	RenderingServer.directional_shadow_atlas_set_size([2048, 4096, 8192][q], true)
+	RenderingServer.directional_soft_shadow_filter_set_quality(
+		[RenderingServer.SHADOW_QUALITY_SOFT_VERY_LOW, RenderingServer.SHADOW_QUALITY_SOFT_LOW,
+		RenderingServer.SHADOW_QUALITY_SOFT_MEDIUM][q])
 
 
 func match_config() -> Dictionary:

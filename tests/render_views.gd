@@ -2,7 +2,8 @@ extends SceneTree
 ## Renders the preview of each ground from each set view (and Aberdour in each
 ## lighting preset) to renders/. Needs a display:
 ##   xvfb-run godot --path . --rendering-method gl_compatibility -s tests/render_views.gd
-## Add `-- quick` for just the match camera and west end of each ground.
+## Add `-- quick` for just the match camera and west end of each ground, and
+## `quality=0|1|2` for the Low/Medium/High graphics setting (default High).
 
 func _initialize() -> void:
 	var scene: Node3D = load("res://preview/preview.tscn").instantiate()
@@ -16,6 +17,10 @@ func _run(scene: Node3D) -> void:
 	var pitch: Node3D = scene.get_node("ShintyPitch")
 	var views := [[1, "broadcast"], [6, "match_camera"], [2, "west_end"], [3, "east_end"],
 			[4, "looking_south"], [5, "aerial"]]
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("quality="):
+			pitch.graphics_quality = int(a.get_slice("=", 1))
+			root.get_node("Game").set_graphics_quality(pitch.graphics_quality, false)
 	var shots := []
 	for v in ShintyPitch.VENUE_NAMES.size():
 		for view in views:

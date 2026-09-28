@@ -5,6 +5,7 @@ extends Node3D
 ## reads the match state, never changes it. One world unit is one yard; the
 ## centre spot is the origin.
 
+const TeamData := preload("res://scripts/team_data.gd")
 const PitchScene := preload("res://pitch/shinty_pitch.tscn")
 
 var m: Node  # the match (parent)
@@ -33,6 +34,9 @@ func _ready() -> void:
 	pitch.length_yd = m.PITCH.x
 	pitch.width_yd = m.PITCH.y
 	pitch.show_placeholder_goals = false  # our own hails below
+	var q: int = get_node("/root/Game").graphics_quality if has_node("/root/Game") else ShintyPitch.Detail.MEDIUM
+	pitch.graphics_quality = q
+	pitch.scenery_detail = ShintyPitch.Detail.LOW if q == ShintyPitch.Detail.LOW else ShintyPitch.Detail.MEDIUM
 	add_child(pitch)
 	_build_hails()
 	for p in m.players:
@@ -57,6 +61,10 @@ func _ready() -> void:
 	var tracked: Array = figures.values()
 	tracked.append(referee_figure)
 	director.setup(self, tracked, ball)
+	var audio := ShintyMatchAudio.new()
+	audio.name = "Audio"
+	audio.m = m
+	add_child(audio)
 	cam_x = m.ball_pos.x - m.PITCH.x / 2.0
 	_update_camera(1.0)
 
@@ -184,7 +192,7 @@ func _build_hails() -> void:
 
 
 func _build_player(p) -> Dictionary:
-	var f := ShintyMatchAdapter.build_player(self, p.data, ShintyMatchAdapter.team_from_colors(m.colors[p.team][0], m.colors[p.team][1]))
+	var f := ShintyMatchAdapter.build_player(self, p.data, {"colors": m.kits[p.team]})
 	var root: Node3D = f["root"]
 	var team: Dictionary = m.teams[p.team]
 	ShintyKitSponsor.apply(f["model"], ShintySponsors.shirt_texture(ShintySponsors.for_team(team)))
@@ -209,25 +217,23 @@ func _build_player(p) -> Dictionary:
 	return f
 
 
-## Pitchside advertising boards: along the far touchline, where the TV camera
-## sees them, and behind each goal. A ground can place its own instead with
-## ShintyAdBoard.place_row().
+## Pitchside advertising boards where the ground puts them (usually along the
+## far touchline, where the TV camera sees them, and behind each goal; see
+## ShintyPitch.board_rows()).
 func _build_boards() -> void:
 	var holder := Node3D.new()
 	holder.name = "AdBoards"
 	add_child(holder)
-	var hl: float = m.PITCH.x / 2.0
-	var hw: float = m.PITCH.y / 2.0
 	var s := 1.0 / ShintyMatchAdapter.YARD  # yards per metre
-	ShintyAdBoard.place_row(holder, Vector3(-hl, 0, -hw - 4.0), Vector3(hl, 0, -hw - 4.0), Vector3.ZERO, s, 6.0, true, 0)
-	for end in [-1.0, 1.0]:
-		ShintyAdBoard.place_row(holder, Vector3(end * (hl + 5.0), 0, -hw * 0.8), Vector3(end * (hl + 5.0), 0, hw * 0.8),
-			Vector3.ZERO, s, 6.0, true, 3 if end < 0 else 5)
+	for r in pitch.board_rows():
+		ShintyAdBoard.place_row(holder, r[0], r[1], Vector3.ZERO, s, 6.0, true, r[2])
 
 
-## The referee: an all-black kit, no helmet and no caman.
+## The referee: black kit (a bright top if a team wears black), no helmet and
+## no caman.
 func _build_referee() -> Dictionary:
-	var kit := {"colors": {"primary": "#15161a", "secondary": "#15161a", "socks": "#15161a"}}
+	var top := TeamData.referee_colour(m.kits)
+	var kit := {"colors": {"primary": top, "secondary": "#15161a", "shorts": "#15161a", "socks": "#15161a"}}
 	var f := ShintyMatchAdapter.build_player(self, {"name": "Referee", "number": 0, "position": "REF", "pace": 60, "tackling": 40}, kit)
 	var model: ShintyPlayerModel = f["model"]
 	model.wear_helmet = false
@@ -245,6 +251,7 @@ func _mesh(mesh: Mesh, mat: Material) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
 	mi.mesh = mesh
 	mi.material_override = mat
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	return mi
 
 

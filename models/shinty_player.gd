@@ -422,6 +422,7 @@ func _build() -> void:
 		["RightUpperLeg", "Hips", Vector3(0.095 * sw, -0.05, 0)],
 		["RightLowerLeg", "RightUpperLeg", Vector3(0, -0.44, 0)],
 		["RightFoot", "RightLowerLeg", Vector3(0, -0.43, 0)],
+		["Caman", "", Vector3.ZERO],  # posed from _caman each frame; carries the stick's mesh
 	]
 	for d in defs:
 		var idx := _skel.get_bone_count()
@@ -652,6 +653,10 @@ func _pose(_delta: float) -> void:
 	if head_y < 0.0:
 		ct.origin.y -= head_y
 	_caman.transform = ct
+	var caman_bone: int = _bone["Caman"]
+	_skel.set_bone_pose_position(caman_bone, ct.origin)
+	_skel.set_bone_pose_rotation(caman_bone, ct.basis.get_rotation_quaternion())
+	_skel.set_bone_pose_scale(caman_bone, Vector3.ONE if _caman.visible else Vector3.ZERO)
 
 	# Both hands grip the shaft: top hand near the butt, lower hand further down.
 	var top := ct * Vector3(0, -GRIP_TOP, 0)
