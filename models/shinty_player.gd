@@ -36,7 +36,7 @@ const SKIN_TONES := [
 const ACTIONS := {
 	"swing": 0.78, "pass": 0.55, "volley": 0.62, "tackle": 0.55, "trap": 0.4,
 	"save_left": 0.9, "save_right": 0.9, "celebrate": 1.6,
-	"shy": 1.5, "stumble": 0.7, "poke": 0.35, "block": 0.6, "cleek": 0.45, "barge": 0.4,
+	"shy": 2.0, "stumble": 0.7, "poke": 0.35, "block": 0.6, "cleek": 0.45, "barge": 0.4,
 }
 
 @export_group("Body")
