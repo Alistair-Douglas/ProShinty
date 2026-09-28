@@ -28,6 +28,9 @@ var _t := 1.0
 var _time := 0.0
 var _venue_timer: SceneTreeTimer
 
+## No scenery or sun shadows: for tests on slow software renderers.
+static var lite := false
+
 
 func _ready() -> void:
 	pitch = PitchScene.instantiate()
@@ -35,7 +38,12 @@ func _ready() -> void:
 	pitch.lighting = 1  # summer evening: low, warm light for the menus
 	pitch.show_placeholder_goals = true
 	pitch.add_ground_collision = false
+	if lite:
+		pitch.show_scenery = false
 	add_child(pitch)
+	if lite:
+		for sun in pitch.find_children("*", "DirectionalLight3D", true, false):
+			sun.shadow_enabled = false
 
 	var dummy := {"number": 0, "position": "CF", "pace": 70, "tackling": 60}
 	home_player = _hero(dummy, Vector3(-0.62, 0, 0), -PI * 0.5)
