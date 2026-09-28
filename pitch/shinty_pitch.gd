@@ -370,9 +370,8 @@ func _build_flags(root: Node3D) -> void:
 	var pole := mat("flag_pole", Color(0.95, 0.95, 0.95), 0.5)
 	var cloth := mat("flag_cloth", Color(0.85, 0.12, 0.1), 0.8)
 	cloth.cull_mode = BaseMaterial3D.CULL_DISABLED
-	var spots := [Vector2(-hl, -hw), Vector2(hl, -hw), Vector2(-hl, hw), Vector2(hl, hw),
-			Vector2(0, -hw - 1.0), Vector2(0, hw + 1.0)]
-	for p in spots:
+	# Corner flags only: shinty has none at halfway.
+	for p in [Vector2(-hl, -hw), Vector2(hl, -hw), Vector2(-hl, hw), Vector2(hl, hw)]:
 		var f := Node3D.new()
 		f.position = Vector3(p.x, 0, p.y)
 		root.add_child(f)
