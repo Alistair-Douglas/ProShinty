@@ -58,15 +58,19 @@ func _build() -> void:
 	var H := height_m * s
 	var lift := 0.06 * s  # gap under the board
 
-	var frame := StandardMaterial3D.new()
-	frame.albedo_color = Color(0.08, 0.09, 0.1)
-	frame.roughness = 0.6
-	var body := _box(Vector3(L, H + 0.06 * s, 0.12 * s), Vector3(L / 2.0, lift + H / 2.0, -0.07 * s), frame)
-	body.name = "Frame"
-	# Brace legs behind, leaning back.
+	# Frame and the brace legs behind it (leaning back), as one mesh: one draw
+	# call and one shadow caster per board.
+	var st := SurfaceTool.new()
+	st.append_from(_box_mesh(Vector3(L, H + 0.06 * s, 0.12 * s)), 0,
+		Transform3D(Basis(), Vector3(L / 2.0, lift + H / 2.0, -0.07 * s)))
 	for x in [0.35 * s, L - 0.35 * s]:
-		var leg := _box(Vector3(0.06 * s, H * 1.1, 0.06 * s), Vector3(x, H * 0.5, -0.45 * s), frame)
-		leg.rotation.x = -0.5
+		st.append_from(_box_mesh(Vector3(0.06 * s, H * 1.1, 0.06 * s)), 0,
+			Transform3D(Basis(Vector3.RIGHT, -0.5), Vector3(x, H * 0.5, -0.45 * s)))
+	var body := MeshInstance3D.new()
+	body.name = "Frame"
+	body.mesh = st.commit()
+	body.material_override = _frame_material()
+	add_child(body)
 
 	_mat = ShaderMaterial.new()
 	_mat.shader = Shader_
@@ -114,15 +118,21 @@ func _process(delta: float) -> void:
 		_slide = 0.0
 
 
-func _box(size: Vector3, pos: Vector3, m: Material) -> MeshInstance3D:
-	var mi := MeshInstance3D.new()
+func _box_mesh(size: Vector3) -> BoxMesh:
 	var b := BoxMesh.new()
 	b.size = size
-	mi.mesh = b
-	mi.material_override = m
-	mi.position = pos
-	add_child(mi)
-	return mi
+	return b
+
+
+static var _frame_mat: StandardMaterial3D
+
+## Shared by every board, so the renderer can draw the frames back to back.
+static func _frame_material() -> StandardMaterial3D:
+	if _frame_mat == null:
+		_frame_mat = StandardMaterial3D.new()
+		_frame_mat.albedo_color = Color(0.08, 0.09, 0.1)
+		_frame_mat.roughness = 0.6
+	return _frame_mat
 
 
 ## Lines boards up from `from` to `to` (on the ground, world units), facing

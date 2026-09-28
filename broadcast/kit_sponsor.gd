@@ -3,7 +3,8 @@ extends RefCounted
 ## Prints a sponsor across the front of a player's shirt.
 ##
 ## Works with any ShintyPlayerModel: it finds the shirt pieces the model hangs
-## on its "Spine" bone, measures them, and adds a print flush with the front of
+## on its "Spine" bone (or their size, recorded as "mesh_aabb" when they were
+## baked into one mesh), measures them, and adds a print flush with the front of
 ## the shirt, so it follows the body and fits slim and heavy builds. Call it
 ## after setup() (and again after rebuild(), which clears it).
 ##
@@ -26,8 +27,11 @@ static func apply(model: ShintyPlayerModel, texture: Texture2D, color = null) ->
 	# The shirt's front surface and width, from the meshes on this bone.
 	var box := AABB()
 	var first := true
+	if holder.has_meta("mesh_aabb"):  # the pieces were baked into one body mesh
+		box = holder.get_meta("mesh_aabb")
+		first = false
 	for c in holder.get_children():
-		if c is MeshInstance3D and c.mesh:
+		if c is MeshInstance3D and c.mesh and c.name != NODE_NAME:
 			var b: AABB = c.transform * c.mesh.get_aabb()
 			box = b if first else box.merge(b)
 			first = false
