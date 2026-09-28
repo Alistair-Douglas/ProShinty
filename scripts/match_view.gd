@@ -5,6 +5,7 @@ extends Node3D
 ## reads the match state, never changes it. One world unit is one yard; the
 ## centre spot is the origin.
 
+const TeamData := preload("res://scripts/team_data.gd")
 const PitchScene := preload("res://pitch/shinty_pitch.tscn")
 
 var m: Node  # the match (parent)
@@ -168,7 +169,7 @@ func _build_hails() -> void:
 
 
 func _build_player(p) -> Dictionary:
-	var f := ShintyMatchAdapter.build_player(self, p.data, ShintyMatchAdapter.team_from_colors(m.colors[p.team][0], m.colors[p.team][1]))
+	var f := ShintyMatchAdapter.build_player(self, p.data, {"colors": m.kits[p.team]})
 	var root: Node3D = f["root"]
 	var team: Dictionary = m.teams[p.team]
 	ShintyKitSponsor.apply(f["model"], ShintySponsors.shirt_texture(ShintySponsors.for_team(team)))
@@ -205,9 +206,11 @@ func _build_boards() -> void:
 		ShintyAdBoard.place_row(holder, r[0], r[1], Vector3.ZERO, s, 6.0, true, r[2])
 
 
-## The referee: an all-black kit, no helmet and no caman.
+## The referee: black kit (a bright top if a team wears black), no helmet and
+## no caman.
 func _build_referee() -> Dictionary:
-	var kit := {"colors": {"primary": "#15161a", "secondary": "#15161a", "socks": "#15161a"}}
+	var top := TeamData.referee_colour(m.kits)
+	var kit := {"colors": {"primary": top, "secondary": "#15161a", "shorts": "#15161a", "socks": "#15161a"}}
 	var f := ShintyMatchAdapter.build_player(self, {"name": "Referee", "number": 0, "position": "REF", "pace": 60, "tackling": 40}, kit)
 	var model: ShintyPlayerModel = f["model"]
 	model.wear_helmet = false

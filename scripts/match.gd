@@ -95,7 +95,8 @@ var manual_step := false   # tests drive step() themselves
 var teams: Array = []
 var players: Array = []
 var squads := [[], []]
-var colors := [[Color.RED, Color.WHITE], [Color.BLUE, Color.YELLOW]]
+var colors := [[Color.RED, Color.WHITE], [Color.BLUE, Color.YELLOW]]   # [shirt, trim] of the kit each side wears
+var kits := [{}, {}]   # the kit each side wears (TeamData.match_kits)
 var score := [0, 0]
 var shots := [0, 0]
 var state := State.THROW_UP
@@ -157,10 +158,11 @@ func _setup() -> void:
 	half_seconds = float(config.get("half_seconds", 180.0))
 	if config.has("seed"):
 		seed(int(config["seed"]))
+	kits = TeamData.match_kits(teams[0], teams[1])
 	for t in 2:
-		var c: Dictionary = teams[t].get("colors", {})
-		colors[t] = [Color.from_string(c.get("primary", "#cc2222"), Color.RED),
-			Color.from_string(c.get("secondary", "#ffffff"), Color.WHITE)]
+		var c: Dictionary = kits[t]
+		colors[t] = [Color.from_string(str(c.get("primary", "#cc2222")), Color.RED),
+			Color.from_string(str(c.get("secondary", "#ffffff")), Color.WHITE)]
 		for pd in TeamData.starting_twelve(teams[t]):
 			var p := Player.new()
 			p.team = t
@@ -172,17 +174,10 @@ func _setup() -> void:
 			Body.setup(p)
 			squads[t].append(p)
 			players.append(p)
-	# Clash check: if both teams wear similar colours, the away side switches.
-	if _color_close(colors[0][0], colors[1][0]):
-		colors[1] = [colors[1][1], colors[1][0]]
 	referee.setup(self)
 	_start_throw_up()
 	if human_side >= 0:
 		human = _nearest_outfield(human_side, ball_pos, null)
-
-
-func _color_close(a: Color, b: Color) -> bool:
-	return abs(a.r - b.r) + abs(a.g - b.g) + abs(a.b - b.b) < 0.35
 
 
 # ---------------------------------------------------------------- main loop

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "note": "Clubs from shinty.com/clubs/ (read 2026-09-27). Players and ratings are made-up placeholders, rated by the club's listed league. Kingussie and Aberdour are listed first as the default fixture. Kit colours are placeholders unless colors.placeholder is false. Ratings run 1-99; the first player at each position starts, the rest are substitutes.",
+  "note": "Clubs from shinty.com/clubs/ (read 2026-09-27). Players and ratings are made-up placeholders, rated by the club's listed league. Kingussie and Aberdour are listed first as the default fixture. Kits: colors holds the home kit (primary shirt, secondary trim, shorts, socks, optional pattern hoops/stripes) and colors.away the change kit, worn when the home kit would clash. colors.source is \"club\" when the colours come from the club (website, kit shop or shinty.com) and \"crest\" when they are taken from the club crest. Ratings run 1-99; the first player at each position starts, the rest are substitutes.",
   "teams": [
     {
       "id": "kingussie",
@@ -10,9 +10,18 @@
       "ground": "The Dell",
       "league": "",
       "colors": {
-        "primary": "#b3122e",
-        "secondary": "#f2f2f2",
-        "placeholder": true
+        "primary": "#c8102e",
+        "secondary": "#1f4fb8",
+        "shorts": "#16254f",
+        "socks": "#c8102e",
+        "pattern": "hoops",
+        "away": {
+          "primary": "#f4f4f4",
+          "secondary": "#c8102e",
+          "shorts": "#16254f",
+          "socks": "#f4f4f4"
+        },
+        "source": "club"
       },
       "players": [
         {
@@ -169,9 +178,17 @@
       "ground": "Silversands",
       "league": "South Divisions 1 & 2",
       "colors": {
-        "primary": "#1f4fa3",
-        "secondary": "#ffd23f",
-        "placeholder": true
+        "primary": "#16161a",
+        "secondary": "#f4f4f4",
+        "shorts": "#16161a",
+        "socks": "#f4f4f4",
+        "away": {
+          "primary": "#f4f4f4",
+          "secondary": "#16161a",
+          "shorts": "#f4f4f4",
+          "socks": "#16161a"
+        },
+        "source": "club"
       },
       "players": [
         {
@@ -328,9 +345,17 @@
       "ground": "",
       "league": "",
       "colors": {
-        "primary": "#1f4fa3",
-        "secondary": "#ffffff",
-        "placeholder": false
+        "primary": "#1f4fb8",
+        "secondary": "#f4f4f4",
+        "shorts": "#f4f4f4",
+        "socks": "#1f4fb8",
+        "away": {
+          "primary": "#f4f4f4",
+          "secondary": "#1f4fb8",
+          "shorts": "#1f4fb8",
+          "socks": "#f4f4f4"
+        },
+        "source": "club"
       },
       "players": [
         {
@@ -525,7 +550,15 @@
       "colors": {
         "primary": "#c8102e",
         "secondary": "#f2b705",
-        "placeholder": false
+        "shorts": "#16161a",
+        "socks": "#c8102e",
+        "away": {
+          "primary": "#16161a",
+          "secondary": "#f2b705",
+          "shorts": "#16161a",
+          "socks": "#16161a"
+        },
+        "source": "club"
       },
       "players": [
         {
@@ -718,9 +751,17 @@
       "ground": "The Dell, Kingussie",
       "league": "Premier League (women)",
       "colors": {
-        "primary": "#bf2fad",
-        "secondary": "#ffffff",
-        "placeholder": true
+        "primary": "#16254f",
+        "secondary": "#6cb4e4",
+        "shorts": "#16254f",
+        "socks": "#16254f",
+        "away": {
+          "primary": "#6cb4e4",
+          "secondary": "#16254f",
+          "shorts": "#16254f",
+          "socks": "#6cb4e4"
+        },
+        "source": "club"
       },
       "players": [
         {
@@ -913,9 +954,17 @@
       "ground": "Jubilee Park",
       "league": "",
       "colors": {
-        "primary": "#2fbfa7",
-        "secondary": "#1a1a1a",
-        "placeholder": true
+        "primary": "#c8102e",
+        "secondary": "#f4f4f4",
+        "shorts": "#f4f4f4",
+        "socks": "#c8102e",
+        "away": {
+          "primary": "#1f8a3b",
+          "secondary": "#f4f4f4",
+          "shorts": "#f4f4f4",
+          "socks": "#1f8a3b"
+        },
+        "source": "club"
       },
       "players": [
         {
@@ -1108,9 +1157,17 @@
       "ground": "",
       "league": "Mowi Premiership",
       "colors": {
-        "primary": "#bf7d2f",
-        "secondary": "#ffffff",
-        "placeholder": true
+        "primary": "#1f8a3b",
+        "secondary": "#f4f4f4",
+        "shorts": "#f4f4f4",
+        "socks": "#1f8a3b",
+        "away": {
+          "primary": "#f4f4f4",
+          "secondary": "#1f8a3b",
+          "shorts": "#1f8a3b",
+          "socks": "#f4f4f4"
+        },
+        "source": "club"
       },
       "players": [
         {
@@ -1303,9 +1360,18 @@
       "ground": "",
       "league": "North Division 2",
       "colors": {
-        "primary": "#532fbf",
-        "secondary": "#1a1a1a",
-        "placeholder": true
+        "primary": "#16161a",
+        "secondary": "#f2a900",
+        "shorts": "#16161a",
+        "socks": "#16161a",
+        "pattern": "hoops",
+        "away": {
+          "primary": "#f4f4f4",
+          "secondary": "#16161a",
+          "shorts": "#16161a",
+          "socks": "#f4f4f4"
+        },
+        "source": "crest"
       },
       "players": [
         {
@@ -1498,9 +1564,17 @@
       "ground": "The Meadows",
       "league": "South Division 1",
       "colors": {
-        "primary": "#35bf2f",
-        "secondary": "#ffffff",
-        "placeholder": true
+        "primary": "#c8102e",
+        "secondary": "#f4f4f4",
+        "shorts": "#f4f4f4",
+        "socks": "#c8102e",
+        "away": {
+          "primary": "#f4f4f4",
+          "secondary": "#c8102e",
+          "shorts": "#c8102e",
+          "socks": "#f4f4f4"
+        },
+        "source": "club"
       },
       "players": [
         {
@@ -1693,9 +1767,17 @@
       "ground": "Castle Leod",
       "league": "",
       "colors": {
-        "primary": "#bf2f5f",
-        "secondary": "#1a1a1a",
-        "placeholder": true
+        "primary": "#6cb4e4",
+        "secondary": "#16254f",
+        "shorts": "#16254f",
+        "socks": "#6cb4e4",
+        "away": {
+          "primary": "#16254f",
+          "secondary": "#6cb4e4",
+          "shorts": "#16254f",
+          "socks": "#16254f"
+        },
+        "source": "club"
       },
       "players": [
         {
@@ -1888,9 +1970,18 @@
       "ground": "The Meadows, Edinburgh",
       "league": "Youth leagues (CSYSA, U14s)",
       "colors": {
-        "primary": "#2f89bf",
-        "secondary": "#ffffff",
-        "placeholder": true
+        "primary": "#1f8a3b",
+        "secondary": "#1f4fb8",
+        "shorts": "#1f4fb8",
+        "socks": "#1f8a3b",
+        "pattern": "hoops",
+        "away": {
+          "primary": "#c8102e",
+          "secondary": "#f4f4f4",
+          "shorts": "#f4f4f4",
+          "socks": "#c8102e"
+        },
+        "source": "club"
       },
       "players": [
         {
@@ -2083,9 +2174,17 @@
       "ground": "",
       "league": "Mowi Premiership",
       "colors": {
-        "primary": "#b3bf2f",
-        "secondary": "#1a1a1a",
-        "placeholder": true
+        "primary": "#f6c700",
+        "secondary": "#16161a",
+        "shorts": "#16161a",
+        "socks": "#f6c700",
+        "away": {
+          "primary": "#16161a",
+          "secondary": "#f6c700",
+          "shorts": "#16161a",
+          "socks": "#16161a"
+        },
+        "source": "club"
       },
       "players": [
         {
@@ -2278,9 +2377,18 @@
       "ground": "",
       "league": "Mixed 6s team in development",
       "colors": {
-        "primary": "#a12fbf",
-        "secondary": "#ffffff",
-        "placeholder": true
+        "primary": "#1f4fb8",
+        "secondary": "#f4f4f4",
+        "shorts": "#f4f4f4",
+        "socks": "#1f4fb8",
+        "pattern": "stripes",
+        "away": {
+          "primary": "#16161a",
+          "secondary": "#f4f4f4",
+          "shorts": "#16161a",
+          "socks": "#16161a"
+        },
+        "source": "club"
       },
       "players": [
         {
@@ -2473,9 +2581,17 @@
       "ground": "An Aird",
       "league": "Mowi Premiership",
       "colors": {
-        "primary": "#2fbf77",
-        "secondary": "#1a1a1a",
-        "placeholder": true
+        "primary": "#f6c700",
+        "secondary": "#16161a",
+        "shorts": "#16161a",
+        "socks": "#f6c700",
+        "away": {
+          "primary": "#16161a",
+          "secondary": "#f6c700",
+          "shorts": "#16161a",
+          "socks": "#16161a"
+        },
+        "source": "club"
       },
       "players": [
         {
@@ -2668,9 +2784,17 @@
       "ground": "Peterson Park, Yoker",
       "league": "",
       "colors": {
-        "primary": "#bf4d2f",
-        "secondary": "#ffffff",
-        "placeholder": true
+        "primary": "#16254f",
+        "secondary": "#f4f4f4",
+        "shorts": "#f4f4f4",
+        "socks": "#16254f",
+        "away": {
+          "primary": "#f4f4f4",
+          "secondary": "#16254f",
+          "shorts": "#16254f",
+          "socks": "#f4f4f4"
+        },
+        "source": "club"
       },
       "players": [
         {
@@ -2863,9 +2987,18 @@
       "ground": "",
       "league": "",
       "colors": {
-        "primary": "#2f3cbf",
-        "secondary": "#1a1a1a",
-        "placeholder": true
+        "primary": "#c8102e",
+        "secondary": "#16161a",
+        "shorts": "#16161a",
+        "socks": "#c8102e",
+        "pattern": "hoops",
+        "away": {
+          "primary": "#f4f4f4",
+          "secondary": "#c8102e",
+          "shorts": "#16161a",
+          "socks": "#f4f4f4"
+        },
+        "source": "club"
       },
       "players": [
         {
@@ -3058,9 +3191,17 @@
       "ground": "",
       "league": "",
       "colors": {
-        "primary": "#65bf2f",
-        "secondary": "#ffffff",
-        "placeholder": true
+        "primary": "#1f8a3b",
+        "secondary": "#16161a",
+        "shorts": "#16161a",
+        "socks": "#1f8a3b",
+        "away": {
+          "primary": "#e8731c",
+          "secondary": "#16161a",
+          "shorts": "#16161a",
+          "socks": "#e8731c"
+        },
+        "source": "club"
       },
       "players": [
         {
@@ -3253,9 +3394,17 @@
       "ground": "",
       "league": "",
       "colors": {
-        "primary": "#bf2f8f",
-        "secondary": "#1a1a1a",
-        "placeholder": true
+        "primary": "#f6c700",
+        "secondary": "#16161a",
+        "shorts": "#16161a",
+        "socks": "#f6c700",
+        "away": {
+          "primary": "#16161a",
+          "secondary": "#f4f4f4",
+          "shorts": "#16161a",
+          "socks": "#16161a"
+        },
+        "source": "crest"
       },
       "players": [
         {
@@ -3448,9 +3597,17 @@
       "ground": "Bught Park",
       "league": "",
       "colors": {
-        "primary": "#2fb9bf",
-        "secondary": "#ffffff",
-        "placeholder": true
+        "primary": "#c8102e",
+        "secondary": "#16254f",
+        "shorts": "#16254f",
+        "socks": "#c8102e",
+        "away": {
+          "primary": "#f4f4f4",
+          "secondary": "#16254f",
+          "shorts": "#16254f",
+          "socks": "#f4f4f4"
+        },
+        "source": "club"
       },
       "players": [
         {
@@ -3643,9 +3800,17 @@
       "ground": "Canal Parks",
       "league": "Mowi National",
       "colors": {
-        "primary": "#bf9b2f",
-        "secondary": "#1a1a1a",
-        "placeholder": true
+        "primary": "#1f4fb8",
+        "secondary": "#f4f4f4",
+        "shorts": "#f4f4f4",
+        "socks": "#1f4fb8",
+        "away": {
+          "primary": "#f4f4f4",
+          "secondary": "#1f4fb8",
+          "shorts": "#16254f",
+          "socks": "#f4f4f4"
+        },
+        "source": "club"
       },
       "players": [
         {
@@ -3838,9 +4003,17 @@
       "ground": "",
       "league": "",
       "colors": {
-        "primary": "#712fbf",
-        "secondary": "#ffffff",
-        "placeholder": true
+        "primary": "#7a1f3d",
+        "secondary": "#16161a",
+        "shorts": "#16161a",
+        "socks": "#7a1f3d",
+        "away": {
+          "primary": "#f4f4f4",
+          "secondary": "#7a1f3d",
+          "shorts": "#7a1f3d",
+          "socks": "#f4f4f4"
+        },
+        "source": "club"
       },
       "players": [
         {
@@ -4033,9 +4206,17 @@
       "ground": "",
       "league": "Mowi Premiership",
       "colors": {
-        "primary": "#bf2f42",
-        "secondary": "#ffffff",
-        "placeholder": true
+        "primary": "#c8102e",
+        "secondary": "#16161a",
+        "shorts": "#16161a",
+        "socks": "#c8102e",
+        "away": {
+          "primary": "#16161a",
+          "secondary": "#c8102e",
+          "shorts": "#16161a",
+          "socks": "#16161a"
+        },
+        "source": "crest"
       },
       "players": [
         {
@@ -4228,9 +4409,17 @@
       "ground": "",
       "league": "Mowi Premiership",
       "colors": {
-        "primary": "#1d3fbb",
-        "secondary": "#ffffff",
-        "placeholder": false
+        "primary": "#1f4fb8",
+        "secondary": "#f4f4f4",
+        "shorts": "#f4f4f4",
+        "socks": "#c8102e",
+        "away": {
+          "primary": "#f4f4f4",
+          "secondary": "#1f4fb8",
+          "shorts": "#1f4fb8",
+          "socks": "#c8102e"
+        },
+        "source": "club"
       },
       "players": [
         {
@@ -4423,9 +4612,18 @@
       "ground": "",
       "league": "",
       "colors": {
-        "primary": "#95bf2f",
-        "secondary": "#ffffff",
-        "placeholder": true
+        "primary": "#1f4fb8",
+        "secondary": "#16161a",
+        "shorts": "#16161a",
+        "socks": "#1f4fb8",
+        "pattern": "hoops",
+        "away": {
+          "primary": "#f5d000",
+          "secondary": "#16161a",
+          "shorts": "#16161a",
+          "socks": "#f5d000"
+        },
+        "source": "club"
       },
       "players": [
         {
@@ -4618,9 +4816,18 @@
       "ground": "",
       "league": "Mowi National",
       "colors": {
-        "primary": "#be2fbf",
-        "secondary": "#1a1a1a",
-        "placeholder": true
+        "primary": "#c8102e",
+        "secondary": "#f4f4f4",
+        "shorts": "#f4f4f4",
+        "socks": "#c8102e",
+        "pattern": "hoops",
+        "away": {
+          "primary": "#16254f",
+          "secondary": "#f4f4f4",
+          "shorts": "#16254f",
+          "socks": "#16254f"
+        },
+        "source": "club"
       },
       "players": [
         {
@@ -4813,9 +5020,17 @@
       "ground": "",
       "league": "",
       "colors": {
-        "primary": "#2fbf94",
-        "secondary": "#ffffff",
-        "placeholder": true
+        "primary": "#1f4fb8",
+        "secondary": "#f4f4f4",
+        "shorts": "#f4f4f4",
+        "socks": "#1f4fb8",
+        "away": {
+          "primary": "#f4f4f4",
+          "secondary": "#1f4fb8",
+          "shorts": "#1f4fb8",
+          "socks": "#f4f4f4"
+        },
+        "source": "club"
       },
       "players": [
         {
@@ -5008,9 +5223,17 @@
       "ground": "",
       "league": "",
       "colors": {
-        "primary": "#bf6b2f",
-        "secondary": "#1a1a1a",
-        "placeholder": true
+        "primary": "#f4f4f4",
+        "secondary": "#16161a",
+        "shorts": "#16161a",
+        "socks": "#f4f4f4",
+        "away": {
+          "primary": "#1f4fb8",
+          "secondary": "#16161a",
+          "shorts": "#16161a",
+          "socks": "#1f4fb8"
+        },
+        "source": "club"
       },
       "players": [
         {
@@ -5203,9 +5426,17 @@
       "ground": "",
       "league": "",
       "colors": {
-        "primary": "#412fbf",
-        "secondary": "#ffffff",
-        "placeholder": true
+        "primary": "#1f4fb8",
+        "secondary": "#f4f4f4",
+        "shorts": "#16254f",
+        "socks": "#1f4fb8",
+        "away": {
+          "primary": "#f4f4f4",
+          "secondary": "#1f4fb8",
+          "shorts": "#16254f",
+          "socks": "#f4f4f4"
+        },
+        "source": "club"
       },
       "players": [
         {
@@ -5398,9 +5629,17 @@
       "ground": "",
       "league": "Mowi Premiership",
       "colors": {
-        "primary": "#48bf2f",
-        "secondary": "#1a1a1a",
-        "placeholder": true
+        "primary": "#c8102e",
+        "secondary": "#16161a",
+        "shorts": "#16161a",
+        "socks": "#c8102e",
+        "away": {
+          "primary": "#f4f4f4",
+          "secondary": "#16161a",
+          "shorts": "#16161a",
+          "socks": "#f4f4f4"
+        },
+        "source": "club"
       },
       "players": [
         {
@@ -5593,9 +5832,18 @@
       "ground": "",
       "league": "Mowi National (withdrew August 2026)",
       "colors": {
-        "primary": "#bf2f72",
-        "secondary": "#ffffff",
-        "placeholder": true
+        "primary": "#1f8a3b",
+        "secondary": "#f4f4f4",
+        "shorts": "#f4f4f4",
+        "socks": "#1f8a3b",
+        "pattern": "stripes",
+        "away": {
+          "primary": "#16161a",
+          "secondary": "#1f8a3b",
+          "shorts": "#16161a",
+          "socks": "#16161a"
+        },
+        "source": "club"
       },
       "players": [
         {
@@ -5788,9 +6036,17 @@
       "ground": "Pairc nan Laoch",
       "league": "Mowi Premiership",
       "colors": {
-        "primary": "#2f9bbf",
-        "secondary": "#1a1a1a",
-        "placeholder": true
+        "primary": "#16254f",
+        "secondary": "#6cb4e4",
+        "shorts": "#16254f",
+        "socks": "#16254f",
+        "away": {
+          "primary": "#6cb4e4",
+          "secondary": "#16254f",
+          "shorts": "#f4f4f4",
+          "socks": "#6cb4e4"
+        },
+        "source": "club"
       },
       "players": [
         {
@@ -5983,9 +6239,17 @@
       "ground": "",
       "league": "Development squad; women in South Division 2",
       "colors": {
-        "primary": "#bfb82f",
-        "secondary": "#ffffff",
-        "placeholder": true
+        "primary": "#e8731c",
+        "secondary": "#f4f4f4",
+        "shorts": "#16161a",
+        "socks": "#e8731c",
+        "away": {
+          "primary": "#f4f4f4",
+          "secondary": "#e8731c",
+          "shorts": "#16161a",
+          "socks": "#f4f4f4"
+        },
+        "source": "crest"
       },
       "players": [
         {
@@ -6178,9 +6442,17 @@
       "ground": "Strachurmore and Dunoon Stadium",
       "league": "Mowi South Division 2",
       "colors": {
-        "primary": "#8e2fbf",
-        "secondary": "#1a1a1a",
-        "placeholder": true
+        "primary": "#6cb4e4",
+        "secondary": "#f5d000",
+        "shorts": "#16254f",
+        "socks": "#6cb4e4",
+        "away": {
+          "primary": "#16254f",
+          "secondary": "#6cb4e4",
+          "shorts": "#16254f",
+          "socks": "#16254f"
+        },
+        "source": "crest"
       },
       "players": [
         {
@@ -6373,9 +6645,17 @@
       "ground": "",
       "league": "North Division 1",
       "colors": {
-        "primary": "#2fbf64",
-        "secondary": "#ffffff",
-        "placeholder": true
+        "primary": "#7a1f3d",
+        "secondary": "#f4f4f4",
+        "shorts": "#f4f4f4",
+        "socks": "#7a1f3d",
+        "away": {
+          "primary": "#f4f4f4",
+          "secondary": "#7a1f3d",
+          "shorts": "#f4f4f4",
+          "socks": "#7a1f3d"
+        },
+        "source": "crest"
       },
       "players": [
         {
@@ -6568,9 +6848,17 @@
       "ground": "Grantown Grammar School fields",
       "league": "Mowi National (women); men inactive",
       "colors": {
-        "primary": "#bf3b2f",
-        "secondary": "#1a1a1a",
-        "placeholder": true
+        "primary": "#16161a",
+        "secondary": "#2f6fd0",
+        "shorts": "#16161a",
+        "socks": "#16161a",
+        "away": {
+          "primary": "#2f6fd0",
+          "secondary": "#f4f4f4",
+          "shorts": "#f4f4f4",
+          "socks": "#2f6fd0"
+        },
+        "source": "crest"
       },
       "players": [
         {
@@ -6763,9 +7051,17 @@
       "ground": "Peffermill Playing Fields",
       "league": "Mowi South Division 2",
       "colors": {
-        "primary": "#2f4ebf",
-        "secondary": "#ffffff",
-        "placeholder": true
+        "primary": "#f6c700",
+        "secondary": "#16161a",
+        "shorts": "#16161a",
+        "socks": "#f6c700",
+        "away": {
+          "primary": "#16161a",
+          "secondary": "#f6c700",
+          "shorts": "#16161a",
+          "socks": "#16161a"
+        },
+        "source": "crest"
       },
       "players": [
         {
@@ -6960,7 +7256,15 @@
       "colors": {
         "primary": "#5b2a86",
         "secondary": "#f5d000",
-        "placeholder": false
+        "shorts": "#16161a",
+        "socks": "#5b2a86",
+        "away": {
+          "primary": "#f5d000",
+          "secondary": "#5b2a86",
+          "shorts": "#16161a",
+          "socks": "#f5d000"
+        },
+        "source": "club"
       },
       "players": [
         {
