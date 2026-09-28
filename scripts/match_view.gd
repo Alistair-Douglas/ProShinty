@@ -22,6 +22,8 @@ var shy_look := Vector3.ZERO
 var shy_eye := Vector3.ZERO
 var director: ShintyTVDirector
 var aim_arrow: Node3D     # where the player is aiming a shy, hit-out or corner
+var crowd: ShintyCrowd
+var goal_judges: ShintyGoalJudges
 
 const SKIN := Color(0.93, 0.76, 0.62)
 const WOOD := Color(0.55, 0.36, 0.18)
@@ -57,6 +59,7 @@ func _ready() -> void:
 	add_child(camera)
 	_build_boards()
 	_build_aim_arrow()
+	_build_crowd()
 	director = ShintyTVDirector.new()
 	director.name = "TVDirector"
 	add_child(director)
@@ -78,6 +81,7 @@ func w(v: Vector2, height: float = 0.0) -> Vector3:
 # ---------------------------------------------------------------- per frame
 
 func _process(delta: float) -> void:
+	goal_judges.step(delta)
 	if director.playing:
 		director.step(delta)
 		return
@@ -256,6 +260,21 @@ func _build_boards() -> void:
 	var s := 1.0 / ShintyMatchAdapter.YARD  # yards per metre
 	for r in pitch.board_rows():
 		ShintyAdBoard.place_row(holder, r[0], r[1], Vector3.ZERO, s, 6.0, true, r[2])
+
+
+## Spectators round the ground and a goal judge behind each hail. The crowd
+## wears the colours of the kits the teams are playing in, and is thinner on
+## lower graphics settings.
+func _build_crowd() -> void:
+	crowd = ShintyCrowd.new()
+	crowd.name = "Crowd"
+	crowd.unit_scale = 1.0 / ShintyMatchAdapter.YARD
+	add_child(crowd)
+	crowd.build(pitch, m.colors, pitch.graphics_quality)
+	goal_judges = ShintyGoalJudges.new()
+	goal_judges.name = "GoalJudges"
+	add_child(goal_judges)
+	goal_judges.setup(m, self, crowd)
 
 
 ## The referee: black kit (a bright top if a team wears black), no helmet and
