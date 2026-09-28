@@ -941,10 +941,10 @@ func _backswing(size: float) -> Array:
 	var p := Vector3(0.14, -0.08, -0.26).lerp(Vector3(0.28, 0.5, 0.0), size)
 	var d := Vector3(0.25, -0.85, -0.45).normalized().slerp(Vector3(0.08, 0.9, 0.42).normalized(), size)
 	# A big hit is wound right up: hands high by the back shoulder and the
-	# caman laid back behind the head.
+	# caman raised up and back over it.
 	var big := _big(size)
 	p = p.lerp(Vector3(0.24, 0.64, 0.06), big)
-	d = d.slerp(Vector3(0.05, 0.5, 0.86).normalized(), big)
+	d = d.slerp(Vector3(0.06, 0.8, 0.6).normalized(), big)
 	return [p, d]
 
 
