@@ -32,6 +32,9 @@ const DRIBBLE_LOSE := 3.2    # yards: a touch this far from the carrier has got 
 const SHY_TOSS := 6.5        # yd/s: how hard a shy is thrown up
 const SHY_ARM := 0.8         # the shy is tossed an arm's length in front
 const SHY_ATTEMPTS := 3      # tries at a clean strike before the shy goes over
+const SHY_MIN_SPEED := 14.0  # yd/s: the softest shy
+const SHY_MAX_SPEED := 38.0  # and the hardest
+const RESTART_AIM_RATE := 1.2  # rad/s: how fast the player turns their aim at a restart
 const SHY_HOLD := 0.35       # the ball is lifted in the hand this long before it leaves it
 const THROW_UP_SET := 1.2   # seconds the pair stand ready before the ball goes up
 const THROW_UP_TOSS := 8.0   # yd/s: the referee's throw
@@ -149,6 +152,8 @@ var throw_up_swing := {}           # Player -> when they swing at it
 var shy_lift: Player = null        # taking a shy with the ball still in the hand
 var shy_lift_t := 0.0
 var shy_lift_from := Vector3.ZERO
+var restart_aim := 0.0             # the player's aim at a restart, off restart_base
+var restart_base := Vector2.RIGHT  # straight in from the line (a shy) or the default aim
 var dribble_vel := Vector2.ZERO    # a dribbled ball rolling ahead of its carrier
 var dribble_taps := 0
 
@@ -687,6 +692,15 @@ func _human_control(dt: float) -> void:
 			charge = -1.0
 			return
 	var aim := mv.normalized() if mv.length() > 0.15 else p.facing
+	if p == set_piece_taker_now() or (p.shy_ready and carrier == p):
+		# Standing over a restart: the stick turns the aim smoothly, within
+		# a half circle (for a shy, from up the line round to down the line).
+		p.desired = Vector2.ZERO
+		if mv.length() > 0.15:
+			var want: float = clamp(restart_base.angle_to(mv), -PI / 2.0, PI / 2.0)
+			restart_aim = move_toward(restart_aim, want, RESTART_AIM_RATE * dt)
+		p.facing = restart_base.rotated(restart_aim)
+		aim = p.facing
 	if p == set_piece_taker_now() and set_piece_t < SET_PIECE_MIN:
 		return   # play has stopped: let everyone get set first
 	if Input.is_action_just_pressed("shoot"):
@@ -829,9 +843,9 @@ func _throw_up_shy(p: Player) -> void:
 	var a := 0.5 * GRAVITY
 	var c := Body.OVERHEAD - 1.4
 	p.swing_t = SHY_HOLD + (SHY_TOSS + sqrt(SHY_TOSS * SHY_TOSS - 4.0 * a * c)) / (2.0 * a)
-	# High and long, whatever the taker was going to do with it.
+	# Up and over, as hard as the taker chose to hit it.
 	var req: Dictionary = p.swing_req
-	req["speed"] = max(req["speed"], 22.0)
+	req["speed"] = clamp(req["speed"], SHY_MIN_SPEED, SHY_MAX_SPEED)
 	req["loft"] = max(req["loft"], req["speed"] * 0.45)
 	req["kind"] = "shy"
 	for o in players:
@@ -879,7 +893,10 @@ func _contact(p: Player) -> void:
 	if not shy and _nearest_opponent_dist(p) < 2.0:
 		diff += 0.2
 	if shy:
-		diff += 0.1
+		# Overhead with the back of the stick: the harder you go at it, the
+		# likelier you are to miss it or shank it off the heel or toe.
+		var force: float = clamp((req["speed"] - SHY_MIN_SPEED) / (SHY_MAX_SPEED - SHY_MIN_SPEED), 0.0, 1.0)
+		diff += 0.05 + force * force * 0.7
 	var res := ShintyMatchAdapter.swing_like_match(p.data, req["dir"], req["speed"], req["loft"], req["skill_key"],
 		ball_vel, ball_vz, _skill_mod(p.team), clamp(diff, 0.0, 1.0), offset)
 	p.overswing = 0.0
@@ -1383,7 +1400,8 @@ func _check_ball_out() -> void:
 			var gx: float = abs(end_x - D_RADIUS)
 			_restart(defending, Vector2(gx, PITCH.y / 2.0 + randf_range(-4.0, 4.0)), "Hit-out")
 	elif ball_pos.y < 0.0 or ball_pos.y > PITCH.y:
-		var spot := Vector2(clamp(ball_pos.x, 1.0, PITCH.x - 1.0), clamp(ball_pos.y, 0.5, PITCH.y - 0.5))
+		# The shy is taken from the touchline where it went out.
+		var spot := Vector2(clamp(ball_pos.x, 1.0, PITCH.x - 1.0), 0.0 if ball_pos.y < 0.0 else PITCH.y)
 		_restart(1 - last_team if last_team >= 0 else 0, spot, "Shy")
 
 
@@ -1396,12 +1414,21 @@ func _restart(team: int, spot: Vector2, label: String) -> void:
 		p.swing_t = -1.0
 		p.shy_ready = false
 		p.shy_toss = false
-	taker.pos = spot - toward * (PLAYER_R + 0.55)
-	taker.pos = Vector2(clamp(taker.pos.x, 1.5, PITCH.x - 1.5), clamp(taker.pos.y, 1.5, PITCH.y - 1.5))
+	if label == "Shy":
+		# Toes just behind the line, facing straight in.
+		var inward := Vector2(0, 1) if spot.y < PITCH.y / 2.0 else Vector2(0, -1)
+		toward = inward
+		taker.pos = spot - inward * 0.2
+		spot += inward * 0.35
+	else:
+		taker.pos = spot - toward * (PLAYER_R + 0.55)
+		taker.pos = Vector2(clamp(taker.pos.x, 1.5, PITCH.x - 1.5), clamp(taker.pos.y, 1.5, PITCH.y - 1.5))
 	taker.vel = Vector2.ZERO
 	taker.facing = toward
 	taker.stagger = 0.0
 	taker.stick = Body.rest_spot(taker)
+	restart_base = toward
+	restart_aim = 0.0
 	# The ball is placed on the spot, not left where it went out.
 	ball_pos = spot
 	ball_vel = Vector2.ZERO
