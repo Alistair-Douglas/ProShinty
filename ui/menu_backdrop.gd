@@ -34,6 +34,9 @@ var _venue_timer: SceneTreeTimer
 ## No scenery or sun shadows: for tests on slow software renderers.
 static var lite := false
 
+## Where the two camans cross over the centre spot (metres).
+const THROW_UP_CROSS := Vector3(0.0, 2.3, 0.15)
+
 
 func _ready() -> void:
 	pitch = PitchScene.instantiate()
@@ -49,16 +52,16 @@ func _ready() -> void:
 			sun.shadow_enabled = false
 
 	var dummy := {"number": 0, "position": "CF", "pace": 70, "tackling": 60}
-	home_player = _hero(dummy, Vector3(-0.62, 0, 0), -PI * 0.5)
-	away_player = _hero(dummy, Vector3(0.62, 0, 0), PI * 0.5)
+	home_player = _hero(dummy, Vector3(-0.5, 0, 0.15), -PI * 0.5)
+	away_player = _hero(dummy, Vector3(0.5, 0, 0.15), PI * 0.5)
 	ball = ShintyBallModel.new()
 	ball.simulate = false
 	ball.auto_find_hails = false
 	ball.display_scale = 1.4
 	add_child(ball)
 	ball.place(Vector3(0, 0.04, 0.15))
-	home_player.look_at_point(Vector3(0, 0.1, 0.15))
-	away_player.look_at_point(Vector3(0, 0.1, 0.15))
+	home_player.look_at_point(Vector3(0, 1.4, 0.15))
+	away_player.look_at_point(Vector3(0, 1.4, 0.15))
 
 	camera = Camera3D.new()
 	camera.fov = 42.0
@@ -77,7 +80,9 @@ func _hero(player: Dictionary, pos: Vector3, yaw: float) -> ShintyPlayerModel:
 	m.setup(player)
 	m.position = pos
 	m.rotation.y = yaw
-	m.charge_swing()  # camans drawn back, ready for the ball
+	# The throw-up: face to face over the ball, camans raised and crossed
+	# high over the spot, waiting for the referee to throw it up.
+	m.set_reach(THROW_UP_CROSS, 1.0)
 	return m
 
 
