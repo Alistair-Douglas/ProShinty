@@ -82,6 +82,7 @@ func _ready() -> void:
 	_build_controls()
 	_build_designer()
 	_show("hub", true)
+	Music.play()
 	# Fade in over the first frames while the ground finishes building.
 	var fade := ColorRect.new()
 	fade.color = ShintyStyle.INK
@@ -513,8 +514,16 @@ func _build_controls() -> void:
 	gfx.size = Vector2(300, 74)
 	gfx.changed.connect(func(i): Game.set_graphics_quality(i))
 	s.add_child(gfx)
+	# Menu music volume (Music autoload), remembered like the graphics.
+	var mus := ShintyStepper.new("Music", Music.VOLUME_NAMES, Music.volume_step)
+	mus.position = Vector2(570, 586)
+	mus.size = Vector2(300, 74)
+	mus.changed.connect(func(i): Music.set_volume_step(i))
+	s.add_child(mus)
 	back.focus_neighbor_right = gfx.get_path()
 	gfx.focus_neighbor_left = back.get_path()
+	gfx.focus_neighbor_right = mus.get_path()
+	mus.focus_neighbor_left = gfx.get_path()
 	s.set_meta("first", back)
 
 
