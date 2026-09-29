@@ -34,6 +34,9 @@ const KEEP_CLEAR := {
 		[Vector2(-2.8, 4.2), Vector2(3.6, 2.6)],
 	],
 }
+## The team dugouts either side of halfway on the far side, at every ground
+## (scripts/subs_bench.gd builds them where a ground has none of its own).
+const DUGOUTS := [[Vector2(-12.0, -7.0), Vector2(6.0, 3.2)], [Vector2(6.0, -7.0), Vector2(6.0, 3.2)]]
 
 ## Most of the crowd follows one of the two teams and wears its colours
 ## (jacket in the main colour, scarf or hat in the second); the rest are
@@ -205,7 +208,7 @@ func _ok(pitch: ShintyPitch, p: Vector2, clear: Array) -> bool:
 
 static func _keep_clear(venue: int, hl: float, hw: float) -> Array:
 	var out := []
-	for r in KEEP_CLEAR.get(venue, []):
+	for r in KEEP_CLEAR.get(venue, []) + DUGOUTS:
 		var pos: Vector2 = r[0]
 		# The listed y is measured from the touchline on that side.
 		pos.y += -hw if pos.y < 0.0 else hw

@@ -32,6 +32,17 @@ func track(figure_list: Array, ball_node: Node3D) -> void:
 		_bone_counts.append(skel.get_bone_count() if skel else 0)
 
 
+## Start recording one more figure (a substitute coming on). Frames from
+## before it arrived show it hidden.
+func add_figure(f: Dictionary) -> void:
+	figures.append(f)
+	var model: Node3D = f["model"]
+	var skel := model.find_child("Skeleton3D", true, false) as Skeleton3D
+	_skels.append(skel)
+	_camans.append(model.find_child("Caman", true, false))
+	_bone_counts.append(skel.get_bone_count() if skel else 0)
+
+
 ## Store the current frame. Call once per drawn frame, after the view updated.
 func record(delta: float) -> void:
 	time += delta
@@ -71,9 +82,12 @@ func show_at(t: float) -> Vector3:
 	var span: float = b["t"] - a["t"]
 	var k := clampf((t - a["t"]) / span, 0.0, 1.0) if span > 0.0 else 0.0
 	for fi in figures.size():
+		var root: Node3D = figures[fi]["root"]
+		if fi >= a["f"].size() or fi >= b["f"].size():
+			root.visible = false   # not on yet
+			continue
 		var fa: Array = a["f"][fi]
 		var fb: Array = b["f"][fi]
-		var root: Node3D = figures[fi]["root"]
 		root.transform = (fa[0] as Transform3D).interpolate_with(fb[0], k)
 		root.visible = fa[1]
 		var skel: Skeleton3D = _skels[fi]

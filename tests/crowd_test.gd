@@ -54,7 +54,8 @@ func _check_grounds() -> void:
 			counts.append(crowd.count)
 			crowd.free()
 		print("%s: crowd Low/Medium/High %s" % [ShintyPitch.VENUE_NAMES[v], counts])
-		_check(counts[0] > 60 and counts[0] < counts[1] and counts[1] < counts[2] and counts[2] < 1500,
+		# Tighnabruaich's small ground holds about 55 on Low once the dugouts are kept clear.
+		_check(counts[0] > 45 and counts[0] < counts[1] and counts[1] < counts[2] and counts[2] < 1500,
 			"%s crowd size scales with graphics" % ShintyPitch.VENUE_NAMES[v])
 		pitch.free()
 

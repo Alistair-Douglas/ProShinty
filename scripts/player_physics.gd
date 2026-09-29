@@ -203,7 +203,7 @@ static func _knock(m, p, dv: float, by) -> void:
 		p.stagger = clampf(0.35 + (dv - hold) * 0.25, 0.35, 1.3)
 		p.swing_t = -1.0
 		m.anim(p, "stumble")
-		m.events.append({"type": "knockdown", "team": p.team})
+		m.events.append({"type": "knockdown", "team": p.team, "on": p})
 		if p == m.carrier:
 			m.spill(p, by)
 	elif p == m.carrier and dv > hold * 0.55 and randf() < (dv / hold - 0.55) * 0.8:

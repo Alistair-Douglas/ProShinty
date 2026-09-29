@@ -7,6 +7,7 @@ extends Node3D
 
 const TeamData := preload("res://scripts/team_data.gd")
 const PitchScene := preload("res://pitch/shinty_pitch.tscn")
+const SubsBench := preload("res://scripts/subs_bench.gd")
 
 var m: Node  # the match (parent)
 var pitch: Node3D
@@ -24,6 +25,7 @@ var director: ShintyTVDirector
 var aim_arrow: Node3D     # where the player is aiming a shy, hit-out or corner
 var crowd: ShintyCrowd
 var goal_judges: ShintyGoalJudges
+var benches: Node3D       # substitutes sat in the dugouts (subs_bench.gd)
 
 const SKIN := Color(0.93, 0.76, 0.62)
 const WOOD := Color(0.55, 0.36, 0.18)
@@ -60,6 +62,10 @@ func _ready() -> void:
 	_build_boards()
 	_build_aim_arrow()
 	_build_crowd()
+	benches = SubsBench.new()
+	benches.name = "Benches"
+	add_child(benches)
+	benches.setup(self)
 	director = ShintyTVDirector.new()
 	director.name = "TVDirector"
 	add_child(director)
@@ -85,16 +91,26 @@ func _process(delta: float) -> void:
 	if director.playing:
 		director.step(delta)
 		return
+	for p in m.players:
+		if not figures.has(p):
+			_add_figure(p)   # a substitute coming on
 	for p in figures:
-		if p in m.players:
+		if p in m.players or p in m.subs.leaving:
 			_update_player(p, figures[p], delta)
 		else:
-			figures[p]["root"].visible = false  # sent off
+			figures[p]["root"].visible = false  # sent off, or subbed off and gone
+	benches.step()
 	_update_referee(delta)
 	_update_aim_arrow()
 	ball.position = w(m.ball_pos, m.ball_z + ShintyBallPhysics.RADIUS * ShintyMatchAdapter.TO_YARDS)
 	_update_camera(delta)
 	director.after_frame(delta)
+
+
+func _add_figure(p) -> void:
+	var f := _build_player(p)
+	figures[p] = f
+	director.replay.add_figure(f)
 
 
 func _update_player(p, f: Dictionary, delta: float) -> void:
