@@ -38,7 +38,7 @@ const RESTART_AIM_RATE := 1.2  # rad/s: how fast the player turns their aim at a
 const SHY_HOLD := 0.35       # the ball is lifted in the hand this long before it leaves it
 const THROW_UP_SET := 1.2   # seconds the pair stand ready before the ball goes up
 const THROW_UP_TOSS := 8.0   # yd/s: the referee's throw
-const THROW_UP_GAP := 0.42   # each centre stands this far from the spot: shoulder to shoulder
+const THROW_UP_GAP := 0.42   # each centre stands this far from the spot, face to face
 const SET_PIECE_PAUSE := 2.2 # hit-outs and corners: play stops while players get set
 const SET_PIECE_MIN := 1.0   # a human taker can't hit it before this
 const FEET_HEIGHT := 0.35     # yards: a ball below this is stopped with the feet
@@ -64,6 +64,7 @@ class Player:
 	var position_code: String
 	var role: String
 	var home: Vector2
+	var man: Player          # a back: the opposing forward they mark
 	var pos := Vector2.ZERO
 	var vel := Vector2.ZERO
 	var desired := Vector2.ZERO
@@ -126,6 +127,7 @@ var kits := [{}, {}]   # the kit each side wears (TeamData.match_kits)
 var score := [0, 0]
 var shots := [0, 0]
 var state := State.THROW_UP
+var fwd_shape := ["diamond", "diamond"]   # each side's front four: "diamond" or "square"
 var state_timer := 0.0
 var half := 1
 var clock := 0.0
@@ -220,10 +222,28 @@ func _setup() -> void:
 			Body.setup(p)
 			squads[t].append(p)
 			players.append(p)
+	# Each side's forwards line up in a diamond or a square (the backs then
+	# take the shape of the forwards they face).
+	for t in 2:
+		fwd_shape[t] = str(config.get("shapes", ["", ""])[t])
+		if not TeamData.FORWARD_SHAPES.has(fwd_shape[t]):
+			fwd_shape[t] = "square" if randf() < 0.4 else "diamond"
+	_apply_shapes()
 	referee.setup(self)
 	_start_throw_up()
 	if human_side >= 0:
 		human = _nearest_outfield(human_side, ball_pos, null)
+
+
+## Home spots from the two forward shapes, and each back's man to mark.
+func _apply_shapes() -> void:
+	for p in players:
+		p.home = TeamData.shaped_home(p.position_code, fwd_shape[p.team], fwd_shape[1 - p.team])
+		p.man = null
+		var code: String = TeamData.MARKS.get(p.position_code, "")
+		for o in squads[1 - p.team]:
+			if code != "" and o.position_code == code:
+				p.man = o
 
 
 # ---------------------------------------------------------------- main loop
@@ -307,14 +327,12 @@ func _start_throw_up() -> void:
 		p.throw_up = false
 		p.facing = Vector2(attack_dir[p.team], 0)
 		if p.position_code == "LM" and throw_up_pair.size() == p.team:
-			# The two centres stand shoulder to shoulder over the spot, each
-			# on his own side of it and side-on to the goals, facing opposite
-			# ways across the pitch with the left shoulder towards the goal
-			# he attacks (so the left shoulders meet). Camans raised and
+			# The two centres stand over the spot face to face across the
+			# pitch, each with his back to a touchline, camans raised and
 			# crossed high over the ball.
-			var up_pitch := Vector2(attack_dir[p.team], 0)
-			p.pos = PITCH / 2.0 - up_pitch * THROW_UP_GAP
-			p.facing = up_pitch.rotated(PI / 2.0)
+			var face := Vector2(attack_dir[p.team], 0).rotated(PI / 2.0)
+			p.pos = PITCH / 2.0 - face * THROW_UP_GAP
+			p.facing = face
 			p.throw_up = true
 			throw_up_pair.append(p)
 		p.vel = Vector2.ZERO
@@ -568,7 +586,18 @@ func _ai_team(t: int, dt: float) -> void:
 		for p in squads[t]:
 			if not p.is_keeper() and p != human:
 				ranked.append(p)
-		ranked.sort_custom(func(a, b): return a.pos.distance_squared_to(pt) < b.pos.distance_squared_to(pt))
+		# Backs stay with their forward and forwards stay up the park, so the
+		# ball is chased by whoever is nearest in the middle unless it's in
+		# a back's or forward's own part of the pitch.
+		var bx := own_frac(t, pt.x)
+		var cost := func(p: Player) -> float:
+			var d: float = p.pos.distance_to(pt)
+			if p.role == "DEF" and bx > 0.35:
+				d += 10.0
+			elif p.role == "FWD" and bx < 0.6:
+				d += 8.0
+			return d
+		ranked.sort_custom(func(a, b): return cost.call(a) < cost.call(b))
 		var n := 1
 		if t != human_side and (difficulty == 2 or own_frac(t, ball_pos.x) < 0.35):
 			n = 2

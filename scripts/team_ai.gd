@@ -12,9 +12,12 @@ extends RefCounted
 ##   overlap  - a wide player bursts past the carrier down the touchline
 ##   check    - a forward drops short towards the ball to receive it
 ##   hold     - keep width and shape, pushed up with the play
-## Out of possession: one player covers behind whoever is pressing, a few
-## pick up the most dangerous opponents goal-side, and the rest hold a compact
-## zonal shape that shifts with the ball.
+## The team plays a 4-3-4. Out of possession one or two press the ball (the
+## match picks them), a midfielder covers behind, and the backs stay
+## goal-side of the forwards they mark, so the back four take whatever shape,
+## diamond or square, the other side's forwards stand in. The other
+## midfielders hold a zonal shape that shifts with the ball, picking up
+## runners from deep.
 ## Forwards: shinty is man-marking, forward against back, so forwards hold
 ## their positions up the park whoever has the ball. They don't track back,
 ## support short or go wide on overlaps; the one thing they do is drop short
@@ -27,7 +30,7 @@ enum Job { HOLD, SUPPORT, RUN, OVERLAP, CHECK, COVER, MARK }
 const MAX_RUNNERS := 2        # forward runs at once, per team
 const SUPPORTERS := 2         # short options near the carrier
 const MARK_REFRESH := 0.4     # seconds between marking reassignments
-const MAX_MARKERS := 4        # man-marking the biggest threats; the rest is zonal
+const MAX_MARKERS := 2        # midfielders picking up runners from deep; the rest is zonal
 const MAX_CHECKS := 1         # forwards dropping short at once, per team
 
 
@@ -171,7 +174,7 @@ func _think_attack(p, pl: Plan) -> void:
 		return
 
 	# Overlap: a wide player behind the ball on the same flank goes round it.
-	var wide: bool = p.position_code in ["LHB", "RHB", "LM", "RM"]
+	var wide: bool = p.position_code in ["LM", "RM"]
 	var same_side: bool = sign(p.pos.y - m.PITCH.y / 2.0) == sign(ball.y - m.PITCH.y / 2.0)
 	if wide and same_side and holder != null and ahead < -2.0 and ahead > -22.0 \
 			and runners < MAX_RUNNERS and pl.run_cooldown <= 0.0 and ball_frac > 0.3 \
@@ -257,9 +260,12 @@ func _run_spot(p, ball: Vector2) -> Vector2:
 
 
 ## Formation spot, pushed further up when we have the ball so forwards stretch
-## the defence, and kept wide.
+## the defence, and kept wide. Backs stay goal-side of their forward, a bit
+## looser than when defending.
 func _hold_spot(p) -> Vector2:
 	var t: int = p.team
+	if p.role == "DEF" and p.man != null:
+		return _mark_spot(p, p.man, 6.0)
 	var h: Vector2 = m.home_world(p)
 	var push := 0.0
 	match p.role:
@@ -272,7 +278,7 @@ func _hold_spot(p) -> Vector2:
 		var line_x := _defensive_line_x(t)
 		if (h.x - line_x) * m.attack_dir[t] > 3.0:
 			h.x = line_x + m.attack_dir[t] * 3.0
-	if p.position_code in ["LHB", "LHF", "RHB", "RHF"]:
+	if p.position_code in ["LHF", "RHF"]:
 		h.y = lerp(h.y, 6.0 if p.home.y < 0.5 else m.PITCH.y - 6.0, 0.3)
 	return _in_pitch(h)
 
@@ -283,6 +289,9 @@ func _pick_supporters(t: int, chasers: Array) -> void:
 	for p in m.squads[t]:
 		if p.is_keeper() or p == focus_player[t] or p == m.human or p in chasers or p.role == "FWD":
 			continue
+		if p.role == "DEF" and m.own_frac(t, ball.x) > 0.3:
+			continue   # the backs stay with their forwards
+
 		var pl: Plan = plans[p]
 		if pl.job in [Job.RUN, Job.OVERLAP] and pl.timer > 0.0:
 			continue
@@ -303,6 +312,15 @@ func _defend(p, pl: Plan) -> void:
 		pl.job = Job.COVER
 		pl.target = ball + (goal - ball).normalized() * 7.0
 		pl.sprint = p.pos.distance_to(pl.target) > 6.0
+		return
+	if p.role == "DEF" and p.man != null:
+		# Man-marking: goal-side of their forward, tighter the nearer the
+		# ball, so the back four take the shape the forwards stand in.
+		var man = p.man
+		var near: float = clamp(1.0 - man.pos.distance_to(ball) / 35.0, 0.0, 1.0)
+		pl.job = Job.MARK
+		pl.target = _mark_spot(p, man, lerp(4.5, 2.0, near))
+		pl.sprint = p.pos.distance_to(pl.target) > 4.0 or man.vel.length() > 6.0
 		return
 	var o = marks[t].get(p)
 	if o != null:
@@ -325,6 +343,19 @@ func _defend(p, pl: Plan) -> void:
 		pl.sprint = p.pos.distance_to(pl.target) > 6.0   # get back out to your spot
 
 
+## Goal-side of `man`, `gap` yards back towards our goal and leaning a little
+## towards the ball. A back follows a forward who drops deep only so far.
+func _mark_spot(p, man, gap: float) -> Vector2:
+	var t: int = p.team
+	var goal: Vector2 = m.own_goal(t)
+	var ball: Vector2 = focus[t]
+	var spot: Vector2 = man.pos + (goal - man.pos).normalized() * gap + man.vel * 0.2
+	spot = spot.lerp(spot.lerp(ball, 0.25), clamp(1.0 - man.pos.distance_to(ball) / 40.0, 0.0, 1.0) * 0.4)
+	if m.own_frac(t, spot.x) > 0.55:
+		spot.x = m.frac_to_world(t, Vector2(0.55, 0.0)).x
+	return _in_pitch(spot)
+
+
 ## Formation spot squeezed towards the ball and pulled back towards our goal.
 func _shape_spot(p) -> Vector2:
 	var t: int = p.team
@@ -342,8 +373,8 @@ func _pick_cover(t: int, chasers: Array) -> void:
 	var best = null
 	var best_d := INF
 	for p in m.squads[t]:
-		if p.is_keeper() or p == m.human or p in chasers:
-			continue
+		if p.is_keeper() or p == m.human or p in chasers or p.role != "MID":
+			continue   # the backs are on their men, the forwards up the park
 		var d: float = p.pos.distance_to(ball)
 		if d < best_d:
 			best_d = d
@@ -360,15 +391,15 @@ func _assign_marks(t: int, chasers: Array) -> void:
 	for p in m.squads[t]:
 		if p.is_keeper() or p == m.human or p in chasers or p == cover[t]:
 			continue
-		if p.role == "FWD":
-			continue   # forwards stay up the park; the backs mark them
+		if p.role != "MID":
+			continue   # forwards stay up the park; the backs have their men
 		if p.role == "MID" and m.own_frac(t, ball.x) > 0.6:
 			continue   # midfielders hold their zone while the ball is up the park
 		free.append(p)
 	var threats := []
 	for o in m.squads[1 - t]:
-		if o.is_keeper() or o == focus_player[t]:
-			continue
+		if o.is_keeper() or o == focus_player[t] or o.role == "FWD":
+			continue   # the backs have the forwards
 		if m.own_frac(t, o.pos.x) > 0.5:
 			continue   # too far up the pitch to worry about
 		threats.append(o)

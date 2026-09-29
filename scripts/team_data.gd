@@ -9,26 +9,43 @@ const LOGO_DIR := "res://data/logos"
 
 ## Formation spot for each position, as a fraction of the pitch.
 ## x runs from the team's own goal (0) to the goal it attacks (1).
+## A 4-3-4 and a keeper: the full back and three half backs, three in the
+## middle (the centre half forward plays as the middle one of the three), and
+## four forwards. The forwards stand in a diamond or a square (FORWARD_SHAPES),
+## and the backs line up on the forwards they mark, so the back four take the
+## same shape as the other team's front four.
 const FORMATION := {
 	"GK": Vector2(0.02, 0.5),
-	"FB": Vector2(0.13, 0.5),
-	"LHB": Vector2(0.26, 0.2),
-	"CHB": Vector2(0.26, 0.5),
-	"RHB": Vector2(0.26, 0.8),
-	"LM": Vector2(0.45, 0.35),
-	"RM": Vector2(0.45, 0.65),
-	"LHF": Vector2(0.62, 0.2),
-	"CHF": Vector2(0.62, 0.5),
-	"RHF": Vector2(0.62, 0.8),
-	"CF": Vector2(0.75, 0.38),
-	"FF": Vector2(0.86, 0.6),
+	"FB": Vector2(0.10, 0.5),
+	"LHB": Vector2(0.22, 0.2),
+	"CHB": Vector2(0.33, 0.5),
+	"RHB": Vector2(0.22, 0.8),
+	"LM": Vector2(0.46, 0.25),
+	"CHF": Vector2(0.43, 0.5),
+	"RM": Vector2(0.46, 0.75),
+	"LHF": Vector2(0.74, 0.2),
+	"CF": Vector2(0.62, 0.5),
+	"RHF": Vector2(0.74, 0.8),
+	"FF": Vector2(0.88, 0.5),
 }
+
+## The front four: a diamond (one up top, two wide, one in the hole) or a
+## square (two pairs).
+const FORWARD_SHAPES := {
+	"diamond": {"CF": Vector2(0.62, 0.5), "LHF": Vector2(0.74, 0.2), "RHF": Vector2(0.74, 0.8), "FF": Vector2(0.88, 0.5)},
+	"square": {"LHF": Vector2(0.66, 0.28), "RHF": Vector2(0.66, 0.72), "CF": Vector2(0.84, 0.36), "FF": Vector2(0.84, 0.64)},
+}
+
+## Shinty is man-marking, back against forward: which opposing forward each
+## back picks up.
+const MARKS := {"FB": "FF", "CHB": "CF", "LHB": "LHF", "RHB": "RHF"}
+const MARK_GAP := 0.035   ## backs stand this far goal-side of their forward (fraction of the length)
 
 const ROLE := {
 	"GK": "GK",
 	"FB": "DEF", "LHB": "DEF", "CHB": "DEF", "RHB": "DEF",
-	"LM": "MID", "RM": "MID",
-	"LHF": "FWD", "CHF": "FWD", "RHF": "FWD", "CF": "FWD", "FF": "FWD",
+	"LM": "MID", "CHF": "MID", "RM": "MID",
+	"LHF": "FWD", "RHF": "FWD", "CF": "FWD", "FF": "FWD",
 }
 
 const POSITION_NAMES := {
@@ -106,6 +123,20 @@ static func load_teams() -> Array:
 		load_error = "Skipped in %s: %s." % [PATH, "; ".join(problems)]
 		push_warning(load_error)
 	return teams
+
+
+## Home spots for a team whose forwards play `shape`, against opponents whose
+## forwards play `their_shape`: the backs line up goal-side of the forwards
+## they mark.
+static func shaped_home(position_code: String, shape: String, their_shape: String) -> Vector2:
+	var fwd: Dictionary = FORWARD_SHAPES.get(shape, FORWARD_SHAPES["diamond"])
+	if fwd.has(position_code):
+		return fwd[position_code]
+	if MARKS.has(position_code):
+		var theirs: Dictionary = FORWARD_SHAPES.get(their_shape, FORWARD_SHAPES["diamond"])
+		var f: Vector2 = theirs[MARKS[position_code]]
+		return Vector2(1.0 - f.x - MARK_GAP, f.y)
+	return FORMATION.get(position_code, Vector2(0.5, 0.5))
 
 
 static func role_of(position_code: String) -> String:

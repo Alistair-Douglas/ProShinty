@@ -125,7 +125,7 @@ func _read_events() -> void:
 			"throw_up":
 				_clear()
 				# The referee throws the ball up at the centre spot, from the side.
-				pos = m.ball_pos + Vector2(0, -1.4)
+				pos = m.ball_pos + Vector2(-1.4, 0)
 				vel = Vector2.ZERO
 			"Shy", "Corner", "Hit-out", "Penalty hit", "goal", "half_end":
 				_clear()
@@ -350,7 +350,7 @@ func _run(dt: float) -> void:
 	var target: Vector2 = m.ball_pos
 	if m.state == m.State.THROW_UP:
 		# The referee throws the ball up between the two centres.
-		target = m.ball_pos + Vector2(0, -1.4)
+		target = m.ball_pos + Vector2(-1.4, 0)
 	else:
 		# Trail the play on the far side, on a diagonal, about 12 yards off.
 		var dir := 0.0
