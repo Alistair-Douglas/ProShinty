@@ -32,6 +32,7 @@ const OVERHEAD := 2.6         ## height of the caman head in an overhead strike
 const RESTITUTION := 0.2      ## how bouncy body contact is
 const REACT_RADIUS := 3.2     ## start reaching for a loose ball this close
 const STICK_CLEAR := 0.1      ## caman shaft and head keep this far off other bodies
+const SPRINT_DRIVE := 1.6     ## extra acceleration while sprinting
 
 
 static func setup(p) -> void:
@@ -101,8 +102,13 @@ static func move(m, p, dt: float) -> void:
 	var balance := 0.4 if p.stagger > 0.0 else 1.0
 	var mass_k := pow(78.0 / maxf(p.mass, 40.0), 0.25)
 	var frac := clampf(speed / maxf(top, 0.1), 0.0, 1.0)
-	# Sprinting: acceleration falls away as you near top speed.
-	var accel: float = (8.5 + p.r("pace") * 0.045) * mass_k * maxf(0.2, 1.0 - frac) * balance
+	# Acceleration falls away as you near top speed. Sprinting drives
+	# harder (a footballer's burst), so kicking on from a jog builds up to
+	# full speed in about half a second instead of creeping there.
+	var build: float = maxf(0.2, 1.0 - frac)
+	if p.sprinting:
+		build = maxf(0.35, 1.0 - frac * frac) * SPRINT_DRIVE
+	var accel: float = (8.5 + p.r("pace") * 0.045) * mass_k * build * balance
 	var brake: float = (13.0 + p.r("pace") * 0.03) * mass_k * balance
 	# Turning: sharp at a jog, wide at full tilt.
 	var turn: float = (15.0 + p.r("control") * 0.03) * (1.0 - 0.45 * frac) * mass_k * balance
@@ -222,13 +228,19 @@ static func update_stick(m, p, dt: float) -> void:
 		# Dribbling: the caman reaches out to meet the ball as the player runs
 		# onto it, taps it, and comes back to be carried while it rolls on.
 		var ball_at := Vector3(m.ball_pos.x, m.ball_pos.y, 0.0)
-		if m.is_dribbling(p) and ball_at.distance_to(rest) < 1.0 + 0.5 * m.dribble_assist(p):
-			target = ball_at
+		if m.is_dribbling(p):
+			var from_body: Vector2 = m.ball_pos - p.pos
+			if from_body.length() < m.DRIBBLE_REACH + 0.25:
+				target = ball_at   # the caman stays on the ball
+			else:
+				# Running onto it: the caman reaches out ahead, ready.
+				var out: Vector2 = p.pos + from_body.normalized() * TWO_HAND_REACH * 0.85
+				target = Vector3(out.x, out.y, 0.0)
 	elif p.shy_toss:
 		target = Vector3(p.pos.x + p.facing.x * m.SHY_ARM, p.pos.y + p.facing.y * m.SHY_ARM, OVERHEAD)
 	elif m.in_throw_up(p):
 		# Caman raised high over the spot; as the ball drops, go up to meet it.
-		target = Vector3(p.pos.x + p.facing.x * 0.45, p.pos.y + p.facing.y * 0.45, OVERHEAD)
+		target = Vector3(m.PITCH.x / 2.0, m.PITCH.y / 2.0, OVERHEAD)   # crossed over the spot
 		if m.throw_up_tossed and m.throw_up_t > m.throw_up_swing.get(p, 99.0) - 0.15:
 			target = Vector3(m.ball_pos.x, m.ball_pos.y, clampf(m.ball_z, 1.5, OVERHEAD))
 	elif p.stagger <= 0.0:
@@ -254,7 +266,7 @@ static func update_stick(m, p, dt: float) -> void:
 	var out := Vector2(p.stick.x - rest.x, p.stick.y - rest.y).length()
 	p.reach = clampf(maxf(out / 1.1, p.stick.z / 2.2), 0.0, 1.0)
 	if p == m.carrier:
-		p.reach = 0.6   # stick down on the ball
+		p.reach = 1.0   # the caman head right on the ball, not most of the way to it
 
 
 static func _clamp_reach(p, v: Vector3, keeper_area: bool) -> Vector3:

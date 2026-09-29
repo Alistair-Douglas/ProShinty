@@ -46,10 +46,15 @@ func _draw() -> void:
 			draw_rect(Rect2(c, Vector2(40, 6)), Color(0, 0, 0, 0.6))
 			var full: float = min(m.charge, 1.0)
 			draw_rect(Rect2(c, Vector2(40 * full, 6)), Color(1, 0.4 + 0.5 * (1.0 - full), 0.1))
+			if m.charge_kind == "shoot":
+				# The sweet spot: let go here for a banger.
+				var z: float = m.BANGER_TIMING
+				var hot: bool = m.charge >= z and m.charge <= 1.0
+				draw_rect(Rect2(c + Vector2(40 * z, -2), Vector2(40 * (1.0 - z), 10)), Color(1, 1, 1, 0.9 if hot else 0.45), false, 1.0)
 			if m.charge > 1.0:
 				# Overswing: no extra power, just more chance of a miss-hit.
 				draw_rect(Rect2(c + Vector2(40, 0), Vector2(40 * (m.charge - 1.0), 6)), Color(0.9, 0.1, 0.1))
-	var help := "Move WASD/Arrows   Sprint Shift   Shoot Space   Long hit X   Shield Z   Pass/Poke E   Block F   Cleek C   Barge R   Switch Q   Pause Esc"
+	var help := "Move WASD/Arrows   Sprint Shift   Shoot Space/Click   Long hit X   Shield Z   Pass/Poke E   Block F   Cleek C   Barge R   Switch Q   Pause Esc"
 	draw_rect(Rect2(Vector2(0, screen.y - 24), Vector2(w, 24)), Color(0, 0, 0, 0.45))
 	draw_string(font, Vector2(0, screen.y - 7), help, HORIZONTAL_ALIGNMENT_CENTER, w, 13, Color(1, 1, 1, 0.8))
 	var centre_text := ""

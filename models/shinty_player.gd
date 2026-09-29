@@ -27,6 +27,10 @@ const HEAD_LOCAL := Vector3(0.0, -CAMAN_LENGTH + 0.015, -0.055)  ## caman head c
 ## Ready stance, hips space: butt of the caman and its direction to the head.
 const READY_P := Vector3(0.16, 0.0, -0.26)
 const READY_D := Vector3(-0.08, -0.55, -0.83)
+## Stumble power from which the player goes down (a stagger of about 0.9 s).
+const FALL_AT := 0.68
+## Seconds a fallen player takes to get back up.
+const GET_UP := 0.55
 
 ## Keeper shirts, picked to stand out from the team's own colours.
 const KEEPER_CHOICES := [Color("f2c400"), Color("2e9e4f"), Color("f07c1a"), Color("26262b"), Color("8e44ad")]
@@ -37,7 +41,7 @@ const SKIN_TONES := [
 
 ## Actions and their total duration in seconds (swing and pass scale with power).
 const ACTIONS := {
-	"swing": 0.78, "pass": 0.55, "volley": 0.62, "tackle": 0.55, "trap": 0.4,
+	"swing": 0.78, "pass": 0.55, "volley": 0.62, "tackle": 0.55, "trap": 0.4, "feet_trap": 0.55,
 	"save_left": 0.9, "save_right": 0.9, "celebrate": 1.6,
 	"shy": 2.0, "stumble": 0.7, "poke": 0.35, "block": 0.6, "cleek": 0.45, "barge": 0.4,
 }
@@ -122,6 +126,21 @@ var _carry := 0.0                 # smoothed 0..1: caman carried one-handed on t
 var _carry_from := 0.0            # _carry when the current action started
 var _carry_fade := 0.15           # seconds the stick takes to come off the shoulder
 var _action_age := 0.0            # seconds since the current action started
+var _seed := 0.0                  # 0..1 per player, so no two move in step
+var _sway := Vector3.ZERO         # trunk lean spring (x forward/back, z sideways), radians
+var _sway_v := Vector3.ZERO
+var _jolt := Vector3.ZERO         # last knock, world m/s beyond what legs can do
+var _jolt_age := 9.0
+var _yaw_prev = null
+var _yaw_rate := 0.0              # how fast the player is turning, rad/s
+var _puff := 0.0                  # out of breath after sprinting, 0..1
+var _stumble_dir := Vector2.ZERO  # model space x/z: which way the stumble goes
+var _free_blend := 1.0            # how far the free hand has gone to _free_hand
+var _falling := false             # this stumble ends on the ground
+var _rag: ShintyRagdoll = null    # the body while knocked down
+var _rag_w := 0.0                 # 0 = animation, 1 = ragdoll
+var _rag_face := Vector3.FORWARD  # world: which way the fallen caman's face points
+var _rag_origin := Vector3.ZERO   # where the model stood last frame, world
 
 
 # --- Public API -------------------------------------------------------------
@@ -139,6 +158,9 @@ func setup(player: Dictionary, team: Dictionary = {}) -> void:
 	shirt_number = int(player.get("number", 0))
 	is_keeper = str(player.get("position", "")) == "GK"
 	shoulder_carry = carries_on_shoulder(player)
+	_seed = float((_seed_of(player) / 13) % 1000) / 1000.0
+	_phase = _seed * TAU
+	_time = _seed * 20.0
 	left_handed = str(player.get("hand", "R")).to_upper().begins_with("L")
 	if player.has("skin"):
 		skin_color = Color(str(player["skin"]))
@@ -265,6 +287,16 @@ func play_action(action: StringName, power: float = 1.0, contact_height: float =
 	_carry_from = _carry
 	_action_age = 0.0
 	_carry_fade = _swing_times()[0] if _is_hit_action(action) else 0.15
+	# Stumbles go the way the player was knocked; the hardest put them down.
+	# `power` is how hard (0..1).
+	_falling = false
+	if action == &"stumble":
+		var l := global_transform.basis.orthonormalized().inverse() * _jolt
+		_stumble_dir = Vector2(l.x, l.z).normalized() if _jolt_age < 0.4 and l.length() > 0.2 else Vector2(0.0, 1.0)
+		_sway_v += Vector3(_stumble_dir.y, 0.0, -_stumble_dir.x) * 2.0 * _action_power
+		if _action_power >= FALL_AT:
+			_falling = true
+			_action_len = _action_power * 1.3 + 0.45
 
 
 ## Seconds from play_action() to the strike signal, so match logic can launch
@@ -330,6 +362,22 @@ func look_at_point(target) -> void:
 	_look_target = target
 
 
+## A knock to the body, as a sudden change of velocity in world m/s: the trunk
+## rocks with it and the head snaps after it. advance() notices knocks in the
+## locomotion by itself; call this for anything it can't see.
+func jolt(dv: Vector3) -> void:
+	dv.y = 0.0
+	_jolt = dv
+	_jolt_age = 0.0
+	var l := global_transform.basis.orthonormalized().inverse() * dv
+	_sway_v += Vector3(l.z, 0.0, -l.x) * 1.8
+
+
+## True while the player is down on the grass after a big hit.
+func is_down() -> bool:
+	return _rag != null and _rag_w > 0.5
+
+
 ## World position of the caman head (the part that hits the ball).
 func get_caman_head_position() -> Vector3:
 	if _caman == null:
@@ -386,9 +434,16 @@ func advance(delta: float) -> void:
 	_time += delta
 	_speed = _velocity.length()
 	if delta > 0.0:
-		var a := (_velocity - _prev_velocity) / delta
+		var dv := _velocity - _prev_velocity
+		var a := dv / delta
 		_accel = _accel.lerp(a, clampf(delta * 8.0, 0.0, 1.0))
 		_prev_velocity = _velocity
+		# Legs can't change speed faster than this: anything more is a knock.
+		var legs := 14.0 * delta
+		if dv.length() > legs + 0.6:
+			jolt(dv * (1.0 - legs / dv.length()))
+		_body_springs(delta)
+	_jolt_age += delta
 	var reach_goal := _reach_want if _reach_target != null else 0.0
 	_reach = move_toward(_reach, reach_goal, delta * (6.0 if reach_goal > _reach else 3.0))
 	if auto_face and _speed > 0.3:
@@ -421,6 +476,7 @@ func advance(delta: float) -> void:
 			var done := _action
 			_action = &""
 			action_finished.emit(done)
+	_update_ragdoll(delta)
 	_pose(delta)
 	var head := get_caman_head_position()
 	if delta > 0.0:
@@ -541,9 +597,11 @@ func _pose(_delta: float) -> void:
 
 	# Ready stance / idle breathing
 	var idle := 1.0 - run
-	var breathe := sin(_time * 1.8) * 0.015
+	# Blowing after a sprint: faster, deeper breaths, bent over a little.
+	var breathe := sin(_time * lerpf(1.8, 3.6, _puff)) * lerpf(0.015, 0.045, _puff)
 	# Shinty stance is upright, not an ice hockey crouch: a slight bend, head up.
-	rot["Spine"] = Vector3(-0.08 * idle - 0.1 * run - 0.14 * sprint, 0, 0)
+	# Everyone stands a little differently.
+	rot["Spine"] = Vector3(-0.08 * idle - 0.1 * run - 0.14 * sprint - 0.12 * _puff * idle + (_seed - 0.5) * 0.08, 0, 0)
 	rot["Chest"] = Vector3(breathe, 0, 0)
 	rot["UpperChest"] = Vector3(-0.03 * idle, 0, 0)
 	rot["Neck"] = Vector3(0.08 * idle + 0.1 * run + 0.1 * sprint, 0, 0)
@@ -571,11 +629,27 @@ func _pose(_delta: float) -> void:
 	rot["Chest"] += Vector3(0, -sin(ph) * 0.1 * run, 0)
 
 	# Football running: lean into acceleration, sit back when braking, bank
-	# into turns. Acceleration is turned into the model's own frame.
-	var acc_l := global_transform.basis.orthonormalized().inverse() * _accel
+	# into turns, rock with knocks. The trunk is on a spring (_body_springs),
+	# so it overshoots a little and settles, and the head lags behind it.
 	var side_sign := -1.0 if left_handed else 1.0  # undone by the mirror below
-	rot["Spine"] += Vector3(-clampf(-acc_l.z * 0.035, -0.18, 0.28), 0, -clampf(acc_l.x * 0.03, -0.22, 0.22) * side_sign)
+	rot["Spine"] += Vector3(_sway.x, 0, _sway.z * side_sign)
+	rot["Neck"] += Vector3(clampf(-_sway_v.x * 0.05, -0.35, 0.35), 0, clampf(-_sway_v.z * 0.05, -0.35, 0.35) * side_sign)
+	# Turning, the head goes first and the shoulders follow.
+	rot["Head"] += Vector3(0, clampf(_yaw_rate * 0.08, -0.35, 0.35) * side_sign, 0)
+	rot["Chest"] += Vector3(0, -clampf(_yaw_rate * 0.04, -0.2, 0.2) * side_sign, 0)
+	# Nobody stands still: the weight drifts from one foot to the other, the
+	# free knee softens and the hips drop on that side.
+	if _action == &"" and not _charging:
+		var shift := sin(_time * 0.5 + _seed * TAU) * idle
+		hips_off.x += 0.03 * shift * side_sign
+		rot["Hips"] += Vector3(0, 0, 0.05 * shift)
+		rot["Spine"] += Vector3(0, 0, -0.04 * shift)
+		rot["LeftUpperLeg"] += Vector3(0.07 * maxf(0.0, shift), 0, 0)
+		rot["LeftLowerLeg"] += Vector3(-0.14 * maxf(0.0, shift), 0, 0)
+		rot["RightUpperLeg"] += Vector3(0.07 * maxf(0.0, -shift), 0, 0)
+		rot["RightLowerLeg"] += Vector3(-0.14 * maxf(0.0, -shift), 0, 0)
 	_free_hand = null
+	_free_blend = 1.0
 
 	# Caman carry pose (in hips-relative skeleton space, right-handed)
 	# Two hands low across the thighs, the head held just off the grass out in
@@ -628,8 +702,8 @@ func _pose(_delta: float) -> void:
 		var local: Vector3 = global_transform.affine_inverse() * (_look_target as Vector3)
 		var yaw := clampf(atan2(-local.x, -local.z) - twist, -1.1, 1.1)
 		var pitch := clampf(atan2(local.y - 1.6, Vector2(local.x, local.z).length()), -0.6, 0.4)
-		rot["Neck"] += Vector3(-pitch * 0.4, yaw * 0.45, 0)
-		rot["Head"] += Vector3(-pitch * 0.6, yaw * 0.55, 0)
+		rot["Neck"] += Vector3(pitch * 0.4, yaw * 0.45, 0)
+		rot["Head"] += Vector3(pitch * 0.6, yaw * 0.55, 0)
 
 	# Mirror for left-handers: swap left/right bones and flip yaw/roll.
 	if left_handed:
@@ -751,11 +825,14 @@ func _pose(_delta: float) -> void:
 		if left_handed:
 			fh.x = -fh.x
 		free_target = hips_g.origin + yaw_b * fh
+		free_target = top.lerp(free_target, _free_blend)
 	if free_target == null and carry_top != null:
 		free_target = top.lerp(carry_top, carry)
 	# A runner's free arm swings with the elbow tucked down and back.
 	_solve_arm(top_side, free_target if free_target != null else top, carry if carry_top != null else 0.0)
 	_solve_arm(low_side, _free_low if _free_low != null else low, carry if carry_top != null else 0.0)
+	if _rag != null and _rag_w > 0.0:
+		_apply_ragdoll()
 
 
 ## Returns [caman position, caman direction, twist, hips offset] for the
@@ -842,6 +919,20 @@ func _action_pose(rot: Dictionary) -> Array:
 			var p3 := ready_p.lerp(Vector3(0.06, -0.2, -0.33), k)
 			var d3 := ready_d.slerp(Vector3(0.06, -0.8, -0.6).normalized(), k)
 			return [p3, d3, 0.0, hips_off]
+		&"feet_trap":
+			# The ball stopped with the feet: planted and together, knees soft,
+			# the caman lifted out of the way until it's dead.
+			var k := sin(clampf(t / _action_len, 0.0, 1.0) * PI)
+			_crouch(rot, 0.3 * k)
+			for side in ["Left", "Right"]:
+				var sgn := -1.0 if side == "Left" else 1.0
+				rot[side + "UpperLeg"] = rot[side + "UpperLeg"].lerp(Vector3(0.1, 0, -sgn * 0.04), k)
+				rot[side + "LowerLeg"] = rot[side + "LowerLeg"].lerp(Vector3(-0.3, 0, 0), k)
+				rot[side + "Foot"] = rot[side + "Foot"].lerp(Vector3(0.18, 0, 0), k)
+			rot["Spine"] += Vector3(-0.15 * k, 0, 0)
+			var p5 := ready_p.lerp(Vector3(0.22, 0.12, -0.2), k)
+			var d5 := ready_d.slerp(Vector3(0.35, -0.55, -0.76).normalized(), k)
+			return [p5, d5, 0.0, hips_off]
 		&"save_left", &"save_right":
 			var side := -1.0 if _action == &"save_left" else 1.0
 			var u := clampf(t / _action_len, 0.0, 1.0)
@@ -915,15 +1006,33 @@ func _action_pose(rot: Dictionary) -> Array:
 				_step(rot, 1.0 - k)
 			return [p6, d6, tw, hips_off]
 		&"stumble":
-			# Knocked off balance: rocked back, knees buckle, caman flung out.
+			if _falling:
+				# Down on the grass (the ragdoll has the body): getting back up
+				# is a crouch that straightens as the ragdoll lets go.
+				var g := _ease((t - (_action_len - GET_UP)) / GET_UP)
+				_crouch(rot, 0.9 * (1.0 - g))
+				rot["Spine"] += Vector3(-0.45 * (1.0 - g), 0, 0)
+				return [ready_p, ready_d, 0.0, hips_off]
+			# Knocked off balance the way the hit went: the trunk goes with it,
+			# a quick step to catch the weight, arms out, caman flung wide.
 			var u := clampf(t / _action_len, 0.0, 1.0)
 			var k := sin(u * PI)
-			rot["Spine"] += Vector3(0.35 * k, 0, 0.2 * k)
-			rot["Neck"] += Vector3(-0.2 * k, 0, 0)
-			_crouch(rot, 0.45 * k)
-			hips_off.y -= 0.06 * k
-			var p7 := ready_p.lerp(Vector3(0.25, 0.15, -0.1), k)
-			var d7 := ready_d.slerp(Vector3(0.6, 0.2, -0.77).normalized(), k)
+			var sev := lerpf(0.5, 1.0, _action_power)
+			var sd := _stumble_dir
+			if left_handed:
+				sd.x = -sd.x   # rot is mirrored below
+			rot["Spine"] += Vector3(0.35 * sd.y, 0, -0.3 * sd.x) * k * sev
+			rot["Neck"] += Vector3(-0.2 * sd.y, 0, 0.15 * sd.x) * k
+			_crouch(rot, 0.35 * k * sev)
+			var st := sin(minf(1.0, u * 2.2) * PI) * sev
+			var leg := "Right" if sd.x > 0.0 else "Left"
+			rot[leg + "UpperLeg"] += Vector3(-0.55 * sd.y * st, 0, 0.3 * sd.x * st)
+			rot[leg + "LowerLeg"] += Vector3(-0.35 * st, 0, 0)
+			hips_off += Vector3(_stumble_dir.x, -0.6, _stumble_dir.y) * 0.08 * k * sev
+			_free_hand = Vector3(-0.5, 0.5, 0.05 + 0.2 * sd.y)
+			_free_blend = k
+			var p7 := ready_p.lerp(Vector3(0.3, 0.2, -0.05 - 0.1 * sd.y), k)
+			var d7 := ready_d.slerp(Vector3(0.6, 0.25, -0.75).normalized(), k)
 			return [p7, d7, 0.25 * k, hips_off]
 		&"poke":
 			# Hockey poke check: lunge on the front leg; set_reach() drives the caman.
@@ -1103,6 +1212,182 @@ func _solve_arm(side: String, target: Vector3, tuck: float = 0.0) -> void:
 	_skel.set_bone_pose_rotation(ua, (pb.inverse() * ub).get_rotation_quaternion())
 	_skel.set_bone_pose_rotation(la, (ub.inverse() * lb).get_rotation_quaternion())
 	_skel.set_bone_pose_rotation(hd, Quaternion.IDENTITY)
+
+
+# --- Body physics ------------------------------------------------------------
+
+## The trunk rides on a spring towards the lean that acceleration asks for, so
+## it overshoots and settles like a body instead of snapping; knocks kick it.
+func _body_springs(delta: float) -> void:
+	var inv := global_transform.basis.orthonormalized().inverse()
+	var acc_l := inv * _accel
+	var goal := Vector3(-clampf(-acc_l.z * 0.035, -0.18, 0.28), 0.0, -clampf(acc_l.x * 0.03, -0.22, 0.22))
+	var left := delta
+	while left > 0.0:
+		var h := minf(left, 1.0 / 60.0)
+		left -= h
+		var w := 9.0
+		_sway_v += (goal - _sway) * w * w * h - _sway_v * 2.0 * 0.4 * w * h
+		_sway += _sway_v * h
+	_sway = _sway.clamp(Vector3(-0.7, 0.0, -0.7), Vector3(0.7, 0.0, 0.7))
+	var yaw := global_transform.basis.orthonormalized().get_euler().y
+	if _yaw_prev != null:
+		var rate := wrapf(yaw - float(_yaw_prev), -PI, PI) / delta
+		_yaw_rate = lerpf(_yaw_rate, rate, clampf(delta * 10.0, 0.0, 1.0))
+	_yaw_prev = yaw
+	var sprinting := _speed > 5.5
+	_puff = move_toward(_puff, 1.0 if sprinting else 0.0, delta * (0.12 if sprinting else 0.04))
+
+
+## Knocked down: hand the body to a ragdoll, then take it back to get up.
+func _update_ragdoll(delta: float) -> void:
+	if _falling and _action == &"stumble" and _rag == null and _action_t >= 0.08:
+		_start_ragdoll()
+	if _rag == null:
+		return
+	# The body goes where the match moves the player, falling as it goes, so
+	# getting up never slides them back across the grass.
+	var moved := global_position - _rag_origin
+	_rag.shift(Vector3(moved.x, 0.0, moved.z))
+	_rag_origin = global_position
+	_rag.step(delta)
+	if _falling and _action == &"stumble":
+		var up_at := _action_len - GET_UP
+		if _action_t < up_at:
+			_rag_w = minf(1.0, _rag.age / 0.1)
+		else:
+			# Getting up is done by the body itself: the muscles pull each
+			# joint towards the standing pose, harder and harder, and the
+			# animation only takes over for the last bit.
+			var u := (_action_t - up_at) / GET_UP
+			_rag.pull_strength = 0.03 + 0.25 * u
+			_rag_w = 1.0 - _ease((u - 0.65) / 0.35)
+	else:
+		# Something else came up (or the get-up finished): let go quickly.
+		_rag_w = move_toward(_rag_w, 0.0, delta / 0.3)
+	if _rag_w <= 0.0 and (_action != &"stumble" or not _falling or _action_t >= _action_len - GET_UP):
+		_rag = null
+		_rag_w = 0.0
+		_set_cull_margin(0.0)
+
+
+func _start_ragdoll() -> void:
+	var j := _joints()
+	_rag_face = -_caman.global_transform.basis.z
+	# Knocked the way the hit went; without one, backwards off the challenge.
+	var dir := Vector3(_jolt.x, 0.0, _jolt.z)
+	if _jolt_age > 0.6 or dir.length() < 0.2:
+		dir = global_transform.basis * Vector3(_stumble_dir.x, 0.0, _stumble_dir.y)
+	var push := dir.normalized() * lerpf(2.2, 3.6, _action_power)
+	# The match carries the body along at the player's speed (see
+	# _update_ragdoll), so only the knock itself goes in here.
+	var R := ShintyRagdoll
+	_rag = ShintyRagdoll.new(j, Vector3.ZERO, push, R.L_WR if left_handed else R.R_WR)
+	_rag_origin = global_position
+	_rag.ground = global_position.y
+	_rag_w = 0.0
+	# Lying down, the body reaches well outside where it stands.
+	_set_cull_margin(2.0)
+
+
+## World positions of the ragdoll's joints in the skeleton's current pose.
+func _joints() -> PackedVector3Array:
+	var R := ShintyRagdoll
+	var j := PackedVector3Array()
+	j.resize(R.COUNT)
+	var names := {R.PELVIS: "Hips", R.CHEST: "UpperChest",
+		R.L_SH: "LeftUpperArm", R.L_EL: "LeftLowerArm", R.L_WR: "LeftHand",
+		R.R_SH: "RightUpperArm", R.R_EL: "RightLowerArm", R.R_WR: "RightHand",
+		R.L_HIP: "LeftUpperLeg", R.L_KNEE: "LeftLowerLeg", R.L_ANK: "LeftFoot",
+		R.R_HIP: "RightUpperLeg", R.R_KNEE: "RightLowerLeg", R.R_ANK: "RightFoot"}
+	var sk := _skel.global_transform
+	for i in names:
+		j[i] = sk * _skel.get_bone_global_pose(_bone[names[i]]).origin
+	j[R.HEAD] = sk * (_skel.get_bone_global_pose(_bone["Head"]) * Vector3(0, 0.12, 0))
+	j[R.BUTT] = _caman.global_transform.origin
+	j[R.TIP] = get_caman_head_position()
+	return j
+
+
+func _set_cull_margin(m: float) -> void:
+	for c in _skel.get_children():
+		if c is GeometryInstance3D:
+			(c as GeometryInstance3D).extra_cull_margin = m
+
+
+## Turn the ragdoll's joints into bone rotations and blend them over the
+## animated pose by _rag_w.
+func _apply_ragdoll() -> void:
+	var R := ShintyRagdoll
+	# The pose the animation wants (the skeleton holds it until we blend below):
+	# what the muscles pull towards when getting up.
+	_rag.targets = _joints()
+	var inv := _skel.global_transform.affine_inverse()
+	var P := PackedVector3Array()
+	P.resize(R.COUNT)
+	for i in R.COUNT:
+		P[i] = inv * _rag.pos[i]
+	var local := {}
+	var spine := P[R.CHEST] - P[R.PELVIS]
+	var bh := _frame(P[R.R_HIP] - P[R.L_HIP], spine)
+	var bc := _frame(P[R.R_SH] - P[R.L_SH], spine)
+	var hips_t := Transform3D(bh, P[R.PELVIS])
+	local["Hips"] = bh.get_rotation_quaternion()
+	var third := Quaternion.IDENTITY.slerp((bh.inverse() * bc).get_rotation_quaternion(), 1.0 / 3.0)
+	var uc_t := hips_t
+	for b in ["Spine", "Chest", "UpperChest"]:
+		local[b] = third
+		uc_t = uc_t * Transform3D(Basis(third), _rest_origin[b])
+	var neck: Vector3 = uc_t * _rest_origin["Neck"]
+	var hv: Vector3 = uc_t.basis.inverse() * (P[R.HEAD] - neck)
+	var half := Quaternion.IDENTITY
+	if hv.length() > 0.01:
+		half = Quaternion.IDENTITY.slerp(Quaternion(Vector3.UP, hv.normalized()), 0.5)
+	local["Neck"] = half
+	local["Head"] = half
+	var back_c := bc.z
+	var fwd_h := -bh.z
+	_rag_limb(local, "LeftUpperArm", "LeftLowerArm", "LeftHand", uc_t, P[R.L_EL], P[R.L_WR], back_c)
+	_rag_limb(local, "RightUpperArm", "RightLowerArm", "RightHand", uc_t, P[R.R_EL], P[R.R_WR], back_c)
+	_rag_limb(local, "LeftUpperLeg", "LeftLowerLeg", "LeftFoot", hips_t, P[R.L_KNEE], P[R.L_ANK], fwd_h)
+	_rag_limb(local, "RightUpperLeg", "RightLowerLeg", "RightFoot", hips_t, P[R.R_KNEE], P[R.R_ANK], fwd_h)
+	var w := _rag_w
+	var wr := w
+	for b in local:
+		var idx: int = _bone[b]
+		_skel.set_bone_pose_rotation(idx, _skel.get_bone_pose_rotation(idx).slerp(local[b], wr))
+	var hb: int = _bone["Hips"]
+	_skel.set_bone_pose_position(hb, _skel.get_bone_pose_position(hb).lerp(P[R.PELVIS], w))
+	# The caman lies where it fell.
+	var shaft := P[R.TIP] - P[R.BUTT]
+	if shaft.length() > 0.01:
+		var ct := Transform3D(_caman_basis(shaft.normalized(), inv.basis * _rag_face), P[R.BUTT])
+		ct = _caman.transform.interpolate_with(ct, wr)
+		_caman.transform = ct
+		_skel.set_bone_pose_position(_bone["Caman"], ct.origin)
+		_skel.set_bone_pose_rotation(_bone["Caman"], ct.basis.get_rotation_quaternion())
+
+
+## Orthonormal basis with x along `x` and y as close to `y` as it can be.
+static func _frame(x: Vector3, y: Vector3) -> Basis:
+	x = x.normalized()
+	y = (y - x * x.dot(y)).normalized()
+	return Basis(x, y, x.cross(y))
+
+
+## Aim a two-bone limb from its root (on `parent`) through `mid` to `tip`.
+func _rag_limb(local: Dictionary, upper: String, lower: String, end: String,
+		parent: Transform3D, mid: Vector3, tip: Vector3, fallback: Vector3) -> void:
+	var root: Vector3 = parent * _rest_origin[upper]
+	var line := (tip - root).normalized()
+	var perp := (mid - root) - line * (mid - root).dot(line)
+	if perp.length() < 0.01:
+		perp = fallback
+	var ub := _basis_down(mid - root, perp)
+	var lb := _basis_down(tip - mid, perp)
+	local[upper] = (parent.basis.inverse() * ub).get_rotation_quaternion()
+	local[lower] = (ub.inverse() * lb).get_rotation_quaternion()
+	local[end] = Quaternion.IDENTITY
 
 
 func _basis_down(v: Vector3, ref: Vector3) -> Basis:

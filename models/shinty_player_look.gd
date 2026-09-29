@@ -15,6 +15,7 @@ const HAIR_COLOURS := [Color("2a1d14"), Color("4a3020"), Color("6b4a2b"), Color(
 const EYE_COLOURS := [Color("3b5f86"), Color("4d6b3b"), Color("5a3b22"), Color("2d2018"), Color("5f7a8a")]
 const BOOT_COLOURS := [Color("16161a"), Color("16161a"), Color("f2f2f2"), Color("1d3b8f"), Color("c8102e"), Color("111111")]
 const SOLE_COLOURS := [Color("e8e8e8"), Color("f2c400"), Color("16161a"), Color("ff6a13")]
+const FLASH_COLOURS := [Color("f2f2f2"), Color("e8ff3a"), Color("ff3d6e"), Color("00c2d1"), Color("c9a54a")]
 
 var m: ShintyPlayerModel
 var skel: Skeleton3D
@@ -299,7 +300,7 @@ func _body() -> void:
 		_mesh(ll, _sock_mesh(), socks, Vector3(0, -0.07, 0))
 		# Boot: shaped upper, contrasting sole, a few studs.
 		var foot := _attach(side + "Foot")
-		_boot(foot)
+		_boot(foot, 1.0 if side == "Left" else -1.0)
 
 
 func _sock_mesh() -> ArrayMesh:
@@ -310,34 +311,76 @@ func _sock_mesh() -> ArrayMesh:
 	return _loft(rings, seg, 2.0, true)
 
 
-func _boot(foot: Node3D) -> void:
+func _boot(foot: Node3D, inside: float) -> void:
 	var col: Color = _pick(BOOT_COLOURS, 3)
 	var sole_col: Color = _pick(SOLE_COLOURS, 4)
-	var pts := PackedVector3Array()
-	var rad := PackedVector2Array()
-	# Heel to toe along -Z; radii are (half width, half height).
-	var prof := [
-		[0.075, 0.034, 0.04, 0.0], [0.045, 0.041, 0.047, 0.0], [0.0, 0.044, 0.045, -0.004],
-		[-0.06, 0.046, 0.037, -0.012], [-0.12, 0.044, 0.028, -0.02], [-0.165, 0.034, 0.02, -0.026],
-		[-0.185, 0.018, 0.012, -0.03]]
-	for p in prof:
-		pts.append(Vector3(0, p[3] - 0.022, p[0]))
-		rad.append(Vector2(p[1], p[2]))
-	var upper := ShintyMesh.sweep(pts, rad, seg, 2.6, false, Vector3.RIGHT)
-	_mesh(foot, upper, ShintyMesh.solid(col, 0.35, 0.0, 0.3))
-	# Sole plate
-	var sole := _loft([[0.0, 0.047, 0.13], [0.012, 0.047, 0.13]], seg, 3.5)
-	_mesh(foot, sole, ShintyMesh.solid(sole_col, 0.5), Vector3(0, -0.067, -0.055))
-	if detail:
-		var stud := ShintyMesh.solid(Color("d8d8d8"), 0.3, 0.7)
-		for sp in [Vector3(0.025, 0, 0.05), Vector3(-0.025, 0, 0.05), Vector3(0.028, 0, -0.06),
-				Vector3(-0.028, 0, -0.06), Vector3(0.022, 0, -0.14), Vector3(-0.022, 0, -0.14)]:
-			_mesh(foot, _loft([[0.0, 0.008, 0.008], [-0.012, 0.006, 0.006]], 6), stud, sp + Vector3(0, -0.067, 0))
-		# Laces
-		var lace := ShintyMesh.solid(Color("f0f0f0"), 0.8)
-		for i in 4:
-			_mesh(foot, _loft([[-0.022, 0.003, 0.003], [0.022, 0.003, 0.003]], 6), lace,
-				Vector3(0, 0.012 - i * 0.006, -0.03 - i * 0.022)).rotation.z = PI / 2
+	var flash_col: Color = _pick(FLASH_COLOURS, 6)
+	if flash_col.is_equal_approx(col):
+		flash_col = sole_col
+	# Foot bone space: ankle at the origin, grass at y = -0.06, toe towards -Z.
+	# Stations heel to toe: [z, half width, bottom, top, x offset]. A low-cut
+	# football boot: heel counter up round the ankle, a lace panel falling
+	# away over the instep, a wide forefoot turned in at the big toe and a
+	# slim toe with a little spring.
+	var t := inside * 0.006
+	var upper_st := [
+		[0.078, 0.012, -0.049, -0.008], [0.074, 0.026, -0.05, 0.012], [0.064, 0.036, -0.05, 0.028],
+		[0.042, 0.04, -0.05, 0.032], [0.012, 0.041, -0.05, 0.03], [-0.02, 0.043, -0.05, 0.022],
+		[-0.055, 0.046, -0.05, 0.006, t * 0.3], [-0.095, 0.049, -0.05, -0.008, t * 0.6],
+		[-0.135, 0.047, -0.049, -0.018, t], [-0.17, 0.04, -0.048, -0.026, t * 1.2],
+		[-0.192, 0.029, -0.046, -0.031, t * 1.4], [-0.204, 0.016, -0.044, -0.035, t * 1.5],
+		[-0.209, 0.006, -0.043, -0.038, t * 1.5]]
+	_mesh(foot, ShintyMesh.shoe(upper_st, seg + 2, 2.4, 6.0), ShintyMesh.solid(col, 0.4, 0.0, 0.35))
+	# Sole plate: a little proud of the upper all round, heel slightly thicker.
+	var sole_st := []
+	for st in upper_st:
+		var z: float = st[0]
+		var hw: float = st[1] + 0.004 if st[1] > 0.02 else st[1] + 0.002
+		var thick := lerpf(0.012, 0.008, clampf(-z / 0.2, 0.0, 1.0))
+		var lift := maxf(0.0, (-z - 0.17) * 0.25)  # toe spring
+		sole_st.append([z + signf(z) * 0.002, hw, -0.06 + lift, -0.06 + lift + thick, st[4] if st.size() > 4 else 0.0])
+	_mesh(foot, ShintyMesh.shoe(sole_st, 12 if detail else 8, 8.0, 8.0), ShintyMesh.solid(sole_col, 0.55))
+	if not detail:
+		return
+	# Side flash on both sides, from under the heel collar forward along the midfoot.
+	var flash := ShintyMesh.solid(flash_col, 0.45)
+	for sx in [-1.0, 1.0]:
+		var pts := PackedVector3Array()
+		var rad := PackedVector2Array()
+		for k in 6:
+			var u := k / 5.0
+			var z := lerpf(0.05, -0.1, u)
+			var hw := _station_width(upper_st, z)
+			pts.append(Vector3(sx * (hw + 0.0012), lerpf(-0.012, -0.036, u) + sin(u * PI) * 0.01, z))
+			rad.append(Vector2(lerpf(0.006, 0.0025, u), 0.0015))
+		_mesh(foot, ShintyMesh.sweep(pts, rad, 6, 3.0, false, Vector3.UP), flash)
+	# Laces across the lace panel, following the top of the upper.
+	var lace := ShintyMesh.solid(Color("f0f0f0") if col.get_luminance() < 0.5 else Color("2a2a2e"), 0.8)
+	for i in 5:
+		var z := -0.012 - i * 0.017
+		var top := _station_top(upper_st, z)
+		var l := _mesh(foot, _loft([[-0.017, 0.003, 0.003], [0.017, 0.003, 0.003]], 6), lace, Vector3(0, top + 0.0025, z))
+		l.rotation = Vector3(-0.35, 0, PI / 2)
+	# Studs: conical, four under the forefoot and two under the heel.
+	var stud := ShintyMesh.solid(Color("d8d8d8"), 0.3, 0.7)
+	for sp in [Vector3(0.028, 0, 0.05), Vector3(-0.028, 0, 0.05), Vector3(0.03, 0, -0.08),
+			Vector3(-0.03, 0, -0.08), Vector3(0.024, 0, -0.14), Vector3(-0.024, 0, -0.14)]:
+		_mesh(foot, _loft([[0.0, 0.0075, 0.0075], [-0.009, 0.005, 0.005]], 6), stud, sp + Vector3(0, -0.059, 0))
+
+
+static func _station_width(st: Array, z: float) -> float:
+	return _station_value(st, z, 1)
+
+
+static func _station_top(st: Array, z: float) -> float:
+	return _station_value(st, z, 3)
+
+
+static func _station_value(st: Array, z: float, k: int) -> float:
+	for i in st.size() - 1:
+		if z <= st[i][0] and z >= st[i + 1][0]:
+			return lerpf(st[i][k], st[i + 1][k], inverse_lerp(st[i][0], st[i + 1][0], z))
+	return st[0][k] if z > st[0][0] else st[st.size() - 1][k]
 
 
 ## Shirt pattern from team data: colors.pattern = "hoops" or "stripes".
@@ -430,17 +473,22 @@ func _head() -> void:
 	# Skull and face in one sculpted piece: chin, jaw, cheekbones, brow.
 	var jaw := 0.066 + 0.01 * m.build
 	_mesh(head, _loft([
-		[-0.108, 0.018, 0.016, -0.083], [-0.1, 0.034, 0.03, -0.074], [-0.08, jaw * 0.85, 0.058, -0.045],
+		[-0.112, 0.006, 0.005, -0.087], [-0.106, 0.022, 0.019, -0.08], [-0.1, 0.034, 0.03, -0.074], [-0.08, jaw * 0.85, 0.058, -0.045],
 		[-0.05, jaw, 0.08, -0.018], [-0.015, 0.074, 0.094, -0.006], [0.02, 0.079, 0.1, 0.0],
 		[0.06, 0.079, 0.1, 0.006], [0.095, 0.068, 0.086, 0.01], [0.118, 0.04, 0.052, 0.012],
 		[0.128, 0.01, 0.014, 0.012]], seg + 4, 2.1), skin, c)
 	# Nose, brow ridge, lips, ears
-	var nose := ShintyMesh.sweep(PackedVector3Array([Vector3(0, 0.03, -0.092), Vector3(0, 0.0, -0.106), Vector3(0, -0.018, -0.112)]),
-		PackedVector2Array([Vector2(0.008, 0.006), Vector2(0.012, 0.012), Vector2(0.016, 0.012)]), 10)
+	# Nose: narrow bridge, rounded tip, wider at the nostrils.
+	var nose := ShintyMesh.sweep(PackedVector3Array([Vector3(0, 0.032, -0.088), Vector3(0, 0.008, -0.1),
+		Vector3(0, -0.012, -0.109), Vector3(0, -0.022, -0.106)]),
+		PackedVector2Array([Vector2(0.0065, 0.005), Vector2(0.008, 0.008), Vector2(0.0125, 0.011), Vector2(0.013, 0.007)]), 10)
 	_mesh(head, nose, skin, c)
 	if detail:
-		_mesh(head, ShintyMesh.sweep(PackedVector3Array([Vector3(-0.06, 0.042, -0.086), Vector3(0, 0.046, -0.097), Vector3(0.06, 0.042, -0.086)]),
-			PackedVector2Array([Vector2(0.008, 0.008), Vector2(0.01, 0.01), Vector2(0.008, 0.008)]), 8), skin, c)
+		# Brow ridge (under the helmet's front edge when one is worn).
+		if not m.wear_helmet:
+			_mesh(head, ShintyMesh.sweep(PackedVector3Array([Vector3(-0.058, 0.04, -0.078), Vector3(-0.03, 0.043, -0.088),
+				Vector3(0, 0.044, -0.09), Vector3(0.03, 0.043, -0.088), Vector3(0.058, 0.04, -0.078)]),
+				PackedVector2Array([Vector2(0.003, 0.003), Vector2(0.006, 0.006), Vector2(0.006, 0.006), Vector2(0.006, 0.006), Vector2(0.003, 0.003)]), 8), skin, c)
 		var lip := ShintyMesh.solid(m.skin_color.lerp(Color(0.62, 0.3, 0.3), 0.35), 0.5)
 		_mesh(head, ShintyMesh.sweep(PackedVector3Array([Vector3(-0.022, -0.044, -0.094), Vector3(0, -0.042, -0.1), Vector3(0.022, -0.044, -0.094)]),
 			PackedVector2Array([Vector2(0.004, 0.005), Vector2(0.006, 0.007), Vector2(0.004, 0.005)]), 8), lip, c)
@@ -453,9 +501,10 @@ func _head() -> void:
 			_mesh(head, _ellipsoid(0.0135, 0.009, 0.008), white, e)
 			_mesh(head, _ellipsoid(0.0068, 0.0068, 0.004), iris, e + Vector3(0, 0, -0.0065))
 			_mesh(head, _ellipsoid(0.0032, 0.0032, 0.002), pupil, e + Vector3(0, 0, -0.0092))
-			var brow := _mesh(head, _loft([[-0.016, 0.004, 0.003], [0.016, 0.003, 0.002]], 6), hair,
-				e + Vector3(sx * 0.002, 0.018, -0.006))
-			brow.rotation.z = PI / 2 + sx * 0.12
+			if not m.wear_helmet:  # otherwise tucked under the helmet's brim
+				var brow := _mesh(head, _loft([[-0.016, 0.004, 0.003], [0.016, 0.003, 0.002]], 6), hair,
+					e + Vector3(sx * 0.002, 0.017, -0.011))
+				brow.rotation.z = PI / 2 + sx * 0.12
 			# Ears
 			var ear := _mesh(head, _ellipsoid(0.01, 0.028, 0.018), skin, c + Vector3(sx * 0.08, 0.005, 0.012))
 			ear.rotation.y = sx * 0.3
@@ -473,54 +522,163 @@ func _head() -> void:
 		_helmet(head, c)
 
 
+## Helmet in the style players wear: a hurling-type shell with a raised
+## crown panel, slotted vents, white foam lining, and a stainless steel cage
+## fixed at the brow and temples with a chin cup and strap. Most players wear
+## the team colour; some wear two-tone or white shells.
 func _helmet(head: Node3D, c: Vector3) -> void:
-	var shell := ShintyMesh.solid(m.helmet_color, 0.28, 0.05, 0.8)
-	var inner := ShintyMesh.solid(Color("1c1c20"), 0.8)
-	var metal := ShintyMesh.solid(Color("c9ccd1"), 0.25, 0.9)
-	# Dome over the top, a little bigger than the skull.
+	var main_col := m.helmet_color
+	var panel_col := m.helmet_color
+	var style := _chance(9)
+	if not m.is_keeper and style < 0.18:
+		main_col = Color("f2f2f2")
+	elif not m.is_keeper and style < 0.33 and _color_gap(m.helmet_color, m.trim_color) > 0.25:
+		panel_col = m.trim_color
+	var shell := ShintyMesh.solid(main_col, 0.38, 0.0, 0.55)
+	var panel := ShintyMesh.solid(panel_col.darkened(0.06) if panel_col == main_col else panel_col, 0.38, 0.0, 0.55)
+	var foam := ShintyMesh.solid(Color("ecebe6"), 0.9)
+	var dark := ShintyMesh.solid(Color("18181c"), 0.85)
+	var metal := ShintyMesh.solid(Color("d2d5d9"), 0.3, 0.6)
+	# Shell: the dome, then the sides and back coming down past the ears to
+	# the nape, open at the face. It sits a finger's width off the skull.
 	_mesh(head, _loft([
-		[0.03, 0.096, 0.118, 0.008], [0.07, 0.096, 0.118, 0.01], [0.105, 0.083, 0.104, 0.012],
-		[0.128, 0.064, 0.08, 0.014], [0.142, 0.038, 0.047, 0.014], [0.149, 0.01, 0.012, 0.014]], seg + 4, 2.2), shell, c)
-	# Back and side skirt, open at the face.
+		[0.03, 0.096, 0.121, 0.012], [0.07, 0.096, 0.121, 0.013], [0.105, 0.084, 0.108, 0.015],
+		[0.128, 0.066, 0.084, 0.016], [0.143, 0.04, 0.05, 0.016], [0.15, 0.01, 0.012, 0.016]], seg + 4, 2.3), shell, c)
 	_mesh(head, _loft([
-		[-0.06, 0.09, 0.106, 0.016], [-0.02, 0.095, 0.114, 0.012], [0.035, 0.096, 0.118, 0.008]],
-		seg, 2.2, false, -0.55, PI + 0.55), shell, c)
-	# Padding visible at the rim
-	_mesh(head, _loft([[0.026, 0.093, 0.114, 0.008], [0.034, 0.093, 0.114, 0.008]], seg, 2.2, true), inner, c)
-	# Peak over the brow
-	var peak := _mesh(head, _loft([[0.0, 0.07, 0.02], [0.006, 0.07, 0.02]], seg, 3.0), shell,
-		c + Vector3(0, 0.038, -0.112))
-	peak.rotation.x = 0.25
-	# Vents along the top
+		[-0.075, 0.084, 0.098, 0.03], [-0.045, 0.092, 0.108, 0.022], [-0.005, 0.097, 0.118, 0.015],
+		[0.036, 0.098, 0.122, 0.012]], seg, 2.3, false, -0.5, PI + 0.5), shell, c)
+	# Brow rim: a rolled edge across the forehead where the cage clips on.
+	_mesh(head, _loft([[0.03, 0.1, 0.124, 0.011], [0.042, 0.1, 0.124, 0.011]], seg + 4, 2.3, true, PI + 0.5, TAU - 0.5), shell, c)
+	# Crown panel: a raised strip from the brow over the top to the back,
+	# following the shell's centre line just proud of it.
+	var prof := PackedVector2Array()  # (y, z) up the front, over, down the back
+	var dome_rings := [[0.036, 0.121, 0.012], [0.07, 0.121, 0.013], [0.105, 0.108, 0.015], [0.128, 0.084, 0.016], [0.143, 0.05, 0.016]]
+	for r in dome_rings:
+		prof.append(Vector2(r[0], r[2] - r[1]))
+	prof.append(Vector2(0.15, 0.016))
+	for i in range(dome_rings.size() - 1, -1, -1):
+		prof.append(Vector2(dome_rings[i][0], dome_rings[i][2] + dome_rings[i][1]))
+	prof.append(Vector2(-0.005, 0.015 + 0.118))
+	var cp := PackedVector3Array()
+	var cr := PackedVector2Array()
+	for i in prof.size():
+		var tng := prof[mini(i + 1, prof.size() - 1)] - prof[maxi(i - 1, 0)]
+		var out := Vector2(-tng.y, tng.x).normalized()  # (dy, dz) pointing away from the skull
+		if out.x < 0.0 and prof[i].y > 0.14:
+			out = -out
+		if Vector2(prof[i].x - 0.07, prof[i].y - 0.015).dot(out) < 0.0:
+			out = -out
+		var q := prof[i] + out * 0.004
+		cp.append(c + Vector3(0, q.x, q.y))
+		cr.append(Vector2(lerpf(0.03, 0.036, sin(PI * float(i) / (prof.size() - 1))), 0.0045))
+	_mesh(head, ShintyMesh.sweep(cp, cr, seg, 3.0, false, Vector3.RIGHT), panel)
+	# Foam lining showing under the brow and round the face opening, and the
+	# white ear pads either side.
+	_mesh(head, _loft([[0.024, 0.093, 0.116, 0.012], [0.034, 0.095, 0.119, 0.011]], seg + 4, 2.3, true, PI + 0.55, TAU - 0.55), foam, c)
+	for sx in [-1.0, 1.0]:
+		var pad := _mesh(head, _loft([[-0.05, 0.008, 0.012], [-0.03, 0.01, 0.016], [0.025, 0.011, 0.018], [0.04, 0.008, 0.014]], 10, 2.6), foam,
+			c + Vector3(sx * 0.09, -0.02, -0.03))
+		pad.rotation.x = 0.45
 	if detail:
-		for i in 3:
-			var vent := _mesh(head, _loft([[-0.02, 0.004, 0.012], [0.02, 0.004, 0.012]], 6, 3.0), inner,
-				c + Vector3((i - 1) * 0.03, 0.128 - absf(i - 1) * 0.01, 0.02))
-			vent.rotation.x = PI / 2 - 0.3
-	# Face guard: curved bars on an arc in front of the face.
-	var r := 0.132
-	var n_bars := 7 if detail else 3
-	for i in n_bars:
-		var a := deg_to_rad(lerpf(-58.0, 58.0, float(i) / (n_bars - 1)))
-		var top := c + Vector3(sin(a) * r * 0.92, 0.03, -cos(a) * r)
-		var bot := c + Vector3(sin(a) * r * 0.8, -0.115, -cos(a) * r * 0.86)
-		_mesh(head, ShintyMesh.sweep(PackedVector3Array([top, (top + bot) / 2.0 + Vector3(0, 0, -0.006), bot]),
-			PackedVector2Array([Vector2(0.004, 0.004), Vector2(0.004, 0.004), Vector2(0.004, 0.004)]), 6), metal)
-	for y in ([0.03, -0.02, -0.07, -0.115] if detail else [0.03, -0.115]):
-		var k := inverse_lerp(0.03, -0.115, y)
+		# Vents: two slots stacked on the forehead each side of the panel,
+		# two at the back and two along each side.
+		var slot := ShintyMesh.loft([[-0.001, 0.012, 0.0045], [0.003, 0.011, 0.0038]], 8, 4.0)
+		for sx in [-1.0, 1.0]:
+			for i in 2:
+				_surface_piece(head, slot, dark, c, Vector3(sx * 0.052, 0.068 + i * 0.018, 0.0))
+			_surface_piece(head, slot, dark, c, Vector3(sx * 0.03, 0.08, 1.0))
+			for i in 2:
+				_surface_piece(head, slot, dark, c, Vector3(sx * 0.097, 0.055 + i * 0.022, 0.5), true)
+		# Fixings: rivets at the temples where the cage and strap attach, and
+		# the two clips on the brow.
+		for sx in [-1.0, 1.0]:
+			_mesh(head, _ellipsoid(0.007, 0.007, 0.003), metal, c + Vector3(sx * 0.1, 0.0, -0.035)).rotation.y = sx * PI / 2
+			_mesh(head, _loft([[-0.006, 0.006, 0.004], [0.006, 0.006, 0.004]], 6, 3.0), dark,
+				c + Vector3(sx * 0.014, 0.038, -0.127)).rotation.x = PI / 2
+		var brand := _label("CORRIE", 40, 0.0006)
+		brand.modulate = Color.WHITE if main_col.get_luminance() < 0.6 else Color("1b1b1f")
+		brand.outline_size = 0
+		brand.visibility_range_end = 18.0
+		for sx in [-1.0, 1.0]:
+			var b := brand if sx < 0.0 else brand.duplicate() as Label3D
+			b.position = c + Vector3(sx * 0.1015, 0.035, 0.03)
+			b.rotation = Vector3(0, sx * PI / 2, 0)
+			head.add_child(b)
+	# Cage: bars bent round the face from temple to temple, standing off the
+	# face and tucking in under the chin. v runs 0 (brow) to 1 (chin).
+	var bars_h := [0.0, 0.17, 0.34, 0.5, 0.66, 0.82, 1.0] if detail else [0.0, 0.5, 1.0]
+	var bars_v := [-50.0, -30.0, -6.0, 6.0, 30.0, 50.0] if detail else [-30.0, 0.0, 30.0]
+	var thick := Vector2(0.0033, 0.0033)
+	for v in bars_h:
+		var span := lerpf(80.0, 58.0, v)
 		var pts := PackedVector3Array()
 		var rad := PackedVector2Array()
 		for j in 11:
-			var a2 := deg_to_rad(lerpf(-72.0, 72.0, j / 10.0))
-			pts.append(c + Vector3(sin(a2) * r * lerpf(0.92, 0.8, k), y, -cos(a2) * r * lerpf(1.0, 0.86, k)))
-			rad.append(Vector2(0.0045, 0.0045))
-		_mesh(head, ShintyMesh.sweep(pts, rad, 6), metal)
-	# Chin strap and cup
-	var strap := ShintyMesh.solid(Color("1b1b1f"), 0.7)
+			pts.append(c + _cage_point(v, deg_to_rad(lerpf(-span, span, j / 10.0))))
+			rad.append(thick)
+		_mesh(head, ShintyMesh.sweep(pts, rad, 4), metal)
+	for deg in bars_v:
+		var pts := PackedVector3Array()
+		var rad := PackedVector2Array()
+		for k in 7:
+			pts.append(c + _cage_point(k / 6.0, deg_to_rad(deg)))
+			rad.append(thick)
+		_mesh(head, ShintyMesh.sweep(pts, rad, 4), metal)
+	# Side frame: the outer bar from the temple rivet down to the chin corner.
 	for sx in [-1.0, 1.0]:
-		_mesh(head, ShintyMesh.sweep(PackedVector3Array([c + Vector3(sx * 0.088, -0.02, 0.0), c + Vector3(sx * 0.07, -0.08, -0.03),
-			c + Vector3(sx * 0.03, -0.108, -0.066)]), PackedVector2Array([Vector2(0.003, 0.007), Vector2(0.003, 0.007), Vector2(0.003, 0.007)]), 6), strap)
-	_mesh(head, _ellipsoid(0.03, 0.014, 0.02), strap, c + Vector3(0, -0.11, -0.074))
+		var pts := PackedVector3Array()
+		var rad := PackedVector2Array()
+		for k in 7:
+			var v := k / 6.0
+			pts.append(c + _cage_point(v, sx * deg_to_rad(lerpf(80.0, 58.0, v))))
+			rad.append(Vector2(0.0045, 0.0045))
+		_mesh(head, ShintyMesh.sweep(pts, rad, 5), metal)
+	# Chin cup inside the bottom of the cage, and the strap up to the ear pads.
+	_mesh(head, _ellipsoid(0.032, 0.016, 0.022), dark, c + Vector3(0, -0.118, -0.078))
+	for sx in [-1.0, 1.0]:
+		_mesh(head, ShintyMesh.sweep(PackedVector3Array([c + Vector3(sx * 0.094, -0.045, -0.01), c + Vector3(sx * 0.078, -0.09, -0.04),
+			c + Vector3(sx * 0.03, -0.118, -0.07)]), PackedVector2Array([Vector2(0.0025, 0.008), Vector2(0.0025, 0.008), Vector2(0.0025, 0.008)]), 6), dark)
+
+
+## A point on the cage: v from 0 at the brow to 1 under the chin, a = angle
+## round the face (0 straight ahead). Head space, relative to the skull centre.
+static func _cage_point(v: float, a: float) -> Vector3:
+	var y := lerpf(0.036, -0.13, v)
+	# Half width and depth of the cage at this height: widest at the cheeks,
+	# furthest out in front of the mouth, drawn in under the chin.
+	var half_w := lerpf(0.114, 0.084, v * v)
+	var depth := 0.138 + 0.01 * sin(v * PI * 0.8) - 0.03 * pow(v, 3.0)
+	return Vector3(sin(a) * half_w, y, 0.012 - cos(a) * depth)
+
+
+## Place a small piece flat on the helmet shell. `spot` is (x, y, where) with
+## where 0 = front, 1 = top towards the back, 0.5 = side; `side` turns it to
+## run along the side of the shell.
+func _surface_piece(head: Node3D, mesh: Mesh, mat: Material, c: Vector3, spot: Vector3, side := false) -> void:
+	var x := spot.x
+	var y := spot.y
+	var hw := 0.098
+	var hd := 0.122
+	var pos: Vector3
+	var normal: Vector3
+	if side:
+		var z := lerpf(-0.03, 0.05, spot.z)
+		pos = Vector3(signf(x) * hw * 1.005, y, z + 0.012)
+		normal = Vector3(signf(x), 0.25, 0).normalized()
+	elif spot.z > 0.5:
+		pos = Vector3(x, y + 0.035, 0.09)
+		normal = Vector3(0, 0.6, 1).normalized()
+	else:
+		var k := clampf(x / hw, -0.95, 0.95)
+		pos = Vector3(x, y, 0.012 - hd * sqrt(1.0 - k * k) - 0.001)
+		normal = Vector3(k, 0.35, -sqrt(1.0 - k * k)).normalized()
+	var mi := _mesh(head, mesh, mat, c + pos)
+	# The slot's thin axis is its local Y; lay that along the surface normal.
+	mi.basis = Basis(Quaternion(Vector3.UP, normal)) * (Basis(Vector3.UP, PI / 2) if side else Basis())
+
+
+static func _color_gap(a: Color, b: Color) -> float:
+	return Vector3(a.r - b.r, a.g - b.g, a.b - b.b).length()
 
 
 # --- Caman ---------------------------------------------------------------------------

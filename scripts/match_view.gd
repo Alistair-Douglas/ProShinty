@@ -116,6 +116,10 @@ func _update_player(p, f: Dictionary, delta: float) -> void:
 		var name := StringName(a["name"])
 		if name == &"swing" and a["charge"] > 0.0 and model.is_busy():
 			model.release_swing(a["power"])
+		elif name == &"stumble":
+			# The longer the match keeps them off balance, the harder the
+			# knock looked: the biggest put them on the grass.
+			model.play_action(name, clampf(p.stagger / 1.3, 0.0, 1.0))
 		else:
 			model.play_action(name, a["power"], m.ball_z * ShintyMatchAdapter.YARD)
 	elif p == m.human and m.charge >= 0.0 and p.swing_t < 0.0 and not model.is_busy():

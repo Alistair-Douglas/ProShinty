@@ -16,7 +16,7 @@ marked below.
 | Attackers put it over the byline: goal hit from the edge of the D | Yes (moved out from 4 to 10 yards) |
 | Defenders put it over their own byline: a corner | Yes |
 | Hacking (bringing your caman down on an opponent's caman) is a foul | Enforced |
-| Striking an opponent with the caman is a foul | Enforced |
+| Striking an opponent with the caman is a foul | Enforced: a swing that misses the ball and catches an opponent in front is a foul, and is booked more readily. A swing that catches a late blocker is not a foul; the blocker just gets hurt |
 | Body contact must be shoulder to shoulder | A shoulder barge is legal; a push in the back is a foul, and it's easier for the referee to miss |
 | Ball played with the head is a foul | Enforced when the match reports it |
 | Only the keeper may use hands, open palm only, no catching | Keepers deflect the ball down to their feet; handling outside the D, or catching it, is a foul |
@@ -26,9 +26,9 @@ marked below.
 | Offside: an attacker may not be inside the opponents' D ahead of the ball when a team-mate plays it (not from Wikipedia) | Enforced: free hit to the defenders |
 | Advantage | When the fouled team keeps the ball in the opponents' half, the referee lets play go on and brings it back if they lose it within 3 seconds; anywhere else it blows for the free hit |
 
-Besides the fouls the physics reports (pushes in the back, late blocks), the
+Besides the fouls the physics reports (pushes in the back), the
 referee pulls up clumsy challenges: a poke that misses the ball, more often from
-behind or when tired, and hacking in a stick battle. About eight free hits a
+behind or when tired, hacking in a stick battle, and a swing into a player. About ten free hits a
 match.
 
 The referee has to see a foul to give it. It runs about 10 yards off the play
