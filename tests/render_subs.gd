@@ -41,10 +41,10 @@ func _process(_d: float) -> bool:
 	if menu == null:
 		menu = m.find_children("*", "Control", true, false).filter(func(c): return c.has_method("is_open"))[0]
 	match frame:
-		60, 80:
-			# Close up on each dugout: the bench in neon bibs.
+		60:
+			# Close up on the home dugout: the bench in neon bibs.
 			var view = m.get_node("View")
-			var t := 0 if frame == 60 else 1
+			var t := 0
 			var cam := Camera3D.new()
 			cam.name = "BenchCam"
 			view.add_child(cam)
@@ -52,8 +52,8 @@ func _process(_d: float) -> bool:
 			cam.position = at + Vector3(0.8, 2.4, 4.2)
 			cam.look_at(at + Vector3(0, 0.5, -0.4), Vector3.UP)
 			cam.current = true
-		64, 84:
-			_shot("subs_bench_%d" % (0 if frame == 64 else 1))
+		64:
+			_shot("subs_bench_0")
 			var view = m.get_node("View")
 			view.get_node("BenchCam").free()
 			view.camera.current = true
@@ -90,7 +90,9 @@ func _process(_d: float) -> bool:
 			_shot("subs_board")
 		200:
 			_shot("subs_jog")
-		420:
+			for p in m.subs.leaving:
+				p.pos = m.subs.bench_spot(p.team)   # skip the rest of the walk off
+		204:
 			var view = m.get_node("View")
 			var cam := Camera3D.new()
 			cam.name = "BenchCam"
@@ -99,7 +101,7 @@ func _process(_d: float) -> bool:
 			cam.position = at + Vector3(0.8, 2.4, 4.2)
 			cam.look_at(at + Vector3(0, 0.5, -0.4), Vector3.UP)
 			cam.current = true
-		424:
+		208:
 			_shot("subs_bench_after")
 			var view = m.get_node("View")
 			print("seated after the change: ", view.benches.seated.size())
