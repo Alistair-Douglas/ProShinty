@@ -31,10 +31,7 @@ func _run() -> void:
 		ok = false
 
 	var mus = root.get_node("Music")
-	var present := 0
-	for t in list:
-		if FileAccess.file_exists(Music.DIR + str(t["file"])):
-			present += 1
+	var present: int = Music._music_files().size()
 	print("music: %d of %d mp3s present, %d playable" % [present, list.size(), mus.tracks.size()])
 	if mus.tracks.size() != present:
 		push_error("every present mp3 (and only those) should be playable here")
@@ -66,8 +63,8 @@ func _run() -> void:
 	if load("res://addons/demo_music/export_plugin.gd") == null:
 		push_error("the export guard script should load")
 		ok = false
-	if Music.files_to_leave_out(PackedStringArray(["pc", "release"])).size() != list.size():
-		push_error("a release export should leave out all %d demo tracks" % list.size())
+	if Music.files_to_leave_out(PackedStringArray(["pc", "release"])).size() != Music.all_tracks().size():
+		push_error("a release export should leave out every demo track")
 		ok = false
 	if not Music.files_to_leave_out(PackedStringArray(["pc", "demo"])).is_empty():
 		push_error("a demo export should keep the demo tracks")

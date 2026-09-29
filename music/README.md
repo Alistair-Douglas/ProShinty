@@ -9,8 +9,9 @@ loading screens, and fades out when a match starts. The volume is the
 
 The repository is public and these tracks are not cleared for release, so
 `music/*.mp3` is gitignored. To hear them, copy the mp3s into this folder
-(the names in `playlist.json`) and open the project in Godot. A track whose
-file is missing is skipped; with none present the menu is silent.
+and open the project in Godot. Any file name works: an mp3/ogg/wav that
+isn't named in `playlist.json` still plays, and counts as demo only. With no
+files present the menu is silent (the output log says so).
 
 ## Demo-only flag
 

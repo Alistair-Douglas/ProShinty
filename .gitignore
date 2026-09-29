@@ -18,3 +18,8 @@ Thumbs.db
 # Drop the mp3s listed in music/playlist.json into music/ locally.
 /music/*.mp3
 /music/*.mp3.import
+/music/*.ogg
+/music/*.ogg.import
+/music/*.wav
+/music/*.wav.import
+/music/*.MP3
