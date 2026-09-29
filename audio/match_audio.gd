@@ -10,11 +10,11 @@ const POST := preload("res://audio/sfx/post_bat.mp3")
 const CLACK := preload("res://audio/sfx/clack_plank.wav")
 const CHEER := preload("res://audio/sfx/cheer_crowd.wav")
 const OOH := preload("res://audio/sfx/ooh_crowd.wav")
-const CROWD_LOOP := preload("res://audio/sfx/crowd_loop.wav")
+const CROWD_LOOP := preload("res://audio/sfx/crowd_chatter.wav")
 
 const SOFT_HIT := 8.0      ## yd/s: a strike this slow is the quietest thwack
 const HARD_HIT := 40.0     ## yd/s: a strike this fast is the loudest
-const CROWD_DB := -16.0    ## background murmur level
+const CROWD_DB := -18.0    ## background chatter level
 const VOICES := 8          ## sound effects that can overlap
 
 var m                      # the match (scripts/match.gd); defaults to the parent
