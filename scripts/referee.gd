@@ -124,7 +124,7 @@ func _read_events() -> void:
 				_free_hit_taker = e.get("taker")
 			"throw_up":
 				_clear()
-				# The referee throws the ball up at the centre spot.
+				# The referee throws the ball up at the centre spot, from the side.
 				pos = m.ball_pos + Vector2(0, -1.4)
 				vel = Vector2.ZERO
 			"Shy", "Corner", "Hit-out", "Penalty hit", "goal", "half_end":
