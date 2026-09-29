@@ -691,8 +691,8 @@ func _pose(_delta: float) -> void:
 		var local: Vector3 = global_transform.affine_inverse() * (_look_target as Vector3)
 		var yaw := clampf(atan2(-local.x, -local.z) - twist, -1.1, 1.1)
 		var pitch := clampf(atan2(local.y - 1.6, Vector2(local.x, local.z).length()), -0.6, 0.4)
-		rot["Neck"] += Vector3(-pitch * 0.4, yaw * 0.45, 0)
-		rot["Head"] += Vector3(-pitch * 0.6, yaw * 0.55, 0)
+		rot["Neck"] += Vector3(pitch * 0.4, yaw * 0.45, 0)
+		rot["Head"] += Vector3(pitch * 0.6, yaw * 0.55, 0)
 
 	# Mirror for left-handers: swap left/right bones and flip yaw/roll.
 	if left_handed:

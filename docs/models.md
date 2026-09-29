@@ -72,10 +72,19 @@ animation or physics.
   number on the front, and the number and surname on the back (surnames show
   once squads have real names). Socks have trim hoops. A team can set
   `colors.pattern` to `"hoops"` or `"stripes"`.
-- **Boots** have a shaped upper, a coloured sole, studs and laces, with a few
-  colourways across the squad.
-- **Helmet**: rounded glossy shell with a peak, vents, padding at the rim, a
-  curved steel face guard and a chin strap.
+- **Boots** are low-cut football boots: a flat sole plate with a little toe
+  spring, a heel collar round the ankle, a lace panel over the instep, a
+  wide forefoot turned in at the big toe, a side flash, and conical studs.
+  Boot, sole and flash colours vary across the squad.
+- **Helmet** follows the hurling-style helmets players wear: a rounded shell
+  that comes down past the ears, a raised crown panel from brow to nape,
+  slotted vents on the forehead, top and sides, white foam lining under the
+  brow and down the cheeks, rivets at the temples, a made-up "CORRIE" brand
+  on each side, and a steel cage (seven bars across, six up) standing off
+  the face and tucking in under the chin, with a chin cup and strap. Most
+  players wear the team's helmet colour; about one in six wears a white
+  shell and about one in seven a two-tone one with the panel in the trim
+  colour (keepers always wear the team colour).
 - **Caman**: ash grain, an oval shaft that flares into a curved bas, grip
   tape spiralled round the handle, a knob at the end and tape on the bas.
 - **Ball**: leather with a stitched seam drawn by a shader, and a raised ridge
@@ -154,8 +163,9 @@ launch on the model's `strike` signal.
 
 ## Performance
 
-Each player is about 8,000 triangles in 46 meshes: meshes under the same bone
-that share a material are merged, so 24 players come to roughly 1,100 draw
-calls. `low_detail = true` drops a player to 36 meshes by leaving out the face
-details, face guard bars, studs, laces, names and numbers; use it for
-distant players.
+Each player is about 14,600 triangles, baked into one skinned mesh of about
+nine surfaces (one per material; every plain-coloured part shares a single
+surface) plus a shadow-only copy. The helmet cage, boots and vents add
+triangles but no draw calls. `low_detail = true` halves the triangles (about
+7,700) by leaving out the face details, most cage bars, vents, studs, laces,
+names and numbers; use it for distant players.
