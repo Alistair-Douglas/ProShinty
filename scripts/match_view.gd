@@ -33,6 +33,8 @@ const WOOD := Color(0.55, 0.36, 0.18)
 
 func _ready() -> void:
 	m = get_parent()
+	if has_node("/root/Music"):
+		get_node("/root/Music").stop()  # menu music fades as the match starts
 	pitch = PitchScene.instantiate()
 	pitch.venue = int(m.config.get("venue", 0))
 	pitch.units_per_yard = 1.0

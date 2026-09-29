@@ -36,6 +36,7 @@ run camans   timeout 300  "$GODOT" --headless --path . -s tests/caman_test.gd
 run referee  timeout 300  "$GODOT" --headless --path . -s tests/referee_test.gd
 run crowd    timeout 600  "$GODOT" --headless --fixed-fps 60 --path . -s tests/crowd_test.gd
 run audio    timeout 600  "$GODOT" --headless --path . -s tests/audio_test.gd
+run music    timeout 120  "$GODOT" --headless --path . -s tests/music_test.gd
 run subs     timeout 1200 "$GODOT" --headless --path . -s tests/subs_test.gd
 run sim      timeout 1200 "$GODOT" --headless --path . -s tests/sim_test.gd
 run checkpoint timeout 3000 "$GODOT" --headless --fixed-fps 60 --path . -s tests/checkpoint_test.gd -- $QUICK

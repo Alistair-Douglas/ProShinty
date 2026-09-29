@@ -13,6 +13,11 @@ config/features=PackedStringArray("4.7", "Forward Plus")
 [autoload]
 
 Game="*res://scripts/game.gd"
+Music="*res://scripts/music.gd"
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/demo_music/plugin.cfg")
 
 [display]
 

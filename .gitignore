@@ -13,3 +13,8 @@ export_presets.cfg.bak
 .DS_Store
 Thumbs.db
 *.swp
+
+# Demo music: not licensed, never committed (the repo is public).
+# Drop the mp3s listed in music/playlist.json into music/ locally.
+/music/*.mp3
+/music/*.mp3.import
