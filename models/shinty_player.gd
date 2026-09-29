@@ -601,11 +601,14 @@ func _pose(_delta: float) -> void:
 	# Blowing after a sprint: faster, deeper breaths, bent over a little.
 	var breathe := sin(_time * lerpf(1.8, 3.6, _puff)) * lerpf(0.015, 0.045, _puff)
 	# Shinty stance is upright, not an ice hockey crouch: a slight bend, head up.
-	# Everyone stands a little differently.
-	rot["Spine"] = Vector3(-0.08 * idle - 0.1 * run - 0.14 * sprint - 0.12 * _puff * idle + (_seed - 0.5) * 0.08, 0, 0)
-	rot["Chest"] = Vector3(breathe, 0, 0)
+	# Everyone stands a little differently. A jog stays fairly upright; the
+	# faster they go the further forward they lean, like a sprinter, with the
+	# head kept up to see the play.
+	var pace := _ease((_speed - 2.5) / 5.5)
+	rot["Spine"] = Vector3(-0.08 * idle - 0.1 * run - 0.45 * pace - 0.12 * _puff * idle + (_seed - 0.5) * 0.08, 0, 0)
+	rot["Chest"] = Vector3(breathe - 0.12 * pace, 0, 0)
 	rot["UpperChest"] = Vector3(-0.03 * idle, 0, 0)
-	rot["Neck"] = Vector3(0.08 * idle + 0.1 * run + 0.1 * sprint, 0, 0)
+	rot["Neck"] = Vector3(0.08 * idle + 0.1 * run + 0.45 * pace, 0, 0)
 	rot["Head"] = Vector3(0.04, 0, 0)
 
 	# Legs: a football run cycle blended with a slightly crouched stance.
@@ -619,7 +622,8 @@ func _pose(_delta: float) -> void:
 		var sgn := -1.0 if side == "Left" else 1.0
 		var thigh_run := sin(p) * amp + amp * 0.3
 		var swing_fold := pow(maxf(0.0, cos(p + 0.35)), 2.0)
-		var knee_run := -(0.15 + 0.3 * maxf(0.0, -cos(p)) + fold * swing_fold)
+		# The standing leg stays soft: it bends as it takes the weight.
+		var knee_run := -(0.25 + 0.12 * pace + 0.55 * maxf(0.0, -cos(p)) + fold * swing_fold)
 		var thigh_idle := 0.12
 		var knee_idle := -0.24
 		rot[side + "UpperLeg"] = Vector3(lerpf(thigh_idle, thigh_run, run), 0, sgn * 0.05 * idle)
