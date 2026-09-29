@@ -40,10 +40,40 @@ static func files_to_leave_out(features: PackedStringArray) -> Array:
 	var out := []
 	if "demo" in features:
 		return out
-	for t in read_playlist():
-		if t is Dictionary and t.has("file") and is_demo_only(t):
+	for t in all_tracks():
+		if is_demo_only(t):
 			out.append(DIR + str(t["file"]))
 	return out
+
+
+## The playlist's entries plus any other mp3/ogg/wav dropped into music/
+## under a different name. Those extras have no known licence, so they count
+## as demo only.
+static func all_tracks() -> Array:
+	var out := []
+	var listed := {}
+	for t in read_playlist():
+		if t is Dictionary and t.has("file"):
+			out.append(t)
+			listed[str(t["file"]).to_lower()] = true
+	for f in _music_files():
+		if not listed.has(f.to_lower()):
+			out.append({"file": f, "title": f.get_basename(), "licensed": false, "demo_only": true})
+	return out
+
+
+## Audio files in music/. In an exported build only the .import stubs are
+## listed, so those are mapped back to the original name.
+static func _music_files() -> Array:
+	var found := {}
+	for f in DirAccess.get_files_at(DIR):
+		if f.ends_with(".import") or f.ends_with(".remap"):
+			f = f.get_basename()
+		if f.get_extension().to_lower() in ["mp3", "ogg", "wav"]:
+			found[f] = true
+	var names := found.keys()
+	names.sort()
+	return names
 
 
 static func read_playlist() -> Array:
@@ -63,9 +93,7 @@ func _ready() -> void:
 		p.volume_db = -80.0
 		add_child(p)
 		_players.append(p)
-	for t in read_playlist():
-		if not t is Dictionary or not t.has("file"):
-			continue
+	for t in all_tracks():
 		if is_demo_only(t) and not demo_allowed():
 			continue
 		var stream := _load(DIR + str(t["file"]))
@@ -80,7 +108,10 @@ func _load(path: String) -> AudioStream:
 	if ResourceLoader.exists(path):
 		return load(path) as AudioStream
 	if FileAccess.file_exists(path):  # not imported yet (fresh drop, headless)
-		return AudioStreamMP3.load_from_file(path)
+		match path.get_extension().to_lower():
+			"mp3": return AudioStreamMP3.load_from_file(path)
+			"ogg": return AudioStreamOggVorbis.load_from_file(path)
+			"wav": return AudioStreamWAV.load_from_file(path)
 	return null
 
 
