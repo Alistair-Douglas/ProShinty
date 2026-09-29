@@ -14,7 +14,14 @@ var last_result := {}
 ## 0 Low, 1 Medium, 2 High (ShintyPitch.Detail). Saved between runs.
 var graphics_quality := 1
 
+## Club id -> caman design (ShintyCaman) from the caman designer. Saved
+## between runs; the club's players carry it in matches.
+var camans := {}
+
 const SETTINGS_PATH := "user://settings.cfg"
+const CAMANS_PATH := "user://camans.json"
+## Where designs are saved; tests point this elsewhere.
+var camans_path := CAMANS_PATH
 const GRAPHICS_NAMES := ["Low", "Medium", "High"]
 
 
@@ -23,6 +30,7 @@ func _ready() -> void:
 	if teams.size() > 1:
 		away_index = 1
 	_setup_input()
+	_load_camans()
 	var cfg := ConfigFile.new()
 	if cfg.load(SETTINGS_PATH) == OK and cfg.has_section_key("graphics", "quality"):
 		graphics_quality = clampi(int(cfg.get_value("graphics", "quality")), 0, 2)
@@ -55,6 +63,39 @@ func _apply_graphics() -> void:
 	RenderingServer.directional_soft_shadow_filter_set_quality(
 		[RenderingServer.SHADOW_QUALITY_SOFT_VERY_LOW, RenderingServer.SHADOW_QUALITY_SOFT_LOW,
 		RenderingServer.SHADOW_QUALITY_SOFT_MEDIUM][q])
+
+
+## The caman a club's players carry: its saved design, else one in its colours.
+func team_caman(team_index: int) -> Dictionary:
+	var team: Dictionary = teams[team_index]
+	if team.has("caman"):
+		return ShintyCaman.sanitize(team["caman"])
+	return ShintyCaman.for_team(team)
+
+
+## Gives a club a caman design and remembers it.
+func set_team_caman(team_index: int, design: Dictionary) -> void:
+	var team: Dictionary = teams[team_index]
+	var d := ShintyCaman.sanitize(design)
+	team["caman"] = d
+	camans[str(team.get("id", team["name"]))] = d
+	var f := FileAccess.open(camans_path, FileAccess.WRITE)
+	if f:
+		f.store_string(JSON.stringify(camans, "\t"))
+
+
+func _load_camans() -> void:
+	camans = {}
+	if not FileAccess.file_exists(camans_path):
+		return
+	var data: Variant = JSON.parse_string(FileAccess.get_file_as_string(camans_path))
+	if not (data is Dictionary):
+		return
+	for team in teams:
+		var key := str(team.get("id", team["name"]))
+		if data.has(key):
+			camans[key] = ShintyCaman.sanitize(data[key])
+			team["caman"] = camans[key]
 
 
 func match_config() -> Dictionary:

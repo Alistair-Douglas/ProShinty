@@ -229,9 +229,9 @@ func _build_hails() -> void:
 
 
 func _build_player(p) -> Dictionary:
-	var f := ShintyMatchAdapter.build_player(self, p.data, {"colors": m.kits[p.team]})
-	var root: Node3D = f["root"]
 	var team: Dictionary = m.teams[p.team]
+	var f := ShintyMatchAdapter.build_player(self, p.data, {"colors": m.kits[p.team], "caman": team.get("caman", {})})
+	var root: Node3D = f["root"]
 	ShintyKitSponsor.apply(f["model"], ShintySponsors.shirt_texture(ShintySponsors.for_team(team)))
 	var ring := _mesh(_torus(0.75, 0.95), _mat(Color(1, 0.92, 0.2), true))
 	ring.position = Vector3(0, 0.04, 0)
