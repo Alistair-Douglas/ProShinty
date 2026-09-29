@@ -22,7 +22,7 @@ func _run() -> void:
 	var ok := true
 	var crowd: AudioStreamWAV = ShintyMatchAudio.CROWD_LOOP
 	if crowd.loop_mode == AudioStreamWAV.LOOP_DISABLED:
-		push_error("crowd_loop.wav must be imported as a loop")
+		push_error("crowd_chatter.wav must be imported as a loop")
 		ok = false
 	var teams := TeamData.load_teams()
 	var m = MatchScene.instantiate()

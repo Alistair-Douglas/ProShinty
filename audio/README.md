@@ -13,14 +13,15 @@ hits off the posts or bar from `match.ball_sim.post_hits`:
 | save | `ooh_crowd.wav` from the crowd |
 | goal | `cheer_crowd.wav` |
 
-A quiet crowd murmur (`crowd_loop.wav`) loops under the whole match and pauses
-with the game.
+The crowd chattering (`crowd_chatter.wav`) loops quietly under the whole match
+and pauses with the game.
 
 ## Where the sounds come from
 
 Recordings from [Freesound](https://freesound.org), chosen by Alistair. Trimmed
 to the hit (the cheer without its quiet start, the moan to its first two and a
-half seconds) and mixed to mono; `post_bat.mp3` is as downloaded. Check each licence on its Freesound page before release, and
+half seconds, the chatter to its steadiest 45 seconds with the ends crossfaded
+so it loops) and mixed to mono; `post_bat.mp3` is as downloaded. Check each licence on its Freesound page before release, and
 credit the authors in the game if it asks for attribution:
 
 | File | Freesound sound | Author |
@@ -30,13 +31,8 @@ credit the authors in the game if it asks for attribution:
 | `post_bat.mp3` | [#851452 "bat_hit2"](https://freesound.org/s/851452/) | hashtagsmcgee |
 | `ooh_crowd.wav` | [#150969 "crowd moaning"](https://freesound.org/s/150969/) | unchaz |
 | `clack_plank.wav` | [#366190 "plank falling"](https://freesound.org/s/366190/) | twiggie2000 |
+| `crowd_chatter.wav` | [#400588 "crowd speaking chattering talking"](https://freesound.org/s/400588/) | misjoc |
 
-`crowd_loop.wav` is synthesised from scratch by `make_sounds.py` and released
-CC0. To rebuild it:
-
-    python3 -m pip install numpy scipy
-    python3 audio/make_sounds.py
-
-`crowd_loop.wav` is imported as a forward loop (see its `.import` file).
+`crowd_chatter.wav` is imported as a forward loop (see its `.import` file).
 Any file can be replaced by another recording with the same name; update the
 table above when you do.
