@@ -20,6 +20,9 @@ var camera: Camera3D
 var home_player: ShintyPlayerModel
 var away_player: ShintyPlayerModel
 var ball: ShintyBallModel
+## The caman designer's bench on the near touchline; built the first time the
+## designer opens (see show_bench).
+var bench: ShintyCamanBench
 
 var _shot := "hub"
 var _from := Transform3D()
@@ -114,7 +117,22 @@ func set_shot(name: String, instant := false) -> void:
 		camera.transform = _to
 
 
+## Puts the caman designer's bench just off the near touchline, a little
+## towards the west hail, inside the rails and fences the grounds put 3 m out
+## so nothing stands between the camera and the bench.
+func show_bench() -> ShintyCamanBench:
+	if bench == null:
+		bench = ShintyCamanBench.new()
+		add_child(bench)
+	var p := Vector3(-9.0, 0.0, pitch.pitch_size().y * 0.5 + 0.8)
+	p.y = pitch.ground_height(p)
+	bench.position = p
+	return bench
+
+
 func _shot_transform(name: String) -> Transform3D:
+	if name == "designer":
+		return show_bench().camera_transform()
 	var s: Array = SHOTS[name]
 	return Transform3D.IDENTITY.translated(s[0]).looking_at(s[1], Vector3.UP)
 
@@ -126,5 +144,6 @@ func _process(delta: float) -> void:
 	var k := ease(_t, -2.4)
 	var tr := _from.interpolate_with(_to, k)
 	# A slow handheld drift so the scene never looks frozen.
-	tr.origin += Vector3(sin(_time * 0.21) * 0.12, sin(_time * 0.33) * 0.05, cos(_time * 0.17) * 0.1)
+	var drift := 0.12 if _shot == "designer" else 1.0  # close to the bench: barely moves
+	tr.origin += Vector3(sin(_time * 0.21) * 0.12, sin(_time * 0.33) * 0.05, cos(_time * 0.17) * 0.1) * drift
 	camera.transform = tr
