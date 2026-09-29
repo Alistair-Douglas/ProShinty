@@ -1196,7 +1196,7 @@ func shy_taker() -> Player:
 func _fresh_air(p: Player, keeps_ball: bool, shy: bool = false) -> void:
 	p.overswing = 0.0
 	p.touch_block = 0.2
-	events.append({"type": "hit", "team": p.team, "kind": "fresh_air", "curve": 0.0, "shy": shy})
+	events.append({"type": "hit", "team": p.team, "kind": "fresh_air", "curve": 0.0, "shy": shy, "by": p})
 	if shy:
 		if p.shy_attempts < SHY_ATTEMPTS:
 			# Catch it and go again.

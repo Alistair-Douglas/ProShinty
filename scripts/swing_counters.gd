@@ -18,7 +18,8 @@ extends RefCounted
 ##   {type: "foul", kind, by, on, at, severity}
 ## kind "barge" (legal shoulder barge), "push" (in the back), "hack" (a poke
 ## through the carrier's body; from match.gd). A swing that catches a late
-## blocker is not a foul: the blocker is hurt ("late_block" event).
+## blocker hurts them but is not a foul ("late_block" event). The referee
+## itself calls a swing that misses the ball and hits an opponent.
 ## player_physics.gd also reports knock-downs from behind as "push".
 ## The match emits "strike", "touch" and "tackle" events alongside.
 ##
