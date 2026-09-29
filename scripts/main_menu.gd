@@ -440,7 +440,7 @@ func _rating_badge(ovr: int) -> Control:
 
 const CONTROL_ROWS := [
 	["Move", "W A S D  /  Arrows", "Left stick"],
-	["Shoot at goal (hold for power)", "Space", "X  /  Square"],
+	["Shoot at goal (hold for power)", "Space  /  Left click", "X  /  Square"],
 	["Long hit (hold for power)", "X", "RT  /  R2"],
 	["Shield / hold up the ball (hold)", "Z", "LT  /  L2"],
 	["Pass", "E", "A  /  Cross"],

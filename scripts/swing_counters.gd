@@ -8,15 +8,19 @@ extends RefCounted
 ##  2. Shove. A shoulder barge is legal. Barging someone in the back is a foul,
 ##     but the referee doesn't always see it. (start_barge(), barge_contact().)
 ##  3. Block. Turn the stick so its back is over the ball in the swing's path,
-##     so their swing hits your stick. Block too late and you get hit.
+##     so their swing hits your stick. Block too late and you get hit (and
+##     hurt), but it isn't a foul.
 ##  4. Cleek. Raise the stick under the arc of their swing so it comes down on
 ##     your caman and glances off: they miss, and the ball is there for you.
+##     Only against hits of half power or more.
 ##
 ## Contact goes into match.events for the referee as
 ##   {type: "foul", kind, by, on, at, severity}
-## kind "barge" (legal shoulder barge), "push" (in the back), "stick" (a swing
-## caught a late blocker), "hack" (a poke through the carrier's body; from
-## match.gd). player_physics.gd also reports knock-downs from behind as "push".
+## kind "barge" (legal shoulder barge), "push" (in the back), "hack" (a poke
+## through the carrier's body; from match.gd). A swing that catches a late
+## blocker hurts them but is not a foul ("late_block" event). The referee
+## itself calls a swing that misses the ball and hits an opponent.
+## player_physics.gd also reports knock-downs from behind as "push".
 ## The match emits "strike", "touch" and "tackle" events alongside.
 ##
 ## Units are the match's (yards, seconds).
@@ -30,6 +34,7 @@ const BLOCK_RANGE := 0.55      ## blocker's stick head this close to the ball co
 const CLEEK_TIME := 0.45
 const CLEEK_SET := 0.08
 const CLEEK_RANGE := 2.4       ## stand this close to the swinger to get under the arc
+const CLEEK_MIN_POWER := 0.5   ## only hits of half power or more can be cleeked
 const BARGE_TIME := 0.35
 const BARGE_BURST := 3.5       ## yd/s thrown into a barge
 const BARGE_BRACE := 1.35      ## a braced shoulder hits harder
@@ -110,7 +115,8 @@ static func intercept(m, p) -> bool:
 		if q.stagger > 0.0:
 			continue
 		# Cleek: stick up under the arc, so the swing glances off it.
-		if q.cleek_t > 0.0 and q.counter_age >= CLEEK_SET and q.pos.distance_to(p.pos) < CLEEK_RANGE:
+		if q.cleek_t > 0.0 and q.counter_age >= CLEEK_SET and q.pos.distance_to(p.pos) < CLEEK_RANGE \
+				and cleekable(p):
 			var chance: float = clampf(0.4 + (q.r("tackling") - p.r("control")) / 100.0 * 0.6, 0.15, 0.75)
 			q.cleek_t = 0.0
 			if randf() < chance:
@@ -120,18 +126,26 @@ static func intercept(m, p) -> bool:
 		if q.block_t > 0.0 and Vector2(q.stick.x, q.stick.y).distance_to(ball) < BLOCK_RANGE:
 			q.block_t = 0.0
 			if q.counter_age < BLOCK_SET:
-				# Too late: the swing catches the blocker.
-				q.stagger = 0.6
+				# Too late: the swing catches the blocker. Not a foul (they put
+				# themselves there), but it hurts: the harder the swing, the
+				# longer they're off balance, and a big one puts them down.
+				var share: float = p.swing_req.get("share", 0.5)
+				q.stagger = clampf(0.5 + share * 0.8, 0.5, 1.3)
+				q.swing_t = -1.0
 				m.anim(q, "stumble")
-				m.events.append({"type": "late_block", "team": q.team})
-				# The swing caught the blocker: caman on the man, though the
-				# blocker put themselves there, so it's the mildest kind.
-				m.events.append({"type": "foul", "kind": "stick", "by": p, "on": q, "at": q.pos, "severity": 0.2})
+				m.events.append({"type": "late_block", "team": q.team, "on": q})
+				if p == m.human or q == m.human:
+					m._say("Late block! %s is hurt" % q.data.get("name", "The blocker"), 1.2)
 				if randf() < 0.4:
 					return false   # and the ball still gets through
 			_blocked(m, p, q)
 			return true
 	return false
+
+
+## Cleeks only work against hits of half power or more.
+static func cleekable(s) -> bool:
+	return s.swing_req.get("share", 0.0) >= CLEEK_MIN_POWER
 
 
 ## Two swings arriving together: the camans clash and the ball goes anywhere.
@@ -200,7 +214,7 @@ static func ai_counter(m, p) -> bool:
 		return false
 	var left: float = s.swing_t
 	var my_swing := ShintyPlayerModel.contact_delay("pass", 0.5)
-	if d_body < CLEEK_RANGE - 0.3 and left > CLEEK_SET + 0.05 and randf() < 0.3:
+	if d_body < CLEEK_RANGE - 0.3 and left > CLEEK_SET + 0.05 and cleekable(s) and randf() < 0.3:
 		start_cleek(m, p)
 	elif d_ball < Body.TWO_HAND_REACH and left > BLOCK_SET and randf() < 0.6:
 		start_block(m, p)

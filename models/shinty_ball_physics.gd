@@ -47,7 +47,8 @@ func duplicate_state() -> ShintyBallPhysics:
 func is_airborne() -> bool:
 	# Still falling counts too: a ball coming down within a hair of the grass
 	# has yet to land (and bounce), not started rolling.
-	return position.y > ground_y + RADIUS + 0.003 or absf(velocity.y) > 0.05
+	var above := position.y - (ground_y + RADIUS)
+	return above > 0.003 or velocity.y > 0.05 or (velocity.y < -0.05 and above > 0.00001)
 
 
 func height() -> float:
@@ -187,7 +188,8 @@ func _ground_contact(vy: float, bounce: bool) -> void:
 		var side := spin.y
 		spin += r.cross(dv) * (5.0 / (2.0 * RADIUS * RADIUS))
 		spin.y = side
-	flat *= TURF_SOAK
+	if bounce or vy > 0.3:
+		flat *= TURF_SOAK   # a real landing, not a ball settling onto the grass
 	if bounce:
 		var e := clampf(GROUND_RESTITUTION + 0.1 - 0.012 * vy, 0.28, 0.55) * randf_range(0.9, 1.1)
 		flat = flat.rotated(Vector3.UP, randfn(0.0, TURF_KICK))

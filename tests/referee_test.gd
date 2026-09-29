@@ -23,6 +23,10 @@ func _process(_delta: float) -> bool:
 		_test_keeper_hands_outside_d()
 		_test_advantage()
 		_test_keeper_catch()
+		_test_no_advantage_in_own_half()
+		_test_card_rate()
+		_test_swing_into_player()
+		_test_late_block_no_foul()
 		print("Referee tests: %s" % ("all passed" if _failures == 0 else "%d failed" % _failures))
 		quit(0 if _failures == 0 else 1)
 	return false
@@ -41,6 +45,7 @@ func _new_match():
 	m.config = {"home": _teams[0], "away": _teams[1], "human_side": -1, "difficulty": 1, "half_seconds": 600.0, "seed": 7}
 	root.add_child(m)
 	m.referee.always_sees = true
+	m.referee.chance_cards = false
 	m.state = m.State.PLAY
 	m.ball_pos = m.PITCH / 2.0
 	m.ball_vel = Vector2.ZERO
@@ -219,6 +224,7 @@ func _test_advantage() -> void:
 	print("Advantage")
 	var m = _new_match()
 	var b = _outfield(m, 1, "LM")
+	b.pos = m.target_goal(1) - Vector2(m.attack_dir[1] * 40.0, 0)  # in the opponents' half
 	m.carrier = b
 	m.last_team = 1
 	m.events.append({"type": "foul", "kind": "hack", "by": _outfield(m, 0, "LM"), "on": b, "at": b.pos, "severity": 0.3})
@@ -252,3 +258,90 @@ func _test_keeper_catch() -> void:
 	_check(m2.referee.calls.is_empty(), "a deflected save is fine")
 	m.free()
 	m2.free()
+
+
+func _test_no_advantage_in_own_half() -> void:
+	print("Foul on a player in their own half")
+	var m = _new_match()
+	var b = _outfield(m, 1, "CHB")
+	b.pos = m.own_goal(1) + Vector2(m.attack_dir[1] * 30.0, 0)
+	m.carrier = b
+	m.last_team = 1
+	m.events.append({"type": "foul", "kind": "hack", "by": _outfield(m, 0, "CHF"), "on": b, "at": b.pos, "severity": 0.3})
+	m.referee.step(0.0)
+	_check(_last_call(m) == "free hit", "straight to a free hit, no advantage")
+	m.free()
+
+
+func _test_card_rate() -> void:
+	print("Cards for ordinary fouls")
+	var m = _new_match()
+	m.referee.chance_cards = true
+	var fouled = _outfield(m, 1, "CHB")
+	var yellows := 0
+	for i in 200:
+		m.referee.fouls = {}
+		m.referee.yellows = {}
+		var by = null
+		for p in m.squads[0]:
+			if not p.is_keeper():
+				by = p
+				break
+		if by == null:
+			break
+		var before: int = m.referee.team_cards(0, "yellow")
+		m.events.append({"type": "foul", "kind": "push", "by": by, "on": fouled, "at": Vector2(75, 30), "severity": 0.45})
+		m.referee.step(0.0)
+		yellows += m.referee.team_cards(0, "yellow") - before
+	_check(yellows >= 8 and yellows <= 50, "some pushes in the back are booked, most aren't (%d of 200)" % yellows)
+	m.free()
+
+
+func _test_swing_into_player() -> void:
+	print("Swing misses the ball and hits a player")
+	var m = _new_match()
+	var p = _outfield(m, 0, "CHF")
+	var q = _outfield(m, 1, "CHB")
+	p.pos = Vector2(60, 30)
+	p.facing = Vector2.RIGHT
+	q.pos = Vector2(61.2, 30)
+	var called := false
+	for i in 20:  # the follow-through doesn't always catch them
+		m.events.append({"type": "hit", "team": 0, "kind": "fresh_air", "curve": 0.0, "shy": false, "by": p})
+		m.referee.step(0.0)
+		if m.referee.calls.size() > 0:
+			called = true
+			break
+	_check(called and m.referee.calls[-1]["kind"] == "swing", "foul for swinging into the player")
+	var m2 = _new_match()
+	p = _outfield(m2, 0, "CHF")
+	p.pos = Vector2(60, 30)
+	p.facing = Vector2.RIGHT
+	for q2 in m2.squads[1]:
+		q2.pos = Vector2(100, q2.pos.y)
+	for i in 20:
+		m2.events.append({"type": "hit", "team": 0, "kind": "fresh_air", "curve": 0.0, "shy": false, "by": p})
+		m2.referee.step(0.0)
+	_check(m2.referee.calls.is_empty(), "a swing at fresh air with nobody near is fine")
+	m.free()
+	m2.free()
+
+
+func _test_late_block_no_foul() -> void:
+	print("Late block")
+	var m = _new_match()
+	var p = _outfield(m, 0, "CHF")
+	var q = _outfield(m, 1, "CHB")
+	q.pos = p.pos + Vector2(1.0, 0)
+	q.block_t = 1.0
+	q.counter_age = 0.0
+	m.ball_pos = Vector2(q.stick.x, q.stick.y)
+	m.Counters.intercept(m, p)
+	m.referee.step(0.0)
+	var late := false
+	for e in m.events:
+		if e["type"] == "late_block":
+			late = true
+	_check(late, "the swing catches the blocker")
+	_check(m.referee.calls.is_empty(), "no foul given")
+	m.free()

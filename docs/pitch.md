@@ -18,7 +18,7 @@ it for a match, and picking a home team moves the match to that team's ground.
   penalty spots at 20 yards with 5-yard arcs, 2-yard corner arcs. The ground
   shader draws them, so they stay sharp and follow any pitch size.
 - Mowing stripes, worn goalmouths, placeholder hails (12 ft x 10 ft), corner
-  and halfway flags, and a physics floor (StaticBody3D, layer 1).
+  flags, and a physics floor (StaticBody3D, layer 1).
 - Lighting presets: summer afternoon, summer evening, overcast. Custom sky
   with sun-lit cumulus and high wisps, blue distance haze, soft four-split
   shadows, AgX tone mapping and glow.

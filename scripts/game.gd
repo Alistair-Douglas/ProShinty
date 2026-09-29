@@ -73,7 +73,7 @@ func _setup_input() -> void:
 	_bind("move_right", [KEY_D, KEY_RIGHT], [], [JOY_AXIS_LEFT_X, 1.0])
 	_bind("move_up", [KEY_W, KEY_UP], [], [JOY_AXIS_LEFT_Y, -1.0])
 	_bind("move_down", [KEY_S, KEY_DOWN], [], [JOY_AXIS_LEFT_Y, 1.0])
-	_bind("shoot", [KEY_SPACE], [JOY_BUTTON_X])
+	_bind("shoot", [KEY_SPACE], [JOY_BUTTON_X], [], [MOUSE_BUTTON_LEFT])
 	_bind("hit", [KEY_X], [], [JOY_AXIS_TRIGGER_RIGHT, 1.0])
 	_bind("shield", [KEY_Z], [], [JOY_AXIS_TRIGGER_LEFT, 1.0])
 	_bind("pass", [KEY_E], [JOY_BUTTON_A])
@@ -86,7 +86,7 @@ func _setup_input() -> void:
 	_bind("quit_match", [KEY_M], [JOY_BUTTON_BACK])
 
 
-func _bind(action: String, keys: Array, buttons: Array = [], axis: Array = []) -> void:
+func _bind(action: String, keys: Array, buttons: Array = [], axis: Array = [], mouse: Array = []) -> void:
 	if InputMap.has_action(action):
 		return
 	InputMap.add_action(action, 0.3)
@@ -96,6 +96,10 @@ func _bind(action: String, keys: Array, buttons: Array = [], axis: Array = []) -
 		InputMap.action_add_event(action, e)
 	for b in buttons:
 		var e := InputEventJoypadButton.new()
+		e.button_index = b
+		InputMap.action_add_event(action, e)
+	for b in mouse:
+		var e := InputEventMouseButton.new()
 		e.button_index = b
 		InputMap.action_add_event(action, e)
 	if not axis.is_empty():
