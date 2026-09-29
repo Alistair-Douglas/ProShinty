@@ -14,9 +14,10 @@ extends RefCounted
 ##
 ## Contact goes into match.events for the referee as
 ##   {type: "foul", kind, by, on, at, severity}
-## kind "barge" (legal shoulder barge), "push" (in the back), "stick" (a swing
-## caught a late blocker), "hack" (a poke through the carrier's body; from
-## match.gd). player_physics.gd also reports knock-downs from behind as "push".
+## kind "barge" (legal shoulder barge), "push" (in the back), "hack" (a poke
+## through the carrier's body; from match.gd). A swing that catches a late
+## blocker hurts them but is not a foul. The referee itself calls a swing that
+## misses the ball and hits an opponent. player_physics.gd also reports knock-downs from behind as "push".
 ## The match emits "strike", "touch" and "tackle" events alongside.
 ##
 ## Units are the match's (yards, seconds).
@@ -123,10 +124,9 @@ static func intercept(m, p) -> bool:
 				# Too late: the swing catches the blocker.
 				q.stagger = 0.6
 				m.anim(q, "stumble")
+				# The swing catches the blocker, who put themselves there: they
+				# get hurt, but it isn't a foul.
 				m.events.append({"type": "late_block", "team": q.team})
-				# The swing caught the blocker: caman on the man, though the
-				# blocker put themselves there, so it's the mildest kind.
-				m.events.append({"type": "foul", "kind": "stick", "by": p, "on": q, "at": q.pos, "severity": 0.2})
 				if randf() < 0.4:
 					return false   # and the ball still gets through
 			_blocked(m, p, q)

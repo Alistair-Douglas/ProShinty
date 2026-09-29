@@ -29,9 +29,13 @@ const BATTLE_FOUL := 0.12
 ## ones); a push in the back is booked more readily.
 const YELLOW_CHANCE := 0.3
 const RED_CHANCE := 0.01
+## A swing that misses the ball with an opponent in front of it: the chance
+## the follow-through catches them.
+const SWING_CATCH := 0.5
 const RUN_SPEED := 7.0
 const FOUL_NAMES := {
 	"push": "push in the back", "hack": "hacking", "stick": "caman on the man",
+	"swing": "swung the caman into a player",
 	"trip": "trip", "head": "ball played with the head", "kick": "ball kicked",
 	"hands": "handball", "keeper_catch": "keeper caught the ball", "obstruction": "obstruction", "keeper_hands": "keeper handled outside the D",
 }
@@ -109,6 +113,9 @@ func _read_events() -> void:
 				_on_tackle(e)
 			"battle":
 				_on_battle()
+			"hit":
+				if e.get("kind") == "fresh_air" and not e.get("shy", false) and e.has("by"):
+					_on_fresh_air(e["by"])
 			"save":
 				if e.has("by"):
 					_touched(e["by"])
@@ -211,6 +218,25 @@ func _on_battle() -> void:
 	_on_foul({"kind": "hack", "by": t, "on": o, "at": o.pos, "severity": 0.2 + randf() * 0.4})
 
 
+## A swing at a ball that isn't there, with an opponent in the caman's path:
+## hitting the player instead of the ball is a foul, and a dangerous one.
+## (A swing that catches a late blocker is not: that comes in as a
+## "late_block" event, never here.)
+func _on_fresh_air(p) -> void:
+	if not (p in m.players):
+		return
+	for q in m.squads[1 - p.team]:
+		var off: Vector2 = q.pos - p.pos
+		var d := off.length()
+		if d < 0.1 or d > m.Body.STICK_REACH + m.Body.BODY_R:
+			continue
+		if p.facing.length() < 0.01 or p.facing.normalized().dot(off / d) < 0.3:
+			continue
+		if randf() < SWING_CATCH:
+			_on_foul({"kind": "swing", "by": p, "on": q, "at": q.pos, "severity": 0.35 + randf() * 0.5})
+		return
+
+
 func _on_foul(e: Dictionary) -> void:
 	var kind: String = e.get("kind", "foul")
 	if kind == "barge" or kind == "shoulder":
@@ -249,7 +275,7 @@ func _card_for(p, kind: String, severity: float) -> String:
 		return "yellow"
 	if not chance_cards:
 		return ""
-	var harsh := 1.4 if kind == "push" else 1.0
+	var harsh := 1.4 if kind == "push" or kind == "swing" else 1.0
 	if randf() < RED_CHANCE * severity * harsh:
 		return "red"
 	if randf() < YELLOW_CHANCE * severity * severity * harsh:
