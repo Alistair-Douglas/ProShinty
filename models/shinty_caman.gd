@@ -141,15 +141,19 @@ static func build(parent: Node3D, design: Dictionary = {}, detail := true) -> vo
 	var face: float = [1.0, 1.12, 0.9, 1.4][shape]
 	var pts := PackedVector3Array()
 	var rad := PackedVector2Array()
-	var shaft := [[0.0, 0.0165, 0.0145], [-0.3, 0.0158, 0.0138], [-0.6, 0.0148, 0.0135],
-		[-(L - 0.16), 0.0138, 0.0145], [-(L - 0.1), 0.0148, 0.02]]
+	# Measured off a real caman: 114 cm long, 2.5 cm deep at the grip, 3.5 cm
+	# at 70 cm down, widening into a bas 5.5 cm across the heel. Radii are
+	# [across the faces (X), front to back of the curve (Z)].
+	var shaft := [[0.0, 0.0125, 0.0125], [-0.3, 0.013, 0.0145], [-0.7, 0.0135, 0.0175],
+		[-(L - 0.3), 0.014, 0.0195], [-(L - 0.2), 0.0145, 0.021]]
 	for s in shaft:
 		pts.append(Vector3(0, s[0], 0))
 		rad.append(Vector2(s[1], s[2]) * thick)
-	# The bas: a curved wedge, both faces flat enough to strike with.
-	var bas := [[-(L - 0.07), 0.0, 0.017, 0.026], [-(L - 0.045), -0.008, 0.0185, 0.032],
-		[-(L - 0.025), -0.025, 0.019, 0.035], [-(L - 0.012), -0.05, 0.0185, 0.034],
-		[-(L - 0.006), -0.08, 0.017, 0.03], [-(L - 0.004), -0.105, 0.014, 0.024], [-(L - 0.004), -0.118, 0.01, 0.016]]
+	# The bas: a long gentle heel curving into a wedge, both faces flat enough
+	# to strike with.
+	var bas := [[-(L - 0.13), -0.004, 0.016, 0.0235], [-(L - 0.075), -0.014, 0.0175, 0.026],
+		[-(L - 0.04), -0.03, 0.0185, 0.0275], [-(L - 0.018), -0.055, 0.0185, 0.027],
+		[-(L - 0.008), -0.083, 0.017, 0.024], [-(L - 0.005), -0.106, 0.014, 0.019], [-(L - 0.005), -0.119, 0.01, 0.013]]
 	var taper := PackedFloat32Array()
 	taper.resize(shaft.size())
 	for b in bas:
@@ -160,19 +164,19 @@ static func build(parent: Node3D, design: Dictionary = {}, detail := true) -> vo
 	_add(parent, _bas_sweep(pts, rad, taper, _face_taper(d, false), _face_taper(d, true)), wood_material(d))
 
 	var grip := tape_material(color(d, "grip"), color(d, "grip2") if d["wrap"] else Color.BLACK, d["wrap"])
-	_add(parent, ShintyMesh.loft([[0.004, 0.0185 * thick, 0.0165 * thick], [-0.3, 0.0178 * thick, 0.016 * thick]], 12, 2.0, true), grip)
-	_add(parent, ShintyMesh.loft([[0.012, 0.012, 0.011], [0.006, 0.019, 0.017], [0.0, 0.021 * thick, 0.019 * thick],
-		[-0.012, 0.019 * thick, 0.017 * thick]], 12), ShintyMesh.tape(color(d, "grip")))
+	_add(parent, ShintyMesh.loft([[0.004, 0.0145 * thick, 0.0145 * thick], [-0.3, 0.015 * thick, 0.0163 * thick]], 12, 2.0, true), grip)
+	_add(parent, ShintyMesh.loft([[0.012, 0.009, 0.009], [0.006, 0.0155, 0.0155], [0.0, 0.0175 * thick, 0.0175 * thick],
+		[-0.012, 0.0155 * thick, 0.0155 * thick]], 12), ShintyMesh.tape(color(d, "grip")))
 	if not detail:
 		return
 	# Tape round the neck of the bas, as players do to protect it.
-	_add(parent, ShintyMesh.loft([[-(L - 0.1), 0.0152 * thick, 0.0205 * thick],
-		[-(L - 0.07), 0.0175 * face, 0.0265 * lerpf(1.0, reach, 0.6)]], 12, 2.4, true), ShintyMesh.tape(color(d, "bas_tape")))
+	_add(parent, ShintyMesh.loft([[-(L - 0.22), 0.0152 * thick, 0.0215 * thick],
+		[-(L - 0.16), 0.0158 * thick, 0.0228 * thick]], 12, 2.4, true), ShintyMesh.tape(color(d, "bas_tape")))
 	# Painted bands low on the shaft.
 	var paint := ShintyMesh.solid(color(d, "band"), 0.4, 0.0, 0.5)
 	for i in int(d["bands"]):
 		var y := -0.62 - i * 0.034
-		var r := Vector2(0.0147, 0.0137) * thick + Vector2(0.0007, 0.0007)
+		var r := Vector2(0.0135, 0.0172) * thick + Vector2(0.0007, 0.0007)
 		_add(parent, ShintyMesh.loft([[y, r.x, r.y], [y - 0.016, r.x - 0.0002, r.y]], 12, 2.0, true), paint)
 
 

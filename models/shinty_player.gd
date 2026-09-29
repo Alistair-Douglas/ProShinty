@@ -19,7 +19,7 @@ signal strike(head_position: Vector3, power: float)
 signal action_finished(action: StringName)
 
 const BASE_HEIGHT := 1.80
-const CAMAN_LENGTH := 0.98
+const CAMAN_LENGTH := 1.14  ## a full-size caman, measured off a real one
 const GRIP_TOP := 0.05     ## distance of the top hand from the butt of the caman
 const GRIP_LOW := 0.24     ## distance of the lower hand from the butt
 const HAND_GRIP := 0.065   ## wrist to the middle of the grip
