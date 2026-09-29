@@ -16,6 +16,12 @@ extends RefCounted
 ##   bands    0..3 painted bands low on the shaft
 ##   band     "#rrggbb"
 ##   helmet   "" for the club colour, else "#rrggbb"
+##   face     index into FACES: the angle of the front face of the bas
+##   face_back  the same for the back face (shies are struck with the back)
+##
+## The bas is triangular in section: wide at the sole, narrowing to the top.
+## The more a face is laid back, the more height a hit off it gets (see
+## ShintyStrike.compute_swing's face_degrees); an upright face keeps it low.
 ##
 ## Geometry: the butt of the handle is the origin, the shaft runs down -Y and
 ## the bas curves towards -Z (ShintyPlayerModel.HEAD_LOCAL is its striking
@@ -23,6 +29,9 @@ extends RefCounted
 
 const SHAPES := ["Classic", "Big bas", "Light", "Keeper"]
 const WOODS := ["Natural ash", "Honey", "Dark stain", "Painted"]
+const FACES := ["Upright (low)", "Standard", "Open", "Laid back (high)"]
+## Extra launch angle, in degrees, a hit off each face gets over Standard.
+const FACE_DEGREES := [-5.0, 0.0, 6.0, 12.0]
 ## [light grain, dark grain] per wood finish.
 const WOOD_TONES := [
 	[Color("c89a62"), Color("8a5f33")],
@@ -41,6 +50,7 @@ const PALETTE := [
 const DEFAULT := {
 	"shape": 0, "wood": 0, "paint": "#1f4fb8", "grip": "#141417", "wrap": false,
 	"grip2": "#f2f2f0", "bas_tape": "#141417", "bands": 0, "band": "#c8102e", "helmet": "",
+	"face": 1, "face_back": 1,
 }
 
 const TAPE2_SHADER := """
@@ -90,6 +100,8 @@ static func sanitize(d: Variant) -> Dictionary:
 	out["shape"] = clampi(out["shape"], 0, SHAPES.size() - 1)
 	out["wood"] = clampi(out["wood"], 0, WOODS.size() - 1)
 	out["bands"] = clampi(out["bands"], 0, 3)
+	out["face"] = clampi(out["face"], 0, FACES.size() - 1)
+	out["face_back"] = clampi(out["face_back"], 0, FACES.size() - 1)
 	return out
 
 
@@ -104,6 +116,13 @@ static func for_team(team: Dictionary) -> Dictionary:
 	d["grip2"] = secondary
 	d["band"] = primary
 	return sanitize(d)
+
+
+## Extra launch angle (degrees) for a hit off the front face, or the back
+## face (`back`), of a design.
+static func face_degrees(design: Dictionary, back := false) -> float:
+	var i := int(design.get("face_back" if back else "face", 1))
+	return FACE_DEGREES[clampi(i, 0, FACE_DEGREES.size() - 1)]
 
 
 static func color(d: Dictionary, key: String) -> Color:
@@ -131,10 +150,14 @@ static func build(parent: Node3D, design: Dictionary = {}, detail := true) -> vo
 	var bas := [[-(L - 0.07), 0.0, 0.017, 0.026], [-(L - 0.045), -0.008, 0.0185, 0.032],
 		[-(L - 0.025), -0.025, 0.019, 0.035], [-(L - 0.012), -0.05, 0.0185, 0.034],
 		[-(L - 0.006), -0.08, 0.017, 0.03], [-(L - 0.004), -0.105, 0.014, 0.024], [-(L - 0.004), -0.118, 0.01, 0.016]]
+	var taper := PackedFloat32Array()
+	taper.resize(shaft.size())
 	for b in bas:
 		pts.append(Vector3(0, b[0], b[1] * reach))
 		rad.append(Vector2(b[2] * face, b[3] * lerpf(1.0, reach, 0.6)))
-	_add(parent, ShintyMesh.sweep(pts, rad, 12, 2.6, false, Vector3.RIGHT), wood_material(d))
+		taper.append(1.0)
+	taper[shaft.size() - 1] = 0.5  # the neck eases into the triangle
+	_add(parent, _bas_sweep(pts, rad, taper, _face_taper(d, false), _face_taper(d, true)), wood_material(d))
 
 	var grip := tape_material(color(d, "grip"), color(d, "grip2") if d["wrap"] else Color.BLACK, d["wrap"])
 	_add(parent, ShintyMesh.loft([[0.004, 0.0185 * thick, 0.0165 * thick], [-0.3, 0.0178 * thick, 0.016 * thick]], 12, 2.0, true), grip)
@@ -151,6 +174,78 @@ static func build(parent: Node3D, design: Dictionary = {}, detail := true) -> vo
 		var y := -0.62 - i * 0.034
 		var r := Vector2(0.0147, 0.0137) * thick + Vector2(0.0007, 0.0007)
 		_add(parent, ShintyMesh.loft([[y, r.x, r.y], [y - 0.016, r.x - 0.0002, r.y]], 12, 2.0, true), paint)
+
+
+## How far a face leans in from the sole to the top of the bas (share of its
+## half thickness); more laid back leans in more.
+static func _face_taper(d: Dictionary, back: bool) -> float:
+	return clampf(0.32 + face_degrees(d, back) * 0.028, 0.08, 0.7)
+
+
+## ShintyMesh.sweep with a triangular section where `taper` > 0: the +X
+## (front) and -X (back) faces lean in towards the top of the bas (the inside
+## of its curve) by `front` and `back`. Normals are worked out from the faces.
+static func _bas_sweep(points: PackedVector3Array, radii: PackedVector2Array, taper: PackedFloat32Array,
+		front: float, back: float, segments := 14) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var n := points.size()
+	var ring := segments + 1
+	var frame_x := Vector3.RIGHT
+	var along := 0.0
+	var e := 2.0 / 2.6
+	var verts := PackedVector3Array()
+	var uvs := PackedVector2Array()
+	for i in n:
+		var t: Vector3
+		if i == 0:
+			t = points[1] - points[0]
+		elif i == n - 1:
+			t = points[n - 1] - points[n - 2]
+		else:
+			t = points[i + 1] - points[i - 1]
+		t = t.normalized()
+		frame_x = (frame_x - t * frame_x.dot(t)).normalized()
+		var frame_z := frame_x.cross(t).normalized()
+		if i > 0:
+			along += points[i].distance_to(points[i - 1])
+		var r := radii[i]
+		for j in ring:
+			var a := TAU * float(j) / segments
+			var c := cos(a)
+			var s := sin(a)
+			var px := signf(c) * pow(absf(c), e) * r.x
+			var pz := signf(s) * pow(absf(s), e) * r.y
+			# Lean the face in towards the top: nothing at the sole (pz = -r.y).
+			var lean := (front if px > 0.0 else back) * taper[i] * (0.5 + 0.5 * pz / r.y)
+			px *= 1.0 - lean
+			verts.append(points[i] + frame_x * px + frame_z * pz)
+			uvs.append(Vector2(0.1 * float(j) / segments, along))
+	for i in n - 1:
+		for j in segments:
+			var a0 := i * ring + j
+			var b0 := a0 + ring
+			for k in [a0, a0 + 1, b0, a0 + 1, b0 + 1, b0]:
+				st.set_uv(uvs[k])
+				st.add_vertex(verts[k])
+	# Caps: the butt end and the toe, each a fan round its centre.
+	for end in [0, n - 1]:
+		var centre := points[end]
+		for j in segments:
+			var a: int = end * ring + j
+			var tri := [centre, verts[a], verts[a + 1]] if end == 0 else [centre, verts[a + 1], verts[a]]
+			for v in tri:
+				st.set_uv(Vector2.ZERO)
+				st.add_vertex(v)
+	st.index()
+	st.generate_normals()
+	return st.commit()
+
+
+## The main colour of the wood (or paint), for flat drawings of the caman.
+static func wood_colour(d: Dictionary) -> Color:
+	var w := int(d.get("wood", 0))
+	return color(d, "paint") if w >= WOOD_TONES.size() else WOOD_TONES[w][0]
 
 
 static func wood_material(d: Dictionary) -> Material:

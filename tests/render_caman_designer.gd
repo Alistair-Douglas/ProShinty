@@ -3,8 +3,8 @@ extends SceneTree
 ##   xvfb-run -s "-screen 0 1280x720x24" godot --path . -s tests/render_caman_designer.gd -- <out_dir>
 
 const DESIGNS := [
-	["kingussie", {"shape": 0, "wood": 1, "grip": "#c8102e", "wrap": true, "grip2": "#1f4fb8", "bas_tape": "#141417", "bands": 2, "band": "#1f4fb8"}, 2],
-	["newtonmore", {"shape": 1, "wood": 3, "paint": "#16254f", "grip": "#f2f2f0", "wrap": true, "grip2": "#f07c1a", "bas_tape": "#f07c1a", "bands": 3, "band": "#f07c1a", "helmet": "#f2f2f0"}, 5],
+	["kingussie", {"shape": 0, "wood": 1, "grip": "#c8102e", "wrap": true, "grip2": "#1f4fb8", "bas_tape": "#141417", "bands": 2, "band": "#1f4fb8", "face": 3, "face_back": 0}, 2],
+	["newtonmore", {"shape": 1, "wood": 3, "paint": "#16254f", "grip": "#f2f2f0", "wrap": true, "grip2": "#f07c1a", "bas_tape": "#f07c1a", "bands": 3, "band": "#f07c1a", "helmet": "#f2f2f0"}, 8],
 	["lovat", {"shape": 3, "wood": 2, "grip": "#f2c400", "bas_tape": "#141417", "bands": 1, "band": "#f2c400"}, 9],
 ]
 
@@ -29,9 +29,10 @@ func _run() -> void:
 			if game.teams[i]["id"] == d[0]:
 				idx = i
 		menu.design_club.select(idx)
+		menu._design_players()
 		menu.design = d[1].duplicate()
 		menu._design_refresh(false)
-		menu.backdrop.bench._spin = 0.0
+		menu.backdrop.bench._spin = 0.9  # tilted so the faces of the bas show
 		menu.design_rows.values()[d[2]].grab_focus()
 		for i in 20:
 			await process_frame

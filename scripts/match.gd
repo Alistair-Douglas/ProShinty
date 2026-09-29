@@ -1076,7 +1076,7 @@ func _contact(p: Player) -> void:
 		var force: float = clamp((req["speed"] - SHY_MIN_SPEED) / (SHY_MAX_SPEED - SHY_MIN_SPEED), 0.0, 1.0)
 		diff += 0.05 + force * force * 0.7
 	var res := ShintyMatchAdapter.swing_like_match(p.data, req["dir"], req["speed"], req["loft"], req["skill_key"],
-		ball_vel, ball_vz, _skill_mod(p.team), clamp(diff, 0.0, 1.0), offset)
+		ball_vel, ball_vz, _skill_mod(p.team), clamp(diff, 0.0, 1.0), offset, null, shy)
 	p.overswing = 0.0
 	if res["miss"]:
 		_fresh_air(p, mine, shy)

@@ -98,10 +98,11 @@ static func strike_like_match(player_data: Dictionary, dir: Vector2, speed: floa
 ## out, off balance, under pressure, an overswing); `contact_offset_yards` is
 ## how far the ball was from the bas when the swing arrived.
 ## Returns strike_like_match()'s keys plus kind, curve and side_spin.
+## `back_face` is true for strikes with the back of the stick (shies).
 static func swing_like_match(player_data: Dictionary, dir: Vector2, speed: float, vz: float,
 		skill_key: String, ball_vel: Vector2 = Vector2.ZERO, ball_vz: float = 0.0,
 		skill_bonus: float = 0.0, difficulty: float = 0.0, contact_offset_yards: float = 0.0,
-		rng: RandomNumberGenerator = null) -> Dictionary:
+		rng: RandomNumberGenerator = null, back_face := false) -> Dictionary:
 	var skill := clampf(float(player_data.get(skill_key, 60)) + skill_bonus * 100.0, 1.0, 99.0)
 	var res := ShintyStrike.compute_swing({
 		"aim": Vector3(dir.x, 0.0, dir.y),
@@ -110,6 +111,8 @@ static func swing_like_match(player_data: Dictionary, dir: Vector2, speed: float
 		"skill": skill, "control": clampf(float(player_data.get("control", 60)) + skill_bonus * 100.0, 1.0, 99.0),
 		"ball_velocity": Vector3(ball_vel.x, ball_vz, ball_vel.y) * YARD,
 		"difficulty": difficulty, "contact_offset": contact_offset_yards * YARD, "rng": rng,
+		# The player's own caman (Game stamps it on each player): its face angle.
+		"face_degrees": ShintyCaman.face_degrees(player_data.get("caman", {}), back_face),
 	})
 	var v: Vector3 = res["velocity"] * TO_YARDS
 	return {"ball_vel": Vector2(v.x, v.z), "ball_vz": v.y, "spin": res["spin"],

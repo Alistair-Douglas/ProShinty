@@ -148,8 +148,8 @@ var _rag_origin := Vector3.ZERO   # where the model stood last frame, world
 ## Configure from a player and team dictionary as found in data/teams.json.
 ## Optional player keys: height_cm, weight_kg, skin ("#rrggbb"), hand ("L"/"R").
 ## Optional team colour keys: primary, secondary, shorts, socks, helmet, keeper.
-## An optional team "caman" key holds the club's caman design (ShintyCaman),
-## whose helmet colour, if set, replaces the kit's.
+## An optional "caman" key on the player, else the team, holds the caman
+## design (ShintyCaman), whose helmet colour, if set, replaces the kit's.
 func setup(player: Dictionary, team: Dictionary = {}) -> void:
 	player_data = player
 	var body := body_from_stats(player)
@@ -172,7 +172,8 @@ func setup(player: Dictionary, team: Dictionary = {}) -> void:
 	shorts_color = kit["shorts"]
 	socks_color = kit["socks"]
 	helmet_color = kit["helmet"]
-	var design: Dictionary = team.get("caman", {}).duplicate()
+	# The player's own caman if they have one, else the club's.
+	var design: Dictionary = player.get("caman", team.get("caman", {})).duplicate()
 	if is_keeper:
 		design["shape"] = ShintyCaman.SHAPES.find("Keeper")  # the wide keeper's bas
 	caman_design = design

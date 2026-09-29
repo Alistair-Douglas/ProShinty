@@ -17,7 +17,7 @@ var inactive := false:
 func _init(p_caption := "", p_items: Array = [], p_selected := 0, p_swatches: Array = []) -> void:
 	super(p_caption, p_items, p_selected)
 	swatches = p_swatches
-	custom_minimum_size = Vector2(360, 38)
+	custom_minimum_size = Vector2(360, 34)
 
 
 func _draw() -> void:
