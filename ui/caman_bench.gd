@@ -60,7 +60,7 @@ func refresh() -> void:
 	_caman = Node3D.new()
 	_caman.name = "DesignedCaman"
 	# Lay it along the bench: shaft (-Y) to +X, bas curling up (-Z to +Y).
-	_caman.transform = Transform3D(Basis(Vector3(0, 0, 1), PI / 2), Vector3(-0.49, 0, 0))
+	_caman.transform = Transform3D(Basis(Vector3(0, 0, 1), PI / 2), Vector3(-ShintyPlayerModel.CAMAN_LENGTH * 0.5, 0, 0))
 	_caman_pivot.add_child(_caman)
 	ShintyCaman.build(_caman, design, true)
 	var tapes := [ShintyCaman.color(design, "grip"), ShintyCaman.color(design, "grip2"),
@@ -178,7 +178,7 @@ func _build_props() -> void:
 		var spare := Node3D.new()
 		ShintyCaman.build(spare, {"wood": 1 - i, "grip": ["#141417", "#f2f2f0"][i], "bas_tape": "#141417"}, true)
 		# Butt resting on the end of the seat, bas on the grass.
-		spare.position = Vector3(-LENGTH * 0.5 + 0.03, 0.97, 0.1 - i * 0.2)
+		spare.position = Vector3(-LENGTH * 0.5 + 0.03, ShintyPlayerModel.CAMAN_LENGTH * 0.99, 0.1 - i * 0.2)
 		spare.rotation = Vector3(0.0, PI * 0.5 + 0.3 - i * 0.6, 0.0)
 		spare.rotate_object_local(Vector3.RIGHT, 0.0)
 		spare.rotate(Vector3(0, 0, 1), 0.22)
