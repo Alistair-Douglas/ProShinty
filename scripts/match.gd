@@ -164,7 +164,7 @@ var gather_keeper: Player = null   # a saved ball dropping to the keeper
 var foul_pending = null            # [offender, fouled] seen by the referee
 var gather_t := 0.0
 var team_ai: TeamAI
-var set_piece := ""                # "Hit-out" or "Corner" while one is being taken
+var set_piece := ""                # "Hit-out", "Corner" or "Penalty hit" while one is being taken
 var set_piece_taker: Player = null
 var set_piece_t := 0.0             # seconds since it was awarded
 var throw_up_pair: Array = []     # the two centres contesting the throw-up
@@ -641,6 +641,8 @@ func _ai_carrier(p: Player, dt: float) -> void:
 		return   # mid-swing or fighting for it: committed
 	p.hold_t = max(0.0, p.hold_t - dt)
 	p.shielding = p.hold_t > 0.0
+	if p == penalty_taker:
+		return   # struck at goal by _take_penalty once everyone is set
 	if p.shy_ready or p == set_piece_taker_now():
 		# A shy, hit-out or corner has to be taken: pass it to someone open or hit it long.
 		p.think -= dt
@@ -1791,8 +1793,17 @@ func award_penalty(team: int, text: String) -> void:
 	if keeper != null:
 		keeper.pos = Vector2(goal.x - attack_dir[team] * 0.8, goal.y)
 		keeper.vel = Vector2.ZERO
-	_place_taker(taker, spot, (goal - spot).normalized())
+	var toward := (goal - spot).normalized()
+	_place_taker(taker, spot, toward)
 	penalty_taker = taker
+	# Taken like a hit-out: play stops, the taker stands over the ball on the
+	# spot and aims it (the camera comes round behind), then strikes it.
+	set_piece = "Penalty hit"
+	set_piece_taker = taker
+	restart_base = toward
+	restart_aim = 0.0
+	taker.think = SET_PIECE_PAUSE
+	protected_timer = SET_PIECE_PAUSE
 	_say(text, 2.2)
 	events.append({"type": "Penalty hit", "team": team, "taker": taker})
 
