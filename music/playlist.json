@@ -1,0 +1,9 @@
+{
+	"_note": "Menu music. The mp3s are NOT in git (see README.md). demo_only tracks play only in the editor or in a build exported with the \"demo\" feature, and are left out of every other export.",
+	"tracks": [
+		{"file": "clever_bankston.mp3", "title": "Clever (Instrumental)", "artist": "Bankston", "source": "Epidemic Sound", "licensed": false, "demo_only": true},
+		{"file": "out_of_glory_trabant33.mp3", "title": "Out of Glory", "artist": "Trabant 33", "source": "Epidemic Sound", "licensed": false, "demo_only": true},
+		{"file": "long_way_home_aiyo.mp3", "title": "Long Way Home", "artist": "Aiyo", "source": "Epidemic Sound", "licensed": false, "demo_only": true},
+		{"file": "take_me_for_granted_grateful7.mp3", "title": "Take Me for Granted", "artist": "The Grateful 7", "source": "Epidemic Sound", "licensed": false, "demo_only": true}
+	]
+}
