@@ -473,6 +473,12 @@ func _build_presets(taker, kind: String) -> void:
 		var s = null
 		if kind == "Corner":
 			s = _corner_spot(q)
+		elif kind == "Penalty hit":
+			# Everyone but the taker and the keeper stands back behind the ball.
+			s = q.pos
+			var dir: int = m.attack_dir[t]
+			if (s.x - spot.x) * dir > -m.FREE_HIT_BACK:
+				s.x = spot.x - dir * (m.FREE_HIT_BACK + 2.0)
 		if s == null:
 			s = m.home_at(q, spot)
 			if kind == "Hit-out" and q.team == t and q.position_code in ["LHB", "RHB", "LM", "RM", "LHF", "RHF"]:
