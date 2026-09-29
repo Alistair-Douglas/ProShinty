@@ -40,8 +40,11 @@ var squad_sub: Label
 var design := {}
 var design_rows := {}
 var design_club: ShintyStepper
+var design_player: ShintyStepper
+var design_numbers: Array = []  ## shirt numbers behind design_player's items (0 = whole team)
 var design_save: Button
 var design_status: Label
+var design_faces: ShintyFaceDiagram
 var _dragging := false
 
 
@@ -521,19 +524,20 @@ func _build_controls() -> void:
 ## from ShintyCaman, "colour", "club_colour" (the palette plus the club's own),
 ## "wrap" (off/on) or "bands".
 const DESIGN_ROWS := [
-	["", "CAMAN"],
+	["", "BAS"],
 	["shape", "Shape", "shapes"],
+	["face", "Front face", "faces"],
+	["face_back", "Back face", "faces"],
+	["", "WOOD AND TAPE"],
 	["wood", "Wood", "woods"],
 	["paint", "Paint", "colour"],
-	["", "GRIP"],
 	["grip", "Grip tape", "colour"],
 	["wrap", "Double wrap", "wrap"],
 	["grip2", "Second tape", "colour"],
-	["", "FINISH"],
 	["bas_tape", "Bas tape", "colour"],
+	["", "FINISH"],
 	["bands", "Painted bands", "bands"],
 	["band", "Band colour", "colour"],
-	["", "HELMET"],
 	["helmet", "Helmet", "club_colour"],
 ]
 
@@ -550,8 +554,8 @@ func _build_designer() -> void:
 	sb.border_width_top = 3
 	sb.border_color = ShintyStyle.GOLD
 	panel.add_theme_stylebox_override("panel", sb)
-	panel.position = Vector2(56, 100)
-	panel.size = Vector2(420, 514)
+	panel.position = Vector2(56, 98)
+	panel.size = Vector2(420, 530)
 	s.add_child(panel)
 	var scroll := ScrollContainer.new()
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -575,6 +579,7 @@ func _build_designer() -> void:
 		var r: ShintyOptionRow
 		match row[2]:
 			"shapes": r = ShintyOptionRow.new(row[1], ShintyCaman.SHAPES)
+			"faces": r = ShintyOptionRow.new(row[1], ShintyCaman.FACES)
 			"woods": r = ShintyOptionRow.new(row[1], ShintyCaman.WOODS)
 			"wrap": r = ShintyOptionRow.new(row[1], ["Off", "On"])
 			"bands": r = ShintyOptionRow.new(row[1], ["None", "One", "Two", "Three"])
@@ -589,22 +594,33 @@ func _build_designer() -> void:
 		if first == null:
 			first = r
 
-	# Who gets it: a club picker and the save button, bottom right.
+	# Who gets it: a club, the whole team or one player, and the save button.
 	var names_c: Array = Game.teams.map(func(t): return t["name"])
-	design_club = ShintyStepper.new("Give this caman to", names_c, Game.home_index)
-	design_club.position = Vector2(560, 586)
-	design_club.size = Vector2(330, 74)
-	design_club.changed.connect(func(_i): _design_club_changed())
+	design_club = ShintyStepper.new("Club", names_c, Game.home_index)
+	design_club.position = Vector2(516, 586)
+	design_club.size = Vector2(250, 74)
+	design_club.changed.connect(func(_i):
+		_design_players()
+		_design_club_changed())
 	s.add_child(design_club)
+	design_player = ShintyStepper.new("Give it to", ["Whole team"])
+	design_player.position = Vector2(780, 586)
+	design_player.size = Vector2(250, 74)
+	design_player.changed.connect(func(_i): _design_club_changed())
+	s.add_child(design_player)
 	design_save = Button.new()
-	design_save.text = "SAVE TO CLUB"
+	design_save.text = "SAVE"
 	design_save.add_theme_font_override("font", ShintyStyle.font("black"))
 	design_save.add_theme_font_size_override("font_size", 30)
-	design_save.position = Vector2(904, 596)
-	design_save.size = Vector2(320, 64)
+	design_save.position = Vector2(1048, 596)
+	design_save.size = Vector2(176, 64)
 	ShintyStyle.focus_button(design_save)
 	design_save.pressed.connect(_save_design)
 	s.add_child(design_save)
+	design_faces = ShintyFaceDiagram.new()
+	design_faces.position = Vector2(944, 96)
+	design_faces.size = Vector2(280, 176)
+	s.add_child(design_faces)
 	design_status = ShintyStyle.label("", 17, "semibold", ShintyStyle.MUTED)
 	design_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	design_status.position = Vector2(700, 560)
@@ -613,15 +629,15 @@ func _build_designer() -> void:
 
 	var back := Button.new()
 	back.text = "BACK"
-	back.position = Vector2(56, 626)
-	back.size = Vector2(150, 44)
+	back.position = Vector2(56, 636)
+	back.size = Vector2(150, 40)
 	ShintyStyle.focus_button(back)
 	back.pressed.connect(func(): _show("hub"))
 	s.add_child(back)
 	var reset := Button.new()
 	reset.text = "RESET"
-	reset.position = Vector2(226, 626)
-	reset.size = Vector2(150, 44)
+	reset.position = Vector2(226, 636)
+	reset.size = Vector2(150, 40)
 	ShintyStyle.focus_button(reset)
 	reset.pressed.connect(_design_club_changed)
 	s.add_child(reset)
@@ -640,23 +656,48 @@ func _build_designer() -> void:
 	reset.focus_neighbor_left = back.get_path()
 	reset.focus_neighbor_right = design_club.get_path()
 	design_club.focus_neighbor_left = rows[0].get_path()
-	design_club.focus_neighbor_right = design_save.get_path()
+	design_club.focus_neighbor_right = design_player.get_path()
 	design_club.focus_neighbor_top = rows[0].get_path()
-	design_club.focus_neighbor_bottom = design_save.get_path()
-	design_save.focus_neighbor_left = design_club.get_path()
-	design_save.focus_neighbor_top = design_club.get_path()
+	design_club.focus_neighbor_bottom = design_player.get_path()
+	design_player.focus_neighbor_left = design_club.get_path()
+	design_player.focus_neighbor_right = design_save.get_path()
+	design_player.focus_neighbor_top = design_club.get_path()
+	design_player.focus_neighbor_bottom = design_save.get_path()
+	design_save.focus_neighbor_left = design_player.get_path()
+	design_save.focus_neighbor_top = design_player.get_path()
 	s.set_meta("first", first)
 
 
 ## Opens the designer on the club you last picked, with its current caman.
 func _open_designer() -> void:
 	design_club.select(home_pick.selected if home_pick else Game.home_index)
+	_design_players()
 	_design_club_changed()
 
 
-## Loads the chosen club's caman into the designer (also what Reset does).
+## Fills the "Give it to" picker: the whole team, then each player by number.
+func _design_players() -> void:
+	var team: Dictionary = Game.teams[design_club.selected]
+	var ps: Array = team.get("players", []).duplicate()
+	ps.sort_custom(func(a, b): return int(a.get("number", 0)) < int(b.get("number", 0)))
+	var items := ["Whole team"]
+	design_numbers = [0]
+	for p in ps:
+		items.append("%d  %s" % [int(p.get("number", 0)), str(p.get("name", ""))])
+		design_numbers.append(int(p.get("number", 0)))
+	design_player.items = items
+	design_player.select(0)
+
+
+## The chosen player's shirt number, or 0 for the whole team.
+func _design_number() -> int:
+	return design_numbers[design_player.selected] if design_player.selected < design_numbers.size() else 0
+
+
+## Loads the chosen club's (or player's) caman into the designer; also Reset.
 func _design_club_changed() -> void:
-	design = Game.team_caman(design_club.selected).duplicate()
+	var n := _design_number()
+	design = (Game.team_caman(design_club.selected) if n == 0 else Game.player_caman(design_club.selected, n)).duplicate()
 	_design_refresh(true)
 
 
@@ -700,13 +741,18 @@ func _design_refresh(saved: bool) -> void:
 	design_rows["grip2"].inactive = not design["wrap"]
 	design_rows["band"].inactive = design["bands"] == 0
 	var team: Dictionary = Game.teams[design_club.selected]
+	design_faces.design = design
 	if backdrop:
 		backdrop.show_bench().set_design(design, team)
-	if saved:
-		var custom := team.has("caman")
-		design_status.text = ("%s's own caman" if custom else "%s's colours: not saved yet") % team["name"]
+	var n := _design_number()
+	var who: String = team["name"] if n == 0 else design_player.get_item_text(design_player.selected)
+	if saved and n != 0:
+		var own: bool = Game.has_own_caman(design_club.selected, n)
+		design_status.text = ("%s has a caman of their own" if own else "%s carries the club caman") % who
+	elif saved:
+		design_status.text = ("%s's own caman" if team.has("caman") else "%s's colours: not saved yet") % who
 	else:
-		design_status.text = "Changed: save to give it to %s" % team["name"]
+		design_status.text = "Changed: save to give it to %s" % who
 	design_status.add_theme_color_override("font_color", ShintyStyle.MUTED if saved else ShintyStyle.GOLD)
 
 
@@ -726,9 +772,14 @@ func _palette_index(hex: String) -> int:
 
 
 func _save_design() -> void:
-	Game.set_team_caman(design_club.selected, design)
 	var team: Dictionary = Game.teams[design_club.selected]
-	design_status.text = "Saved: %s's players will carry this caman" % team["name"]
+	var n := _design_number()
+	if n == 0:
+		Game.set_team_caman(design_club.selected, design)
+		design_status.text = "Saved: %s's players will carry this caman" % team["name"]
+	else:
+		Game.set_player_caman(design_club.selected, n, design)
+		design_status.text = "Saved: %s will carry this caman" % design_player.get_item_text(design_player.selected)
 	design_status.add_theme_color_override("font_color", ShintyStyle.GOOD)
 	if home_pick:
 		_teams_changed()  # the players behind the menu pick it up too

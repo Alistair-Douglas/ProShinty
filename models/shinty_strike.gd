@@ -100,6 +100,9 @@ static func compute(params: Dictionary) -> Dictionary:
 ##   contact_offset: float  metres the ball was away from the sweet spot when
 ##                        the swing arrived (adds to the strike point error)
 ##   shape: float         -1..1 deliberate curve (negative bends it left)
+##   face_degrees: float  how far the caman's face is laid back from standard
+##                        (ShintyCaman.face_degrees): more launch, a little
+##                        less pace; negative for an upright face
 ## Returns compute()'s keys plus: kind ("clean", "thin", "fat", "heel", "toe",
 ## "fresh_air"), curve (face minus path, degrees) and side_spin (rad/s).
 static func compute_swing(params: Dictionary) -> Dictionary:
@@ -115,6 +118,7 @@ static func compute_swing(params: Dictionary) -> Dictionary:
 	var diff := clampf(float(params.get("difficulty", 0.0)), 0.0, 1.0)
 	var shape := clampf(float(params.get("shape", 0.0)), -1.0, 1.0)
 	var offset := float(params.get("contact_offset", 0.0))
+	var face_deg := float(params.get("face_degrees", 0.0))
 
 	# How big the errors are: bigger swings, worse players, harder situations.
 	var effort := (0.55 + 0.75 * power) * (1.0 + 1.6 * diff)
@@ -163,7 +167,7 @@ static func compute_swing(params: Dictionary) -> Dictionary:
 	var flat := aim.rotated(Vector3.UP, start_yaw)
 
 	# Launch angle: thin contacts come off low, fat ones balloon.
-	var elev_deg := lerpf(3.0, 38.0, loft)
+	var elev_deg := lerpf(3.0, 38.0, loft) + face_deg
 	if kind == "thin":
 		elev_deg -= v_err * 260.0
 	elif kind == "fat":
@@ -176,6 +180,7 @@ static func compute_swing(params: Dictionary) -> Dictionary:
 	var m := ShintyBallPhysics.MASS
 	var e := RESTITUTION * lerpf(0.6, 1.0, quality)
 	var vh := head_speed(power, sk * 99.0) * lerpf(0.5, 1.0, quality)
+	vh *= 1.0 - face_deg * 0.006  # a laid-back face glances more of the swing away
 	if kind == "fat":
 		vh *= lerpf(0.55, 1.0, quality)
 	var v_in := ball_v.dot(n)

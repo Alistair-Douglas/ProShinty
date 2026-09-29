@@ -14,8 +14,9 @@ var last_result := {}
 ## 0 Low, 1 Medium, 2 High (ShintyPitch.Detail). Saved between runs.
 var graphics_quality := 1
 
-## Club id -> caman design (ShintyCaman) from the caman designer. Saved
-## between runs; the club's players carry it in matches.
+## Camans from the caman designer, saved between runs, by club id:
+## {"team": design, "players": {shirt number: design}}. A player with their
+## own caman carries it; the rest carry the club's (ShintyCaman designs).
 var camans := {}
 
 const SETTINGS_PATH := "user://settings.cfg"
@@ -73,12 +74,71 @@ func team_caman(team_index: int) -> Dictionary:
 	return ShintyCaman.for_team(team)
 
 
-## Gives a club a caman design and remembers it.
-func set_team_caman(team_index: int, design: Dictionary) -> void:
+## The caman one player carries: their own, else the club's.
+func player_caman(team_index: int, number: int) -> Dictionary:
+	var own: Dictionary = _club_camans(team_index).get("players", {}).get(str(number), {})
+	return ShintyCaman.sanitize(own) if not own.is_empty() else team_caman(team_index)
+
+
+## Whether a player has a caman of their own.
+func has_own_caman(team_index: int, number: int) -> bool:
+	return _club_camans(team_index).get("players", {}).has(str(number))
+
+
+## Gives a club a caman design and remembers it. Players with their own
+## caman keep it unless `everyone`.
+func set_team_caman(team_index: int, design: Dictionary, everyone := false) -> void:
+	var c := _club_camans(team_index)
+	c["team"] = ShintyCaman.sanitize(design)
+	if everyone:
+		c.erase("players")
+	_apply_camans(team_index)
+	_save_camans()
+
+
+## Gives one player (by shirt number) their own caman.
+func set_player_caman(team_index: int, number: int, design: Dictionary) -> void:
+	var c := _club_camans(team_index)
+	if not c.has("players"):
+		c["players"] = {}
+	c["players"][str(number)] = ShintyCaman.sanitize(design)
+	_apply_camans(team_index)
+	_save_camans()
+
+
+func _club_key(team_index: int) -> String:
 	var team: Dictionary = teams[team_index]
-	var d := ShintyCaman.sanitize(design)
-	team["caman"] = d
-	camans[str(team.get("id", team["name"]))] = d
+	return str(team.get("id", team["name"]))
+
+
+func _club_camans(team_index: int) -> Dictionary:
+	var key := _club_key(team_index)
+	if not camans.has(key):
+		camans[key] = {}
+	return camans[key]
+
+
+## Puts the saved camans on the club and its players ("caman" keys), which
+## the player models and the strike physics read.
+func _apply_camans(team_index: int) -> void:
+	var team: Dictionary = teams[team_index]
+	var c: Dictionary = camans.get(_club_key(team_index), {})
+	if c.has("team"):
+		team["caman"] = c["team"]
+	else:
+		team.erase("caman")
+	var own: Dictionary = c.get("players", {})
+	for p in team.get("players", []):
+		var key := str(p.get("number", ""))
+		if own.has(key):
+			p["caman"] = own[key]
+		elif c.has("team"):
+			p["caman"] = c["team"]
+		else:
+			p.erase("caman")
+
+
+func _save_camans() -> void:
 	var f := FileAccess.open(camans_path, FileAccess.WRITE)
 	if f:
 		f.store_string(JSON.stringify(camans, "\t"))
@@ -86,16 +146,27 @@ func set_team_caman(team_index: int, design: Dictionary) -> void:
 
 func _load_camans() -> void:
 	camans = {}
-	if not FileAccess.file_exists(camans_path):
-		return
-	var data: Variant = JSON.parse_string(FileAccess.get_file_as_string(camans_path))
+	var data: Variant = null
+	if FileAccess.file_exists(camans_path):
+		data = JSON.parse_string(FileAccess.get_file_as_string(camans_path))
 	if not (data is Dictionary):
-		return
-	for team in teams:
-		var key := str(team.get("id", team["name"]))
-		if data.has(key):
-			camans[key] = ShintyCaman.sanitize(data[key])
-			team["caman"] = camans[key]
+		data = {}
+	for i in teams.size():
+		var key := _club_key(i)
+		var saved: Variant = data.get(key, null)
+		if saved is Dictionary:
+			var c := {}
+			if saved.has("shape"):  # the first designer saved a bare club design
+				c["team"] = ShintyCaman.sanitize(saved)
+			else:
+				if saved.get("team", null) is Dictionary:
+					c["team"] = ShintyCaman.sanitize(saved["team"])
+				if saved.get("players", null) is Dictionary:
+					c["players"] = {}
+					for n in saved["players"]:
+						c["players"][str(n)] = ShintyCaman.sanitize(saved["players"][n])
+			camans[key] = c
+		_apply_camans(i)
 
 
 func match_config() -> Dictionary:
