@@ -3,11 +3,13 @@ extends Control
 ## bug, clock, cards and goal graphics are TV graphics (broadcast/tv_graphics.gd).
 
 const TeamData := preload("res://scripts/team_data.gd")
+const SubsMenu := preload("res://scripts/subs_menu.gd")
 
 var match_node: Node
 var view: Node
 var font: Font
 var tv: ShintyTVGraphics
+var subs_menu: Control
 
 
 func _ready() -> void:
@@ -20,6 +22,9 @@ func _ready() -> void:
 	add_child(tv)
 	if view != null and view.get("director") != null:
 		view.director.graphics = tv
+	subs_menu = SubsMenu.new()
+	subs_menu.match_node = match_node
+	add_child(subs_menu)
 
 
 func _process(_delta: float) -> void:
@@ -31,8 +36,8 @@ func _draw() -> void:
 	var teams: Array = m.teams
 	var screen := get_viewport_rect().size
 	var w := screen.x
-	if tv.replay_active:
-		return  # a replay shows only the TV graphics
+	if tv.replay_active or subs_menu.is_open():
+		return  # a replay shows only the TV graphics; the subs screen covers the rest
 	var human = m.human
 	if human != null:
 		var d: Dictionary = human.data
@@ -61,7 +66,8 @@ func _draw() -> void:
 	var sub := ""
 	if m.paused:
 		centre_text = "Paused"
-		sub = "Esc to resume, M to quit to menu"
+		sub = "Esc / Start to resume    Enter / A for team and subs    M / Back to quit to menu" if m.human_side >= 0 \
+			else "Esc to resume, M to quit to menu"
 	elif m.state == m.State.FULL_TIME:
 		centre_text = "Full time: %s %d - %d %s" % [teams[0]["name"], m.score[0], m.score[1], teams[1]["name"]]
 		sub = "Press Space or Enter for the menu"

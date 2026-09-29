@@ -11,6 +11,7 @@ const Referee := preload("res://scripts/referee.gd")
 const Body := preload("res://scripts/player_physics.gd")
 const Counters := preload("res://scripts/swing_counters.gd")
 const TeamAI := preload("res://scripts/team_ai.gd")
+const Subs := preload("res://scripts/substitutions.gd")
 
 const PITCH := Vector2(150, 75)
 const GOAL_W := 4.0          # 12 ft between the posts
@@ -157,6 +158,7 @@ var ball_sim := ShintyMatchAdapter.BallSim.new(PITCH, GOAL_W, CROSSBAR)
 var carrier: Player = null
 var last_team := -1
 var referee := Referee.new()
+var subs := Subs.new()             # benches and substitutions (substitutions.gd)
 var penalty_taker: Player = null
 var gather_keeper: Player = null   # a saved ball dropping to the keeper
 var foul_pending = null            # [offender, fouled] seen by the referee
@@ -230,6 +232,7 @@ func _setup() -> void:
 			fwd_shape[t] = "square" if randf() < 0.4 else "diamond"
 	_apply_shapes()
 	referee.setup(self)
+	subs.setup(self)
 	_start_throw_up()
 	if human_side >= 0:
 		human = _nearest_outfield(human_side, ball_pos, null)
@@ -251,10 +254,10 @@ func _apply_shapes() -> void:
 func _physics_process(delta: float) -> void:
 	if manual_step:
 		return
-	if Input.is_action_just_pressed("pause") and state != State.FULL_TIME:
+	if Input.is_action_just_pressed("pause") and state != State.FULL_TIME and not subs.menu_busy():
 		paused = not paused
 	if paused:
-		if Input.is_action_just_pressed("quit_match"):
+		if Input.is_action_just_pressed("quit_match") and not subs.menu_busy():
 			get_tree().change_scene_to_file("res://scenes/main_menu.tscn")
 		return
 	if state == State.FULL_TIME and (Input.is_action_just_pressed("ui_accept") or Input.is_action_just_pressed("shoot")):
@@ -265,6 +268,7 @@ func _physics_process(delta: float) -> void:
 
 func step(dt: float) -> void:
 	message_timer = max(0.0, message_timer - dt)
+	subs.step(dt)
 	if state != State.PLAY and state != State.FULL_TIME:
 		referee.step(dt)
 	match state:

@@ -2,7 +2,8 @@ class_name ShintyTVGraphics
 extends Control
 ## TV graphics over the match: the score bug and match clock (top left), the
 ## channel mark with LIVE or REPLAY (top right), a GOAL banner, half-time and
-## full-time straps, and the swipe that runs in and out of replays.
+## full-time straps, the substitution board, and the swipe that runs in and
+## out of replays.
 
 const TeamData := preload("res://scripts/team_data.gd")
 
@@ -16,6 +17,11 @@ var _wipe_mid: Callable
 var _wipe_fired := false
 var _crests: Array = []
 var _time := 0.0
+var _subs_seen := 0
+var _sub_t := -1.0
+var _sub: Dictionary = {}
+
+const SUB_SHOW := 5.0   ## seconds the substitution board stays up
 
 
 func _ready() -> void:
@@ -39,6 +45,7 @@ func wipe(at_middle: Callable) -> void:
 
 func _process(delta: float) -> void:
 	_time += delta
+	_watch_subs(delta)
 	if _goal_t >= 0.0:
 		_goal_t += delta
 		if _goal_t > 2.6 or replay_active:
@@ -78,7 +85,24 @@ func _draw() -> void:
 		_draw_goal(m, screen)
 	elif not replay_active and (m.state == m.State.HALF_TIME or m.state == m.State.FULL_TIME):
 		_draw_strap(m, screen, "HALF TIME" if m.state == m.State.HALF_TIME else "FULL TIME")
+	if _sub_t >= 0.0 and not replay_active:
+		_draw_sub(m, screen)
 	_draw_wipe(screen)
+
+
+## Put the board up for each change the match makes, one after the other.
+func _watch_subs(delta: float) -> void:
+	var s = match_node.get("subs") if match_node != null else null
+	if s == null:
+		return
+	if _sub_t >= 0.0:
+		_sub_t += delta
+		if _sub_t > SUB_SHOW:
+			_sub_t = -1.0
+	if _sub_t < 0.0 and _subs_seen < s.made.size():
+		_sub = s.made[_subs_seen]
+		_subs_seen += 1
+		_sub_t = 0.0
 
 
 # --- Score bug -----------------------------------------------------------------------
@@ -190,6 +214,45 @@ func _draw_strap(m, screen: Vector2, title: String) -> void:
 		draw_string(black, Vector2(cx, r.position.y + 76), str(m.teams[side]["name"]).to_upper(),
 			HORIZONTAL_ALIGNMENT_LEFT if side == 0 else HORIZONTAL_ALIGNMENT_RIGHT, 180, 26, Color.WHITE)
 	draw_string(black, Vector2(r.position.x, r.position.y + 80), "%d - %d" % [m.score[0], m.score[1]], HORIZONTAL_ALIGNMENT_CENTER, w, 36, Color.WHITE)
+
+
+## The substitution board, bottom left: the team, then the player going off
+## (red, arrow down) and the one coming on (green, arrow up). Slides in and out.
+func _draw_sub(m, screen: Vector2) -> void:
+	var t := _sub_t
+	var inn := ease(clampf(t / 0.35, 0.0, 1.0), -2.5)
+	var out := ease(clampf((t - (SUB_SHOW - 0.4)) / 0.4, 0.0, 1.0), 2.0)
+	var black := ShintyStyle.font("black")
+	var bold := ShintyStyle.font("bold")
+	var team: int = _sub["team"]
+	var w := 420.0
+	var x := 28.0 - (1.0 - inn + out) * (w + 40.0)
+	var y := screen.y - 250.0
+	var col: Color = m.colors[team][0]
+	draw_rect(Rect2(x, y, w, 34), ShintyStyle.GOLD)
+	draw_string(black, Vector2(x + 14, y + 25), "SUBSTITUTION", HORIZONTAL_ALIGNMENT_LEFT, -1, 20, ShintyStyle.GOLD_DARK)
+	draw_string(bold, Vector2(x, y + 25), "%d'" % int(_sub["minute"]), HORIZONTAL_ALIGNMENT_RIGHT, w - 14, 18, ShintyStyle.GOLD_DARK)
+	draw_rect(Rect2(x, y + 34, w, 36), Color(0.05, 0.07, 0.09, 0.94))
+	draw_rect(Rect2(x, y + 34, 6, 36), col)
+	var tx := x + 16.0
+	if _crests[team] != null:
+		draw_texture_rect(_crests[team], Rect2(Vector2(tx, y + 38), Vector2(28, 28)), false)
+		tx += 36.0
+	draw_string(bold, Vector2(tx, y + 60), str(m.teams[team]["name"]).to_upper(), HORIZONTAL_ALIGNMENT_LEFT, w - (tx - x) - 10, 19, Color.WHITE)
+	var rows := [[_sub["off"], Color(0.86, 0.16, 0.16), false], [_sub["on"], Color(0.2, 0.75, 0.3), true]]
+	for i in 2:
+		var ry := y + 70.0 + i * 34.0
+		var pd: Dictionary = rows[i][0]
+		var c: Color = rows[i][1]
+		draw_rect(Rect2(x, ry, w, 34), Color(0.1, 0.13, 0.16, 0.94))
+		draw_rect(Rect2(x, ry, 40, 34), c)
+		var cx := x + 20.0
+		var up: bool = rows[i][2]
+		var tip := Vector2(cx, ry + (8.0 if up else 26.0))
+		var base := ry + (24.0 if up else 10.0)
+		draw_colored_polygon(PackedVector2Array([tip, Vector2(cx - 9, base), Vector2(cx + 9, base)]), Color.WHITE)
+		draw_string(black, Vector2(x + 50, ry + 25), str(int(pd.get("number", 0))), HORIZONTAL_ALIGNMENT_CENTER, 34, 19, c.lightened(0.3))
+		draw_string(bold, Vector2(x + 92, ry + 24), str(pd.get("name", "")), HORIZONTAL_ALIGNMENT_LEFT, w - 102, 18, Color.WHITE)
 
 
 ## A slanted dark panel with a gold edge and the channel name sweeps across.

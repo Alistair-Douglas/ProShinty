@@ -23,6 +23,7 @@ marked below.
 | Foul: free hit where it happened (indirect) | Yes; opponents held 5 yards off (distance not from Wikipedia) |
 | Foul inside the D: penalty hit from 20 yards | Yes; everyone but the taker and keeper goes behind the ball |
 | Yellow and red cards; two yellows is a red; sent-off players aren't replaced | Yes; a bad foul or a player's third foul is a yellow, and other fouls may be booked (more likely the worse the foul, and for a push in the back); very bad fouls are a red. About two yellows a match |
+| Substitutes: the Camanachd Association rulebook wasn't reachable, so the game uses a common rule (not from Wikipedia): three changes a match from a named bench, no rolling substitutes | Each side has five on the bench and makes up to three changes; a player who comes off can't go back on. Changes are made when the ball is dead (a goal, half time, a shy, hit-out, corner or free hit), from the pause menu for your side. The computer changes injured players (late blocks and heavy knockdowns can injure) and, from the second half, tired ones |
 | Offside: an attacker may not be inside the opponents' D ahead of the ball when a team-mate plays it (not from Wikipedia) | Enforced: free hit to the defenders |
 | Advantage | When the fouled team keeps the ball in the opponents' half, the referee lets play go on and brings it back if they lose it within 3 seconds; anywhere else it blows for the free hit |
 

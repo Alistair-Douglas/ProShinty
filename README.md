@@ -22,6 +22,7 @@ where to play (Aberdour, Kingussie or Tighnabruaich), and play a full 12-a-side 
 | Shoulder barge | R | Left stick click |
 | Switch player | Q | LB |
 | Pause (M to quit while paused) | Esc | Start |
+| Team and substitutions (while paused) | Enter | A / Cross |
 
 Shots aimed roughly at the goal get a little aim assist. The ball can be in the
 air: a lofted hit sails over players, and the keeper can reach higher than
@@ -40,8 +41,8 @@ numbers; keep one player per position code:
 
 `GK, FB, LHB, CHB, RHB, LM, RM, LHF, CHF, RHF, CF, FF`
 
-Players listed after the first at a position are treated as substitutes (not
-used in matches yet). Ratings run 1 to 99: `pace, control, passing, shooting,
+Players listed after the first at a position are the bench: each club has
+five, and a side can make three substitutions a match (see docs/rules.md). Ratings run 1 to 99: `pace, control, passing, shooting,
 tackling, keeping, stamina`. Overall ratings are calculated from these,
 weighted by position (see `scripts/team_data.gd`). To add a club, add another
 entry to `teams` with an `id`, `name`, `short` and `colors`.
