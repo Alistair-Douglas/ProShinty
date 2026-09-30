@@ -3,7 +3,9 @@ extends SceneTree
 ## and objects (camera pass and shadow pass), plus CPU/GPU frame times.
 ## Needs a renderer (not --headless):
 ##   xvfb-run godot --path . -s tests/perf_probe.gd [-- quality=low|medium|high] [split]
-## `split` also measures with the players hidden, to separate players from scenery.
+## `split` also measures with the players hidden, to separate players from scenery,
+## `without=Canopy,LongGrass` with matching scenery hidden, and `wide` from two
+## fixed cameras that take in the scenery.
 
 const MatchScene := preload("res://scenes/match.tscn")
 
@@ -68,6 +70,34 @@ func _run() -> void:
 			view.set_process(false)
 			await process_frame
 			print(_fmt(name + " (no players)", await _sample(20)))
+		# wide: two fixed cameras that take in the scenery round the pitch, the
+		# views where trees and long grass cost the most.
+		if "wide" in args:
+			var cam := Camera3D.new()
+			cam.fov = 45.0
+			cam.far = 6000.0
+			m.add_child(cam)
+			cam.current = true
+			for v in [[Vector3(0, 18, 55), Vector3(0, 0, -30), "wide across"], [Vector3(70, 8, 30), Vector3(-80, 5, -40), "wide along"]]:
+				cam.position = v[0]
+				cam.look_at(v[1])
+				await process_frame
+				print(_fmt(name + " (" + v[2] + ")", await _sample(15)))
+				if "shot" in args:
+					root.get_viewport().get_texture().get_image().save_png(OS.get_cache_dir().path_join("perf_%s_%s_%s.png" % [name.to_lower(), v[2].replace(" ", "_"), game.get("graphics_quality")]))
+			cam.queue_free()
+			await process_frame
+		# without=Canopy,LongGrass hides scenery whose node name contains any of
+		# those, to see what each part costs.
+		for a in args:
+			if a.begins_with("without="):
+				var parts := a.get_slice("=", 1).split(",")
+				for n in m.find_children("*", "GeometryInstance3D", true, false):
+					for part in parts:
+						if part in String(n.name):
+							n.hide()
+				await process_frame
+				print(_fmt(name + " (" + a + ")", await _sample(20)))
 		if "shot" in args:
 			root.get_viewport().get_texture().get_image().save_png(OS.get_cache_dir().path_join("perf_%s_%s.png" % [name.to_lower(), game.get("graphics_quality")]))
 		m.queue_free()

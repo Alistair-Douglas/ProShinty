@@ -31,6 +31,11 @@ uniform float field_start = 140.0;            // metres from the centre spot
 uniform vec3 crop_color : source_color = vec3(0.64, 0.59, 0.33);
 uniform vec3 hedge_color : source_color = vec3(0.13, 0.2, 0.09);
 
+// Tileable value noise baked by tools/bake_scenery_textures.gd: r and g are
+// 4-octave fbm over 32 cells, b is single-octave noise over 64 cells. Reading
+// it replaces a few dozen noise evaluations per pixel.
+uniform sampler2D noise_tex : hint_default_white, filter_linear_mipmap, repeat_enable;
+
 varying vec3 local_pos;
 varying vec3 view_local;  // camera to this point, in the ground's own space
 
@@ -46,23 +51,17 @@ float hash(vec2 p) {
 	return fract(p.x * p.y);
 }
 
-float vnoise(vec2 p) {
-	vec2 i = floor(p);
-	vec2 f = fract(p);
-	vec2 u = f * f * (3.0 - 2.0 * f);
-	return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x),
-			mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
+// The baked equivalents of vnoise(p) and a 4-octave fbm(p), p in noise cells.
+float tnoise(vec2 p) {
+	return texture(noise_tex, p * (1.0 / 64.0)).b;
 }
 
 float fbm(vec2 p) {
-	float v = 0.0;
-	float a = 0.5;
-	for (int i = 0; i < 4; i++) {
-		v += a * vnoise(p);
-		p = p * 2.03 + vec2(17.1, 3.7);
-		a *= 0.5;
-	}
-	return v;
+	return texture(noise_tex, p * (1.0 / 32.0)).r * 0.9375;
+}
+
+float fbm2(vec2 p) {
+	return texture(noise_tex, p * (1.0 / 32.0)).g * 0.9375;
 }
 
 float ring(vec2 p, vec2 c, float r) {
@@ -105,7 +104,7 @@ float marking_dist(vec2 p) {
 vec3 fields(vec2 m, float n_mid, out float hedge) {
 	// Rotate and warp the grid so the fields don't line up with the pitch.
 	mat2 rot = mat2(vec2(0.94, 0.34), vec2(-0.34, 0.94));
-	vec2 q = rot * m / 150.0 + vec2(fbm(m * 0.004), fbm(m * 0.004 + 7.0)) * 0.6;
+	vec2 q = rot * m / 150.0 + vec2(fbm(m * 0.004), fbm2(m * 0.004)) * 0.6;
 	vec2 cell = floor(q);
 	vec2 f = fract(q);
 	float r = hash(cell + 3.1);
@@ -133,10 +132,11 @@ void fragment() {
 	float px_size = length(fwidth(m)); // metres covered by one pixel, for fading detail
 
 	float n_big = fbm(m * 0.045);
-	float n_mid = fbm(m * 0.3 + 11.0);
-	float n_fine = vnoise(m * 2.7);
+	float n_mid = fbm2(m * 0.3 + 11.0);
+	float n_fine = tnoise(m * 2.7);
 	float detail = 1.0 - smoothstep(0.15, 0.8, px_size);  // blade-scale detail only up close
-	float n_blade = mix(0.5, vnoise(m * 11.0), detail);
+	float n_blade0 = tnoise(m * 11.0);
+	float n_blade = mix(0.5, n_blade0, detail);
 	float dry = smoothstep(0.42, 0.78, n_big * 0.65 + n_mid * 0.35) * wear;
 	vec3 col = mix(grass_color, grass_dry_color, dry);
 	col *= 0.88 + 0.16 * n_fine + 0.1 * (n_blade - 0.5);
@@ -179,8 +179,8 @@ void fragment() {
 	col = mix(col, line_color, line);
 
 	// Blade-scale bumps catch the light up close.
-	float bx = vnoise(m * 11.0 + vec2(0.07, 0.0)) - vnoise(m * 11.0);
-	float bz = vnoise(m * 11.0 + vec2(0.0, 0.07)) - vnoise(m * 11.0);
+	float bx = tnoise(m * 11.0 + vec2(0.07, 0.0)) - n_blade0;
+	float bz = tnoise(m * 11.0 + vec2(0.0, 0.07)) - n_blade0;
 	NORMAL_MAP = normalize(vec3(bx * detail * 4.0, bz * detail * 4.0, 1.0)) * 0.5 + 0.5;
 	NORMAL_MAP_DEPTH = 0.8;
 
