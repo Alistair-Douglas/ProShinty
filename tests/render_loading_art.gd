@@ -6,7 +6,7 @@ extends SceneTree
 ##     -s tests/render_loading_art.gd -- [only=<shot>] [out=<dir>]
 
 const PitchScene := preload("res://pitch/shinty_pitch.tscn")
-const SHOTS := ["swing", "air", "keeper", "chase", "first_ball"]
+const SHOTS := ["swing", "air", "keeper", "chase", "first_ball", "shy", "cleek"]
 
 ## Two made-up kits for the art, so no real club is shown.
 const NAVY := {"id": "art_navy", "colors": {"primary": "#14264a", "secondary": "#f2f2f2", "keeper": "#f2c400"}}
@@ -115,8 +115,8 @@ func _shot_swing(world: Node3D, cam: Camera3D) -> void:
 	_ball(world, m.get_strike_spot(), 1.3)
 	var closing := _player(world, RED, Vector3(7.5, 0, -7.0), 0.0, 4, "CHB")
 	_run_cycle(closing, Vector3(-4.0, 0, 5.0), 0.6)
-	_look(cam, Vector3(-0.2, 0.45, 3.1), Vector3(0.45, 1.05, 0.0))
-	cam.fov = 44.0
+	_look(cam, Vector3(-0.3, 0.45, 3.6), Vector3(0.45, 1.35, 0.0))
+	cam.fov = 54.0
 
 
 ## A mid-air volley: the ball at head height, caman meeting it.
@@ -151,6 +151,8 @@ func _shot_chase(world: Node3D, cam: Camera3D) -> void:
 	_pitch(world, 0, 0)
 	var a := _player(world, NAVY, Vector3(0, 0, 0.35), PI * 0.5, 7, "RM")
 	var b := _player(world, RED, Vector3(0.7, 0, -0.9), PI * 0.5, 6, "LM")
+	b.shoulder_carry = true   # one carries the caman low, one up on the shoulder
+	a.shoulder_carry = false
 	_run_cycle(a, Vector3(-8.5, 0, 0), 0.52)
 	_run_cycle(b, Vector3(-8.5, 0, 0), 0.8)
 	var ball := Vector3(-3.2, ShintyBallPhysics.RADIUS, 0.0)
@@ -163,19 +165,54 @@ func _shot_chase(world: Node3D, cam: Camera3D) -> void:
 	cam.fov = 40.0
 
 
-## The start of every match: the ball thrown up between two players.
+## The start of every match: the ball thrown up between two players, face
+## to face, camans crossed below the heads with each bas curling in.
 func _shot_first_ball(world: Node3D, cam: Camera3D) -> void:
 	_pitch(world, 1, 1)
-	var a := _player(world, NAVY, Vector3(-0.55, 0, 0), -PI * 0.5 + PI, 8, "CHF")
-	var b := _player(world, RED, Vector3(0.55, 0, 0), PI * 0.5 + PI, 5, "CHB")
-	a.rotation.y = -PI * 0.5
-	b.rotation.y = PI * 0.5
-	var ball := Vector3(0, 2.7, 0)
+	var a := _player(world, NAVY, Vector3(-0.5, 0, 0), -PI * 0.5, 8, "CHF")
+	var b := _player(world, RED, Vector3(0.5, 0, 0), PI * 0.5, 5, "CHB")
+	var ball := Vector3(0, 2.9, 0)
 	for m in [a, b]:
-		m.charge_swing()
-		_run_cycle(m, Vector3.ZERO, 0.4)
+		var side := signf(m.position.x)
+		m.reach_face = Vector3(side, 0.0, 0.0)   # toe curls in over the other bas
+		m.set_reach(Vector3(-side * 0.22, 2.3, 0.0), 1.0)
 		m.look_at_point(ball)
-		m.advance(0.0)
+		_run_cycle(m, Vector3.ZERO, 1.0)
 	_ball(world, ball, 1.3)
-	_look(cam, Vector3(0.4, 0.25, 4.0), Vector3(0, 1.75, 0))
-	cam.fov = 50.0
+	_look(cam, Vector3(0.4, 0.4, 4.6), Vector3(0, 1.45, 0))
+	cam.fov = 44.0
+
+
+## A shy from the touchline: the ball tossed up, the caman coming over the top.
+func _shot_shy(world: Node3D, cam: Camera3D) -> void:
+	_pitch(world, 2, 1)
+	var m := _player(world, NAVY, Vector3(0, 0, 0), PI * 0.5, 4, "LHB")
+	_pose(m, &"shy", ShintyPlayerModel.ACTIONS["shy"] * 0.58)
+	var ball := m.global_transform * Vector3(0.0, 1.35, -0.75)
+	m.look_at_point(ball)
+	m.advance(0.0)
+	_ball(world, ball, 1.3)
+	var mark := _player(world, RED, Vector3(4.5, 0, -4.0), -PI * 0.25, 7, "RM")
+	_run_cycle(mark, Vector3.ZERO, 0.5)
+	mark.look_at_point(ball)
+	mark.advance(0.0)
+	_look(cam, Vector3(-2.6, 0.9, 3.4), Vector3(0.4, 1.3, -0.3))
+	cam.fov = 44.0
+
+
+## A cleek: a defender hooks his caman under the arc of a forward's swing.
+func _shot_cleek(world: Node3D, cam: Camera3D) -> void:
+	_pitch(world, 0, 0)
+	var fwd := _player(world, RED, Vector3(0, 0, 0), PI * 0.5, 10, "CF")
+	_pose(fwd, &"swing", 0.78 * 0.33)
+	var ball := fwd.get_strike_spot()
+	fwd.look_at_point(ball)
+	fwd.advance(0.0)
+	# On the camera side, facing the forward, so the hook shows under the swing.
+	var d := _player(world, NAVY, Vector3(0.7, 0, 0.8), atan2(0.7, 0.8), 3, "FB")
+	_pose(d, &"cleek", ShintyPlayerModel.ACTIONS["cleek"] * 0.45)
+	d.look_at_point(fwd.get_caman_head_position())
+	d.advance(0.0)
+	_ball(world, ball, 1.3)
+	_look(cam, Vector3(-1.2, 0.6, 3.6), Vector3(0.4, 1.2, -0.3))
+	cam.fov = 44.0
