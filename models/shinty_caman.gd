@@ -154,10 +154,13 @@ static func build(parent: Node3D, design: Dictionary = {}, detail := true) -> vo
 		rad.append(Vector2(s[1], s[2]) * thick)
 		taper.append(s[3])
 	# The bas: a long gentle heel curving into a wedge, both faces flat enough
-	# to strike with.
-	var bas := [[-(L - 0.13), -0.004, 0.016, 0.0235], [-(L - 0.075), -0.014, 0.0175, 0.026],
-		[-(L - 0.04), -0.03, 0.0185, 0.0275], [-(L - 0.018), -0.055, 0.0185, 0.027],
-		[-(L - 0.008), -0.083, 0.017, 0.024], [-(L - 0.005), -0.106, 0.014, 0.019], [-(L - 0.005), -0.119, 0.01, 0.013]]
+	# to strike with. It runs flat along the sole to a toe cut square, full
+	# depth to the end.
+	var bas := [[-(L - 0.13), 0.0, 0.016, 0.0235], [-(L - 0.095), 0.0, 0.016, 0.024],
+		[-(L - 0.071), -0.004, 0.0165, 0.0245], [-(L - 0.05), -0.016, 0.0175, 0.026],
+		[-(L - 0.038), -0.03, 0.0185, 0.0275], [-(L - 0.029), -0.046, 0.0185, 0.0272],
+		[-(L - 0.026), -0.06, 0.0183, 0.026], [-(L - 0.025), -0.07, 0.018, 0.025],
+		[-(L - 0.024), -0.095, 0.0175, 0.024], [-(L - 0.024), -0.118, 0.0172, 0.0235]]
 	for b in bas:
 		pts.append(Vector3(0, b[0], b[1] * reach))
 		rad.append(Vector2(b[2] * face, b[3] * lerpf(1.0, reach, 0.6)))
