@@ -109,7 +109,7 @@ func set_menu_open(open: bool) -> void:
 
 ## Share of the match played, 0 at the first throw-up to 1 at full time.
 func match_share() -> float:
-	return clampf((m.clock + (m.half_seconds if m.half == 2 else 0.0)) / (m.half_seconds * 2.0), 0.0, 1.0)
+	return clampf(m.match_seconds() / (90.0 * 60.0), 0.0, 1.0)
 
 
 # ---------------------------------------------------------------- per frame

@@ -68,7 +68,7 @@ func _team_short(t: Dictionary) -> String:
 
 func _clock_text() -> String:
 	var m := match_node
-	var secs := int(m.clock / m.half_seconds * 45.0 * 60.0) + (2700 if m.half == 2 else 0)
+	var secs := int(m.match_seconds())
 	return "%02d:%02d" % [secs / 60, secs % 60]
 
 
@@ -84,7 +84,10 @@ func _draw() -> void:
 	if _goal_t >= 0.0:
 		_draw_goal(m, screen)
 	elif not replay_active and (m.state == m.State.HALF_TIME or m.state == m.State.FULL_TIME):
-		_draw_strap(m, screen, "HALF TIME" if m.state == m.State.HALF_TIME else "FULL TIME")
+		var strap := "FULL TIME"
+		if m.state == m.State.HALF_TIME:
+			strap = "EXTRA TIME" if m.half == 2 else "HALF TIME"
+		_draw_strap(m, screen, strap)
 	if _sub_t >= 0.0 and not replay_active:
 		_draw_sub(m, screen)
 	_draw_wipe(screen)
@@ -140,7 +143,7 @@ func _draw_bug(m) -> void:
 	draw_string(bold, Vector2(x, y + 26), _clock_text(), HORIZONTAL_ALIGNMENT_CENTER, 78, 21, Color.WHITE)
 	x += 78
 	draw_rect(Rect2(x, y, 34, h), Color(0.12, 0.16, 0.19, 0.75))
-	draw_string(bold, Vector2(x, y + 25), "%dH" % m.half, HORIZONTAL_ALIGNMENT_CENTER, 34, 16, ShintyStyle.MUTED)
+	draw_string(bold, Vector2(x, y + 25), ("%dH" % m.half if m.half <= 2 else "ET"), HORIZONTAL_ALIGNMENT_CENTER, 34, 16, ShintyStyle.MUTED)
 	# Cards under each team's box
 	var ref = m.get("referee")
 	if ref != null and ref.has_method("team_cards"):

@@ -241,6 +241,11 @@ static func update_stick(m, p, dt: float) -> void:
 	elif m.in_throw_up(p):
 		# Caman raised high over the spot; as the ball drops, go up to meet it.
 		target = Vector3(m.PITCH.x / 2.0, m.PITCH.y / 2.0, OVERHEAD)   # crossed over the spot
+		if m.throw_up_tossed:
+			# Ball up: the caman is pulled back towards their own goal (side
+			# on to them), ready to swing through it up the park.
+			var back: Vector2 = p.pos - m.throw_up_dir(p) * 1.2
+			target = Vector3(back.x, back.y, 1.7)
 		if m.throw_up_tossed and m.throw_up_t > m.throw_up_swing.get(p, 99.0) - 0.15:
 			target = Vector3(m.ball_pos.x, m.ball_pos.y, clampf(m.ball_z, 1.5, OVERHEAD))
 	elif p.stagger <= 0.0:
