@@ -38,6 +38,10 @@ const CLEEK_MIN_POWER := 0.5   ## only hits of half power or more can be cleeked
 const BARGE_TIME := 0.35
 const BARGE_BURST := 3.5       ## yd/s thrown into a barge
 const BARGE_BRACE := 1.35      ## a braced shoulder hits harder
+const FLOOR_PACE := 0.9         ## a sprinting barger at this share of top speed floors a slower player
+const FLOOR_SLOWER := 0.75      ## ...who is moving at under this share of the barger's speed
+const FLOOR_TIME := 1.3         ## seconds a floored player is out of play (full fall)
+const FLOOR_SHOVE := 4.0        ## yd/s the floored player is sent the way of the barge
 const REF_SEES := 0.55         ## chance the referee spots a push in the back
 
 
@@ -103,7 +107,31 @@ static func barge_contact(m, barger, victim) -> float:
 		"on": victim, "at": victim.pos, "severity": 0.4 if in_the_back else 0.0})
 	if in_the_back and not ("referee" in m) and randf() < REF_SEES:
 		m.foul_pending = [barger, victim]
+	if floors(barger, victim):
+		_floor(m, barger, victim, push)
 	return BARGE_BRACE
+
+
+## A barger at full pace into a slower player who isn't holding the ball up
+## or barging back puts them on the ground.
+static func floors(barger, victim) -> bool:
+	var pace: float = barger.vel.length()
+	return barger.sprinting and pace >= barger.top_speed() * FLOOR_PACE \
+		and victim.vel.length() < pace * FLOOR_SLOWER \
+		and not victim.shielding and victim.barge_t <= 0.0
+
+
+## Sent flying the way of the barge and down on the grass, then back up.
+static func _floor(m, barger, victim, push: Vector2) -> void:
+	victim.vel += push * FLOOR_SHOVE
+	victim.stagger = maxf(victim.stagger, FLOOR_TIME)
+	victim.swing_t = -1.0
+	victim.block_t = 0.0
+	victim.cleek_t = 0.0
+	m.anim(victim, "stumble", 1.0)
+	m.events.append({"type": "knockdown", "team": victim.team, "on": victim, "floored": true})
+	if victim == m.carrier:
+		m.spill(victim, barger)
 
 
 ## Just before `p`'s caman meets the ball: does an opponent's block or cleek

@@ -29,9 +29,6 @@ const BATTLE_FOUL := 0.12
 ## ones); a push in the back is booked more readily.
 const YELLOW_CHANCE := 0.3
 const RED_CHANCE := 0.01
-## A swing that misses the ball with an opponent in front of it: the chance
-## the follow-through catches them.
-const SWING_CATCH := 0.5
 const RUN_SPEED := 7.0
 const FOUL_NAMES := {
 	"push": "push in the back", "hack": "hacking", "stick": "caman on the man",
@@ -113,9 +110,8 @@ func _read_events() -> void:
 				_on_tackle(e)
 			"battle":
 				_on_battle()
-			"hit":
-				if e.get("kind") == "fresh_air" and not e.get("shy", false) and e.has("by"):
-					_on_fresh_air(e["by"])
+			"swing_contact":
+				_on_swing_contact(e)
 			"save":
 				if e.has("by"):
 					_touched(e["by"])
@@ -218,23 +214,15 @@ func _on_battle() -> void:
 	_on_foul({"kind": "hack", "by": t, "on": o, "at": o.pos, "severity": 0.2 + randf() * 0.4})
 
 
-## A swing at a ball that isn't there, with an opponent in the caman's path:
-## hitting the player instead of the ball is a foul, and a dangerous one.
-## (A swing that catches a late blocker is not: that comes in as a
-## "late_block" event, never here.)
-func _on_fresh_air(p) -> void:
-	if not (p in m.players):
+## A swing that missed the ball and caught a player (the match reports it
+## as "swing_contact"). Hitting the player instead of the ball is a foul, and
+## a dangerous one, unless the swing came through the front of a player who
+## had the ball: that's part of playing for it. A swing that catches a late
+## blocker is never a foul; that comes in as "late_block", not here.
+func _on_swing_contact(e: Dictionary) -> void:
+	if e.get("front", false) and e.get("had_ball", false):
 		return
-	for q in m.squads[1 - p.team]:
-		var off: Vector2 = q.pos - p.pos
-		var d := off.length()
-		if d < 0.1 or d > m.Body.STICK_REACH + m.Body.BODY_R:
-			continue
-		if p.facing.length() < 0.01 or p.facing.normalized().dot(off / d) < 0.3:
-			continue
-		if randf() < SWING_CATCH:
-			_on_foul({"kind": "swing", "by": p, "on": q, "at": q.pos, "severity": 0.35 + randf() * 0.5})
-		return
+	_on_foul({"kind": "swing", "by": e["by"], "on": e["on"], "at": e["at"], "severity": 0.35 + randf() * 0.5})
 
 
 func _on_foul(e: Dictionary) -> void:

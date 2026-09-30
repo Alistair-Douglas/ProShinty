@@ -36,6 +36,9 @@ static var lite := false
 
 ## Where the two camans cross over the centre spot (metres).
 const THROW_UP_CROSS := Vector3(0.0, 2.3, 0.15)
+## How far past the centre each caman head reaches, so the shafts cross below
+## the heads and each bas curls in over the other.
+const CROSS_PAST := 0.22
 
 
 func _ready() -> void:
@@ -82,7 +85,8 @@ func _hero(player: Dictionary, pos: Vector3, yaw: float) -> ShintyPlayerModel:
 	m.rotation.y = yaw
 	# The throw-up: face to face over the ball, camans raised and crossed
 	# high over the spot, waiting for the referee to throw it up.
-	m.set_reach(THROW_UP_CROSS, 1.0)
+	m.reach_face = Vector3(signf(pos.x), 0.0, 0.0)  # toe curls in, toward the other bas
+	m.set_reach(THROW_UP_CROSS + Vector3(-signf(pos.x) * CROSS_PAST, 0.0, 0.0), 1.0)
 	return m
 
 

@@ -32,6 +32,8 @@ const GOAL_PAUSE := 3.0
 const HALF_TIME_PAUSE := 3.0
 const PENALTY_SPOT := 20.0   # penalty hit, yards from the goal line
 const FREE_HIT_BACK := 5.0   # opponents stand this far off a set piece
+const SWING_CATCH := 0.5     # a swing that misses the ball catches a player in its path
+const TRIP_TIME := 1.0       # a player a caman catches goes down and is back in play a second later
 const OVERSWING_MAX := 1.35  # hit meter past full power
 const CARRY_CATCH_UP := 6.0  # yd/s: how fast a gathered ball settles onto the stick
 const DRIBBLE_ROLL_DECEL := 4.0  # yd/s^2: a tapped ball slowing on the grass
@@ -1274,10 +1276,44 @@ func _fresh_air(p: Player, keeps_ball: bool, shy: bool = false) -> void:
 		return
 	if p == human:
 		_say("Fresh air!", 1.0)
-	if keeps_ball:
+	_swing_follow_through(p)
+	if keeps_ball and carrier == p:
 		return   # swung over the top of it; it's still at your feet
 	if carrier == null and ball_z > 1.0 and ball_vz > 0.0:
 		ball_vz = 0.0
+
+
+## A swing that misses the ball carries on through: an opponent standing in
+## its path can take the caman and go down. The referee decides whether that
+## was a foul (see referee.gd).
+func _swing_follow_through(p: Player) -> void:
+	for q in squads[1 - p.team]:
+		var off: Vector2 = q.pos - p.pos
+		var d := off.length()
+		if d < 0.1 or d > Body.STICK_REACH + Body.BODY_R:
+			continue
+		if p.facing.length() < 0.01 or p.facing.normalized().dot(off / d) < 0.3:
+			continue
+		if randf() >= SWING_CATCH:
+			return
+		var had_ball: bool = carrier == q
+		# From the front: the swing came from where the player was facing.
+		var front: bool = q.facing.length() > 0.01 and q.facing.normalized().dot(-off / d) > 0.3
+		trip(q)
+		events.append({"type": "swing_contact", "by": p, "on": q, "at": q.pos, "front": front, "had_ball": had_ball})
+		if had_ball:
+			spill(q, p)
+		return
+
+
+## A caman caught a player who wasn't blocking: they are tripped, go down,
+## and are back in play TRIP_TIME later. (A late blocker is only hurt: see
+## swing_counters.)
+func trip(q: Player) -> void:
+	q.stagger = max(q.stagger, TRIP_TIME)
+	q.swing_t = -1.0
+	q.shielding = false
+	anim(q, "stumble", clamp(q.stagger / 1.3, 0.0, 1.0))
 
 
 func _take_control(p: Player) -> void:
@@ -1325,6 +1361,10 @@ func _try_tackle(t: Player, o: Player) -> void:
 	if not won and shielded and randf() < 0.06:
 		# Reaching through the carrier's body for the ball: caman on the man.
 		events.append({"type": "foul", "kind": "hack", "by": t, "on": o, "at": o.pos, "severity": 0.3})
+		trip(o)
+		spill(o, t)
+		t.cooldown = 1.0
+		return
 	if won:
 		_steal(t, o)
 	else:

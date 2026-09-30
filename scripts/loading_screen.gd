@@ -16,6 +16,8 @@ const SLIDES := [
 	["keeper", "LAST LINE", "DID YOU KNOW", "Each side fields twelve players: a goalkeeper and eleven outfield players, on a pitch up to 170 yards long."],
 	["chase", "SHOULDER TO SHOULDER", "DID YOU KNOW", "Shinty is a contact sport. A fair shoulder-to-shoulder challenge is allowed, so hold your line when you chase a loose ball."],
 	["first_ball", "FIRST BALL", "DID YOU KNOW", "Every match starts with the referee throwing the ball up between two players, who swing at it as it drops."],
+	["shy", "THE SHY", "TIP", "When the ball goes over the touchline, the shy is taken with the ball tossed up and struck overhead. You get three attempts."],
+	["cleek", "THE CLEEK", "TIP", "Hook your caman under an opponent's swing to stop the strike. Time it right and the ball is yours."],
 ]
 const TIPS := [
 	"Press Q to switch to the player nearest the ball.",

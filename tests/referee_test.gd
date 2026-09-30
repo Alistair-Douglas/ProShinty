@@ -27,6 +27,7 @@ func _process(_delta: float) -> bool:
 		_test_card_rate()
 		_test_swing_into_player()
 		_test_late_block_no_foul()
+		_test_full_pace_barge_floors()
 		print("Referee tests: %s" % ("all passed" if _failures == 0 else "%d failed" % _failures))
 		quit(0 if _failures == 0 else 1)
 	return false
@@ -297,34 +298,66 @@ func _test_card_rate() -> void:
 	m.free()
 
 
-func _test_swing_into_player() -> void:
-	print("Swing misses the ball and hits a player")
-	var m = _new_match()
+func _swing_setup(m, q_has_ball: bool, q_faces_swinger: bool) -> Array:
 	var p = _outfield(m, 0, "CHF")
 	var q = _outfield(m, 1, "CHB")
+	for o in m.squads[1]:
+		if o != q:
+			o.pos = Vector2(120, o.pos.y)
 	p.pos = Vector2(60, 30)
 	p.facing = Vector2.RIGHT
 	q.pos = Vector2(61.2, 30)
-	var called := false
-	for i in 20:  # the follow-through doesn't always catch them
-		m.events.append({"type": "hit", "team": 0, "kind": "fresh_air", "curve": 0.0, "shy": false, "by": p})
-		m.referee.step(0.0)
-		if m.referee.calls.size() > 0:
-			called = true
-			break
-	_check(called and m.referee.calls[-1]["kind"] == "swing", "foul for swinging into the player")
-	var m2 = _new_match()
-	p = _outfield(m2, 0, "CHF")
+	q.facing = Vector2.LEFT if q_faces_swinger else Vector2.RIGHT
+	m.carrier = q if q_has_ball else null
+	return [p, q]
+
+
+## Swing at fresh air until the follow-through catches someone (it doesn't
+## every time). Returns the swing_contact event, or {}.
+func _swing_until_contact(m, p) -> Dictionary:
+	for i in 40:
+		var n: int = m.events.size()
+		m._fresh_air(p, false)
+		for k in range(n, m.events.size()):
+			if m.events[k]["type"] == "swing_contact":
+				return m.events[k]
+	return {}
+
+
+func _test_swing_into_player() -> void:
+	print("Swing misses the ball and hits a player")
+	var m = _new_match()
+	var pq := _swing_setup(m, false, true)
+	var e := _swing_until_contact(m, pq[0])
+	m.referee.step(0.0)
+	_check(not e.is_empty() and is_equal_approx(pq[1].stagger, m.TRIP_TIME), "the swing trips the player for a second")
+	_check(pq[1].stagger / 1.3 >= ShintyPlayerModel.FALL_AT, "a tripped player goes down")
+	_check(m.referee.calls.size() > 0 and m.referee.calls[-1]["kind"] == "swing", "foul for swinging into a player without the ball")
+	m.free()
+	m = _new_match()
+	pq = _swing_setup(m, true, false)
+	_swing_until_contact(m, pq[0])
+	m.referee.step(0.0)
+	_check(m.referee.calls.size() > 0 and m.referee.calls[-1]["kind"] == "swing", "foul for a swing into the back of the ball carrier")
+	m.free()
+	m = _new_match()
+	pq = _swing_setup(m, true, true)
+	e = _swing_until_contact(m, pq[0])
+	m.referee.step(0.0)
+	_check(not e.is_empty() and m.referee.calls.is_empty(), "no foul for a swing through the front of the ball carrier")
+	_check(m.carrier != pq[1], "the carrier goes down and loses the ball")
+	m.free()
+	m = _new_match()
+	var p = _outfield(m, 0, "CHF")
 	p.pos = Vector2(60, 30)
 	p.facing = Vector2.RIGHT
-	for q2 in m2.squads[1]:
+	for q2 in m.squads[1]:
 		q2.pos = Vector2(100, q2.pos.y)
 	for i in 20:
-		m2.events.append({"type": "hit", "team": 0, "kind": "fresh_air", "curve": 0.0, "shy": false, "by": p})
-		m2.referee.step(0.0)
-	_check(m2.referee.calls.is_empty(), "a swing at fresh air with nobody near is fine")
+		m._fresh_air(p, false)
+	m.referee.step(0.0)
+	_check(m.referee.calls.is_empty(), "a swing at fresh air with nobody near is fine")
 	m.free()
-	m2.free()
 
 
 func _test_late_block_no_foul() -> void:
@@ -345,3 +378,41 @@ func _test_late_block_no_foul() -> void:
 	_check(late, "the swing catches the blocker")
 	_check(m.referee.calls.is_empty(), "no foul given")
 	m.free()
+
+
+## Barger at full pace into a slower player, side-on: legal, and down they go.
+## Shielding or barging back, they stay up.
+func _barge_at_pace(victim_shields: bool, victim_barges: bool) -> Array:
+	var m = _new_match()
+	var p = _outfield(m, 0, "CHF")
+	var q = _outfield(m, 1, "CHB")
+	p.pos = Vector2(60, 30)
+	q.pos = Vector2(60, 30 + 0.2)
+	q.facing = Vector2.RIGHT
+	p.sprinting = true
+	p.barge_t = 0.3
+	p.barge_hit = false
+	p.vel = Vector2(0, p.top_speed())
+	q.vel = Vector2(1.0, 0)
+	q.shielding = victim_shields
+	q.barge_t = 0.3 if victim_barges else 0.0
+	m.Body.collide(m)
+	m.referee.step(0.0)
+	return [m, q]
+
+
+func _test_full_pace_barge_floors() -> void:
+	print("Barge at full pace")
+	var r := _barge_at_pace(false, false)
+	var m = r[0]
+	var q = r[1]
+	_check(q.stagger >= 1.3 and q.stagger / 1.3 >= ShintyPlayerModel.FALL_AT, "the slower player is floored")
+	_check(q.vel.y > 3.0, "and sent the way of the barge")
+	_check(m.referee.calls.is_empty(), "a shoulder barge is still legal")
+	m.free()
+	r = _barge_at_pace(true, false)
+	_check(r[1].stagger < 1.3, "holding the ball up, they stay on their feet")
+	r[0].free()
+	r = _barge_at_pace(false, true)
+	_check(r[1].stagger < 1.3, "barging back, they stay on their feet")
+	r[0].free()

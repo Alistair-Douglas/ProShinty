@@ -15,9 +15,9 @@ marked below.
 | Ball over the sideline: a shy to the other team | Yes |
 | Attackers put it over the byline: goal hit from the edge of the D | Yes (moved out from 4 to 10 yards) |
 | Defenders put it over their own byline: a corner | Yes |
-| Hacking (bringing your caman down on an opponent's caman) is a foul | Enforced |
-| Striking an opponent with the caman is a foul | Enforced: a swing that misses the ball and catches an opponent in front is a foul, and is booked more readily. A swing that catches a late blocker is not a foul; the blocker just gets hurt |
-| Body contact must be shoulder to shoulder | A shoulder barge is legal; a push in the back is a foul, and it's easier for the referee to miss |
+| Hacking (bringing your caman down on an opponent's caman) is a foul | Enforced: a hack that catches the ball carrier trips them too |
+| Striking an opponent with the caman is a foul | Enforced: a swing that misses the ball and catches an opponent trips them (down, and back in play a second later) and is a foul, booked more readily, unless it came through the front of a player who had the ball. A swing that catches a late blocker is not a foul; the blocker just gets hurt |
+| Body contact must be shoulder to shoulder | A shoulder barge is legal; a push in the back is a foul, and it's easier for the referee to miss. A barge at full pace into a slower player who isn't holding the ball up or barging back floors them |
 | Ball played with the head is a foul | Enforced when the match reports it |
 | Only the keeper may use hands, open palm only, no catching | Keepers deflect the ball down to their feet; handling outside the D, or catching it, is a foul |
 | Foul: free hit where it happened (indirect) | Yes; opponents held 5 yards off (distance not from Wikipedia) |
