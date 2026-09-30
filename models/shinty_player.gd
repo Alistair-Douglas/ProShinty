@@ -117,6 +117,10 @@ var _head_velocity := Vector3.ZERO
 var _prev_velocity := Vector3.ZERO
 var _accel := Vector3.ZERO        # smoothed, world space, for leaning
 var _reach_target = null          # world point the caman head reaches for
+## World direction the face of the bas turns to while reaching (null: the
+## usual, hook up). The toe points the other way; the menu throw-up uses it to
+## curl each bas in over the other.
+var reach_face = null
 var _reach_want := 0.0
 var _reach := 0.0                 # smoothed 0..1
 var _free_hand = null             # skeleton-space target for a hand off the caman
@@ -769,7 +773,8 @@ func _pose(_delta: float) -> void:
 			var rd := tgt - anchor
 			if rd.length() > 0.05:
 				var dn := rd.normalized()
-				var rt := Transform3D(_caman_basis(dn, face_w), tgt - dn * head_len)
+				var rf: Vector3 = face_w if reach_face == null else _skel.global_transform.basis.inverse() * (reach_face as Vector3)
+				var rt := Transform3D(_caman_basis(dn, rf), tgt - dn * head_len)
 				ct = ct.interpolate_with(rt, _reach)
 	# Running off the ball the caman is carried in the lower hand, low and
 	# across the front of the body with the head out in front just off the
