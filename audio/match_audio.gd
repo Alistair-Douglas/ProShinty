@@ -1,7 +1,8 @@
 class_name ShintyMatchAudio
 extends Node
 ## Match sound: the thwack of caman on ball, the ball off the post or bar,
-## stick clashes, the crowd's murmur, its "ooh" at a save and its roar for a goal. Everything is driven by the
+## stick clashes, the referee's whistle, the crowd's murmur, its "ooh" at a save
+## and its roar for a goal. Everything is driven by the
 ## events the match appends to match.events, so the match itself knows nothing
 ## about sound. Where each sound comes from is in audio/README.md.
 
@@ -11,6 +12,9 @@ const CLACK := preload("res://audio/sfx/clack_plank.wav")
 const CHEER := preload("res://audio/sfx/cheer_crowd.wav")
 const OOH := preload("res://audio/sfx/ooh_crowd.wav")
 const CROWD_LOOP := preload("res://audio/sfx/crowd_chatter.wav")
+const WHISTLE := preload("res://audio/sfx/whistle.wav")
+const WHISTLE_HALF := preload("res://audio/sfx/whistle_half.wav")    ## two blasts
+const WHISTLE_FULL := preload("res://audio/sfx/whistle_full.wav")    ## two short, one long
 
 const SOFT_HIT := 8.0      ## yd/s: a strike this slow is the quietest thwack
 const HARD_HIT := 40.0     ## yd/s: a strike this fast is the loudest
@@ -20,6 +24,7 @@ const VOICES := 8          ## sound effects that can overlap
 var m                      # the match (scripts/match.gd); defaults to the parent
 var crowd: AudioStreamPlayer
 var roar: AudioStreamPlayer  # cheers and oohs, one at a time
+var whistle: AudioStreamPlayer  # the referee has one whistle
 var _sfx: Array[AudioStreamPlayer] = []
 var _next_voice := 0
 var _next_event := 0
@@ -37,6 +42,8 @@ func _ready() -> void:
 		_sfx.append(p)
 	roar = AudioStreamPlayer.new()
 	add_child(roar)
+	whistle = AudioStreamPlayer.new()
+	add_child(whistle)
 	crowd = AudioStreamPlayer.new()
 	crowd.stream = CROWD_LOOP
 	crowd.volume_db = CROWD_DB
@@ -74,6 +81,14 @@ func _on_event(e: Dictionary) -> void:
 			crowd_react(OOH, -5.0)
 		"goal":
 			crowd_react(CHEER, 0.0)
+		"throw_up":
+			blow(WHISTLE, -6.0)
+		"Free hit", "Penalty hit":
+			blow(WHISTLE, 0.0)
+		"Shy", "Corner", "Hit-out":
+			blow(WHISTLE, -9.0)
+		"half_end":
+			blow(WHISTLE_HALF if e.get("half", 1) == 1 else WHISTLE_FULL, 0.0)
 
 
 ## The thwack: louder, sharper and a touch higher the harder the ball is hit.
@@ -96,6 +111,16 @@ func off_the_post(speed_ms: float) -> void:
 	play(POST, lerpf(-12.0, 0.0, s), randf_range(0.95, 1.05))
 	if s > 0.4:
 		crowd_react(OOH, -5.0)
+
+
+## The referee's whistle: a free hit gets a sharp blast, a ball out of play a
+## quieter one; half time and full time get their own calls.
+func blow(stream: AudioStream, db: float) -> void:
+	whistle.stream = stream
+	whistle.volume_db = db
+	whistle.pitch_scale = randf_range(0.98, 1.02)
+	whistle.play()
+	_count(stream)
 
 
 func crowd_react(stream: AudioStream, db: float) -> void:

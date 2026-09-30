@@ -12,6 +12,9 @@ hits off the posts or bar from `match.ball_sim.post_hits`:
 | clash, block, stick_block, cleek, late_block | `clack_plank.wav` |
 | save | `ooh_crowd.wav` from the crowd |
 | goal | `cheer_crowd.wav` |
+| throw-up; shy, corner, hit-out (quieter); free hit, penalty hit (loudest) | `whistle.wav` |
+| half time | `whistle_half.wav`, two blasts |
+| full time | `whistle_full.wav`, two short blasts and a long one |
 
 The crowd chattering (`crowd_chatter.wav`) loops quietly under the whole match
 and pauses with the game.
@@ -21,7 +24,8 @@ and pauses with the game.
 Recordings from [Freesound](https://freesound.org), chosen by Alistair. Trimmed
 to the hit (the cheer without its quiet start, the moan to its first two and a
 half seconds, the chatter to its steadiest 45 seconds with the ends crossfaded
-so it loops) and mixed to mono; `post_bat.mp3` is as downloaded. Check each licence on its Freesound page before release, and
+so it loops; the half-time and full-time calls are built from the one whistle
+blast, stretched and repeated) and mixed to mono; `post_bat.mp3` is as downloaded. Check each licence on its Freesound page before release, and
 credit the authors in the game if it asks for attribution:
 
 | File | Freesound sound | Author |
@@ -31,6 +35,7 @@ credit the authors in the game if it asks for attribution:
 | `post_bat.mp3` | [#851452 "bat_hit2"](https://freesound.org/s/851452/) | hashtagsmcgee |
 | `ooh_crowd.wav` | [#150969 "crowd moaning"](https://freesound.org/s/150969/) | unchaz |
 | `clack_plank.wav` | [#366190 "plank falling"](https://freesound.org/s/366190/) | twiggie2000 |
+| `whistle*.wav` | [#218318 "referee whistle blow gymnasium"](https://freesound.org/s/218318/) | splicesound |
 | `crowd_chatter.wav` | [#400588 "crowd speaking chattering talking"](https://freesound.org/s/400588/) | misjoc |
 
 `crowd_chatter.wav` is imported as a forward loop (see its `.import` file).
