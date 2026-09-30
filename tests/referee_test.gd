@@ -27,6 +27,7 @@ func _process(_delta: float) -> bool:
 		_test_card_rate()
 		_test_swing_into_player()
 		_test_late_block_no_foul()
+		_test_full_pace_barge_floors()
 		print("Referee tests: %s" % ("all passed" if _failures == 0 else "%d failed" % _failures))
 		quit(0 if _failures == 0 else 1)
 	return false
@@ -377,3 +378,41 @@ func _test_late_block_no_foul() -> void:
 	_check(late, "the swing catches the blocker")
 	_check(m.referee.calls.is_empty(), "no foul given")
 	m.free()
+
+
+## Barger at full pace into a slower player, side-on: legal, and down they go.
+## Shielding or barging back, they stay up.
+func _barge_at_pace(victim_shields: bool, victim_barges: bool) -> Array:
+	var m = _new_match()
+	var p = _outfield(m, 0, "CHF")
+	var q = _outfield(m, 1, "CHB")
+	p.pos = Vector2(60, 30)
+	q.pos = Vector2(60, 30 + 0.2)
+	q.facing = Vector2.RIGHT
+	p.sprinting = true
+	p.barge_t = 0.3
+	p.barge_hit = false
+	p.vel = Vector2(0, p.top_speed())
+	q.vel = Vector2(1.0, 0)
+	q.shielding = victim_shields
+	q.barge_t = 0.3 if victim_barges else 0.0
+	m.Body.collide(m)
+	m.referee.step(0.0)
+	return [m, q]
+
+
+func _test_full_pace_barge_floors() -> void:
+	print("Barge at full pace")
+	var r := _barge_at_pace(false, false)
+	var m = r[0]
+	var q = r[1]
+	_check(q.stagger >= 1.3 and q.stagger / 1.3 >= ShintyPlayerModel.FALL_AT, "the slower player is floored")
+	_check(q.vel.y > 3.0, "and sent the way of the barge")
+	_check(m.referee.calls.is_empty(), "a shoulder barge is still legal")
+	m.free()
+	r = _barge_at_pace(true, false)
+	_check(r[1].stagger < 1.3, "holding the ball up, they stay on their feet")
+	r[0].free()
+	r = _barge_at_pace(false, true)
+	_check(r[1].stagger < 1.3, "barging back, they stay on their feet")
+	r[0].free()
