@@ -184,14 +184,16 @@ static func build(parent: Node3D, design: Dictionary = {}, detail := true) -> vo
 ## How far a face leans in from the sole to the top of the bas (share of its
 ## half thickness); more laid back leans in more.
 static func _face_taper(d: Dictionary, back: bool) -> float:
-	return clampf(0.32 + face_degrees(d, back) * 0.028, 0.08, 0.7)
+	return clampf(0.72 + face_degrees(d, back) * 0.02, 0.4, 0.97)
 
 
-## ShintyMesh.sweep with a triangular section where `taper` > 0: the +X
-## (front) and -X (back) faces lean in towards the top of the bas (the inside
-## of its curve) by `front` and `back`. Normals are worked out from the faces.
+## ShintyMesh.sweep that goes from a round section (`taper` 0) to the bas's
+## triangle (`taper` 1): a flat sole, flat front (+X) and back (-X) faces
+## leaning in by `front` and `back` towards the top (the inside of the
+## curve), and only that top edge slightly rounded. Normals are worked out
+## from the faces.
 static func _bas_sweep(points: PackedVector3Array, radii: PackedVector2Array, taper: PackedFloat32Array,
-		front: float, back: float, segments := 14) -> ArrayMesh:
+		front: float, back: float, segments := 32) -> ArrayMesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var n := points.size()
@@ -214,16 +216,15 @@ static func _bas_sweep(points: PackedVector3Array, radii: PackedVector2Array, ta
 		if i > 0:
 			along += points[i].distance_to(points[i - 1])
 		var r := radii[i]
-		var e := lerpf(1.0, 2.0 / 2.6, clampf(taper[i] * 2.0, 0.0, 1.0))  # round shaft, squarer bas
+		var tri := _triangle(r, front, back) if taper[i] > 0.0 else PackedVector2Array()
 		for j in ring:
 			var a := TAU * float(j) / segments
-			var c := cos(a)
-			var s := sin(a)
-			var px := signf(c) * pow(absf(c), e) * r.x
-			var pz := signf(s) * pow(absf(s), e) * r.y
-			# Lean the face in towards the top: nothing at the sole (pz = -r.y).
-			var lean := (front if px > 0.0 else back) * taper[i] * (0.5 + 0.5 * pz / r.y)
-			px *= 1.0 - lean
+			var dir := Vector2(cos(a), sin(a))
+			var p := Vector2(dir.x * r.x, dir.y * r.y)
+			if taper[i] > 0.0:
+				p = p.lerp(_ray_hit(dir, tri), taper[i])
+			var px := p.x
+			var pz := p.y
 			verts.append(points[i] + frame_x * px + frame_z * pz)
 			uvs.append(Vector2(0.1 * float(j) / segments, along))
 	for i in n - 1:
@@ -238,7 +239,7 @@ static func _bas_sweep(points: PackedVector3Array, radii: PackedVector2Array, ta
 		var centre := points[end]
 		for j in segments:
 			var a: int = end * ring + j
-			var tri := [centre, verts[a], verts[a + 1]] if end == 0 else [centre, verts[a + 1], verts[a]]
+			var tri := [centre, verts[a + 1], verts[a]] if end == 0 else [centre, verts[a], verts[a + 1]]
 			for v in tri:
 				st.set_uv(Vector2.ZERO)
 				st.add_vertex(v)
@@ -285,3 +286,34 @@ static func _add(parent: Node3D, mesh: Mesh, mat: Material) -> MeshInstance3D:
 	mi.material_override = mat
 	parent.add_child(mi)
 	return mi
+
+
+## The bas section as a polygon (X across the faces, Z from the sole up):
+## sole corners at +-r.x, faces leaning in by `front` and `back`, and a
+## slightly rounded top.
+static func _triangle(r: Vector2, front: float, back: float) -> PackedVector2Array:
+	var top := r.y * 0.86
+	var tf := r.x * (1.0 - front)
+	var tb := -r.x * (1.0 - back)
+	var poly := PackedVector2Array([Vector2(-r.x, -r.y), Vector2(r.x, -r.y), Vector2(tf, top)])
+	for k in range(1, 4):
+		var f := k / 4.0
+		poly.append(Vector2(lerpf(tf, tb, f), top + (r.y - top) * sin(PI * f)))
+	poly.append(Vector2(tb, top))
+	return poly
+
+
+## Where a ray from the section's centre along `dir` leaves `poly`.
+static func _ray_hit(dir: Vector2, poly: PackedVector2Array) -> Vector2:
+	var best := INF
+	for k in poly.size():
+		var p := poly[k]
+		var e := poly[(k + 1) % poly.size()] - p
+		var den := dir.cross(e)
+		if absf(den) < 1e-9:
+			continue
+		var t := p.cross(e) / den
+		var u := p.cross(dir) / den
+		if t > 0.0 and u >= -1e-6 and u <= 1.0 + 1e-6:
+			best = minf(best, t)
+	return dir * best if best < INF else Vector2.ZERO

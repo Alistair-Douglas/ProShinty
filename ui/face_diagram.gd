@@ -30,10 +30,12 @@ func _draw() -> void:
 	var sole := size.y - 30.0
 	var half := 34.0
 	var tall := 74.0
-	var lean_f := ShintyCaman._face_taper(design, false) * half
-	var lean_b := ShintyCaman._face_taper(design, true) * half
-	var pts := PackedVector2Array([Vector2(cx - half, sole), Vector2(cx + half, sole),
-		Vector2(cx + half - lean_f * 2.0, sole - tall), Vector2(cx - half + lean_b * 2.0, sole - tall)])
+	# Same polygon the caman's bas is built from, scaled up.
+	var tri := ShintyCaman._triangle(Vector2(half, tall * 0.5), ShintyCaman._face_taper(design, false),
+		ShintyCaman._face_taper(design, true))
+	var pts := PackedVector2Array()
+	for q in tri:
+		pts.append(Vector2(cx + q.x, sole - tall * 0.5 - q.y))
 	draw_colored_polygon(pts, ShintyCaman.wood_colour(design))
 	pts.append(pts[0])
 	draw_polyline(pts, Color(1, 1, 1, 0.55), 1.5, true)
