@@ -291,6 +291,7 @@ func _build_ground(root: Node3D) -> void:
 	var mat := ShaderMaterial.new()
 	mat.shader = _load_local("ground.gdshader")
 	mat.set_shader_parameter("unit", YARD_M)  # the Site node is in metres
+	mat.set_shader_parameter("noise_tex", _load_local("ground_noise.png"))
 	mat.set_shader_parameter("pitch_size", Vector2(length_yd, width_yd))
 	var look: Dictionary = _layout.ground_look()
 	for k in look:
@@ -662,6 +663,8 @@ func emit_trees(root: Node3D, b: TreeBatch, segs: int, rings: int, cards: int, l
 	var mm2 := MultiMesh.new()
 	mm2.transform_format = MultiMesh.TRANSFORM_3D
 	mm2.use_colors = true
+	if graphics_quality == Detail.LOW:
+		cards = int(cards * 0.6)
 	mm2.mesh = _canopy_mesh(segs, rings, cards)
 	mm2.instance_count = b.canopies.size()
 	for i in b.canopies.size():
@@ -672,19 +675,28 @@ func emit_trees(root: Node3D, b: TreeBatch, segs: int, rings: int, cards: int, l
 	mmi2.multimesh = mm2
 	var cm := ShaderMaterial.new()
 	cm.shader = _load_local("canopy.gdshader")
+	cm.set_shader_parameter("leaf_tex", _load_local("leaves.png"))
+	cm.set_shader_parameter("noise_tex", _load_local("ground_noise.png"))
 	mmi2.material_override = cm
+	# Far trees swap to a plain blob with no leaf cards (see _split_multimesh).
+	var far := ShaderMaterial.new()
+	far.shader = _load_local("canopy_far.gdshader")
+	far.set_shader_parameter("noise_tex", _load_local("ground_noise.png"))
+	far.set_shader_parameter("leaf_tile", _load_local("leaves_tile.png"))
+	mmi2.set_meta("far_mesh", _canopy_mesh(maxi(segs - 4, 6), maxi(rings - 2, 4), 0, 0.95))
+	mmi2.set_meta("far_material", far)
 	root.add_child(mmi2)
 
 
-## Unit-radius canopy blob: a sphere core (UV2.x = 0) and leaf cards
-## (UV2.x = 1) scattered over its surface. Every vertex gets a normal pointing
+## Unit-radius canopy blob: a sphere core (UV2.x = 0) of radius `core` and
+## leaf cards (UV2.x = 1) scattered over its surface. Every vertex gets a normal pointing
 ## out from the centre, so the blob shades as one soft mass.
-func _canopy_mesh(segs: int, rings: int, cards: int) -> ArrayMesh:
+func _canopy_mesh(segs: int, rings: int, cards: int, core := 0.82) -> ArrayMesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var sphere := SphereMesh.new()
-	sphere.radius = 0.82
-	sphere.height = 1.64
+	sphere.radius = core
+	sphere.height = core * 2.0
 	sphere.radial_segments = segs
 	sphere.rings = rings
 	var arrays := sphere.get_mesh_arrays()
@@ -721,6 +733,7 @@ func _canopy_mesh(segs: int, rings: int, cards: int) -> ArrayMesh:
 			st.set_uv(cc * 0.5 + Vector2(0.5, 0.5))
 			st.set_uv2(Vector2(1.0, rng.randf()))
 			st.add_vertex(v)
+	st.index()  # share corner vertices: the wind and lumps run once per vertex
 	return st.commit()
 
 
@@ -754,7 +767,7 @@ func emit_tufts(root: Node3D, rng: RandomNumberGenerator, count: int, area: Rect
 	mmi.name = "LongGrass"
 	mmi.multimesh = mm
 	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	mmi.visibility_range_end = 220.0
+	mmi.visibility_range_end = [80.0, 140.0, 220.0][graphics_quality]  # a few pixels high beyond this
 	var mat := ShaderMaterial.new()
 	mat.shader = _load_local("tuft.gdshader")
 	mmi.material_override = mat
@@ -953,6 +966,8 @@ const BATCH_CELL := 60.0
 ## How far from the pitch (metres) scenery still casts shadows, by quality.
 ## Beyond it the shadow would be a few blurry pixels in the last cascade.
 const SHADOW_REACH := [15.0, 70.0, INF]
+## Metres from the camera within which trees keep their full canopy, by quality.
+const TREE_NEAR := [45.0, 85.0, 170.0]
 
 
 ## Cuts the scenery's draw calls without changing what it looks like: each big
@@ -1059,11 +1074,44 @@ func _split_multimesh(root: Node3D, mmi: MultiMeshInstance3D, reach: float) -> v
 		var chunk := mmi.duplicate(0) as MultiMeshInstance3D
 		chunk.name = "%s_%d_%d" % [mmi.name, cell.x, cell.y]
 		chunk.multimesh = part
-		if chunk.cast_shadow != GeometryInstance3D.SHADOW_CASTING_SETTING_OFF and _cell_distance(cell) > reach:
+		var shadows := chunk.cast_shadow != GeometryInstance3D.SHADOW_CASTING_SETTING_OFF and _cell_distance(cell) <= reach
+		if not shadows:
 			chunk.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		mmi.get_parent().add_child(chunk)
+		if mmi.has_meta("far_mesh"):
+			_add_far_trees(root, mmi, chunk, shadows)
 	mmi.get_parent().remove_child(mmi)
 	mmi.queue_free()
+
+
+## Canopy LOD for one cell of trees. Close up the camera sees the full canopy
+## with its leaf cards; past TREE_NEAR it sees a plain opaque blob, which is a
+## fraction of the triangles and needs no cut-out. Below HIGH the shadow also
+## comes from the plain blob (cut-out shadows are costly), so trees still
+## shade the ground under them but without the dappling.
+func _add_far_trees(root: Node3D, mmi: MultiMeshInstance3D, chunk: MultiMeshInstance3D, shadows: bool) -> void:
+	var near: float = TREE_NEAR[graphics_quality] * root.scale.x
+	# No margins: with fading off they act as hysteresis, and a cell starting
+	# inside the margin could show neither version.
+	chunk.visibility_range_end = near
+	var blobs := chunk.multimesh.duplicate() as MultiMesh
+	blobs.mesh = mmi.get_meta("far_mesh")
+	var far := MultiMeshInstance3D.new()
+	far.name = chunk.name + "Far"
+	far.multimesh = blobs
+	far.transform = chunk.transform
+	far.material_override = mmi.get_meta("far_material")
+	far.visibility_range_begin = near
+	far.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if shadows and graphics_quality == Detail.HIGH \
+		else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	chunk.get_parent().add_child(far)
+	if shadows and graphics_quality != Detail.HIGH:
+		chunk.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		var caster := far.duplicate(0) as MultiMeshInstance3D
+		caster.name = chunk.name + "Shadow"
+		caster.visibility_range_begin = 0.0
+		caster.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_SHADOWS_ONLY
+		chunk.get_parent().add_child(caster)
 
 
 func _load_local(file: String) -> Resource:
