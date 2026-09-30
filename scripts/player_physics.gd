@@ -200,7 +200,7 @@ static func _knock(m, p, dv: float, by) -> void:
 		if by.barge_t <= 0.0 and dv > hold * 1.25 and p.facing.dot((p.pos - by.pos).normalized()) > 0.5:
 			m.events.append({"type": "foul", "kind": "push", "by": by, "on": p, "at": p.pos,
 				"severity": clampf((dv - hold) / hold, 0.1, 1.0)})
-		p.stagger = clampf(0.35 + (dv - hold) * 0.25, 0.35, 1.3)
+		p.stagger = clampf(0.45 + (dv - hold) * 0.35, 0.45, 1.3)
 		p.swing_t = -1.0
 		m.anim(p, "stumble")
 		m.events.append({"type": "knockdown", "team": p.team, "on": p})
