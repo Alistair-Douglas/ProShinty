@@ -42,7 +42,8 @@ const SKIN_TONES := [
 ## Actions and their total duration in seconds (swing and pass scale with power).
 const ACTIONS := {
 	"swing": 0.78, "pass": 0.55, "volley": 0.62, "tackle": 0.55, "trap": 0.4, "feet_trap": 0.55,
-	"save_left": 0.9, "save_right": 0.9, "celebrate": 1.6,
+	"save_left": 0.9, "save_right": 0.9, "save_feet": 0.7, "save_high_left": 0.8, "save_high_right": 0.8,
+	"celebrate": 1.6,
 	"shy": 2.0, "stumble": 0.7, "poke": 0.35, "block": 0.6, "cleek": 0.45, "barge": 0.4,
 }
 
@@ -938,6 +939,33 @@ func _action_pose(rot: Dictionary) -> Array:
 			var p5 := ready_p.lerp(Vector3(0.22, 0.12, -0.2), k)
 			var d5 := ready_d.slerp(Vector3(0.35, -0.55, -0.76).normalized(), k)
 			return [p5, d5, 0.0, hips_off]
+		&"save_feet":
+			# Keeper: feet together and planted, knees bent, the caman blade
+			# down in front of the feet so nothing goes through the legs.
+			var u := clampf(t / _action_len, 0.0, 1.0)
+			var k := sin(minf(1.0, u * 3.0) * PI * 0.5) * (1.0 - _ease(maxf(0.0, (u - 0.7) / 0.3)))
+			_crouch(rot, 0.5 * k)
+			for side in ["Left", "Right"]:
+				var sgn := -1.0 if side == "Left" else 1.0
+				rot[side + "UpperLeg"] = rot[side + "UpperLeg"].lerp(Vector3(0.2, 0, -sgn * 0.06), k)
+				rot[side + "LowerLeg"] = rot[side + "LowerLeg"].lerp(Vector3(-0.45, 0, 0), k)
+				rot[side + "Foot"] = rot[side + "Foot"].lerp(Vector3(0.25, 0, 0), k)
+			rot["Spine"] += Vector3(-0.3 * k, 0, 0)
+			var p7 := ready_p.lerp(Vector3(0.0, 0.0, -0.3), k)
+			var d7 := ready_d.slerp(Vector3(0.0, -0.96, -0.28).normalized(), k)
+			return [p7, d7, 0.0, hips_off]
+		&"save_high_left", &"save_high_right":
+			# Keeper: a high shot turned away with the caman, arms up and the
+			# stick raised to the side of the head.
+			var side := -1.0 if _action == &"save_high_left" else 1.0
+			var u := clampf(t / _action_len, 0.0, 1.0)
+			var k := sin(minf(1.0, u * 3.0) * PI * 0.5) * (1.0 - _ease(maxf(0.0, (u - 0.6) / 0.4)))
+			rot["Spine"] += Vector3(0.1 * k, 0, -side * 0.25 * k)
+			rot["Chest"] += Vector3(0.05 * k, 0, -side * 0.15 * k)
+			hips_off.x = side * 0.12 * k
+			var p8 := ready_p.lerp(Vector3(side * 0.25, 0.7, -0.25), k)
+			var d8 := ready_d.slerp(Vector3(side * 0.55, 0.8, -0.25).normalized(), k)
+			return [p8, d8, 0.0, hips_off]
 		&"save_left", &"save_right":
 			var side := -1.0 if _action == &"save_left" else 1.0
 			var u := clampf(t / _action_len, 0.0, 1.0)
