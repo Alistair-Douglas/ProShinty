@@ -610,7 +610,7 @@ func _pose(_delta: float) -> void:
 	# faster they go the further forward they lean, like a sprinter, with the
 	# head kept up to see the play.
 	var pace := _ease((_speed - 2.5) / 5.5)
-	rot["Spine"] = Vector3(-0.08 * idle - 0.1 * run - 0.45 * pace - 0.12 * _puff * idle + (_seed - 0.5) * 0.08, 0, 0)
+	rot["Spine"] = Vector3(-0.08 * idle - 0.1 * run - 0.35 * pace - 0.12 * _puff * idle + (_seed - 0.5) * 0.08, 0, 0)
 	rot["Chest"] = Vector3(breathe - 0.12 * pace, 0, 0)
 	rot["UpperChest"] = Vector3(-0.03 * idle, 0, 0)
 	rot["Neck"] = Vector3(0.08 * idle + 0.1 * run + 0.45 * pace, 0, 0)
@@ -635,7 +635,12 @@ func _pose(_delta: float) -> void:
 		rot[side + "LowerLeg"] = Vector3(lerpf(knee_idle, knee_run, run), 0, 0)
 		rot[side + "Foot"] = Vector3(lerpf(0.12, -0.15 - 0.35 * maxf(0.0, -sin(p)) + 0.2 * swing_fold, run), 0, 0)
 	hips_off.y = -absf(cos(ph)) * 0.045 * run
-	rot["Hips"] = Vector3(0, sin(ph) * 0.12 * run, 0)
+	# Leaning into a sprint, the hips go with it: pushed a little forward and
+	# tipped forward (the legs stay under), not left behind the shoulders.
+	hips_off.z -= 0.06 * pace * run
+	rot["Hips"] = Vector3(-0.1 * pace, sin(ph) * 0.12 * run, 0)
+	rot["LeftUpperLeg"] += Vector3(0.1 * pace, 0, 0)
+	rot["RightUpperLeg"] += Vector3(0.1 * pace, 0, 0)
 	rot["Chest"] += Vector3(0, -sin(ph) * 0.1 * run, 0)
 
 	# Football running: lean into acceleration, sit back when braking, bank
@@ -664,7 +669,9 @@ func _pose(_delta: float) -> void:
 	# Caman carry pose (in hips-relative skeleton space, right-handed)
 	# Two hands low across the thighs, the head held just off the grass out in
 	# front (a hockey player would have it flat on the ice).
-	var cam_p := _lerp3(READY_P, Vector3(0.18, 0.02, -0.24), run)
+	# The hands (and the stick) go forward with the lean.
+	var lean_fwd := Vector3(0.0, 0.04, -0.14) * pace
+	var cam_p := _lerp3(READY_P, Vector3(0.18, 0.02, -0.24), run) + lean_fwd
 	var cam_d := _lerp3(READY_D, Vector3(-0.25, -0.5, -0.83), run).normalized()
 	cam_p.y += sin(ph * 2.0) * 0.025 * run
 	var twist := 0.0
@@ -790,20 +797,20 @@ func _pose(_delta: float) -> void:
 		var mx := -1.0 if left_handed else 1.0
 		var pump := sin(ph) * run   # > 0: front (left) leg forward
 		var bob := absf(cos(ph)) * 0.03 * run
-		var hand := Vector3(0.2 * mx, 0.04 + bob, -0.16 - 0.05 * pump)
+		var hand := Vector3(0.2 * mx, 0.04 + bob, -0.16 - 0.05 * pump) + lean_fwd
 		var cd := Vector3(-0.55 * mx, -0.45 + 0.05 * pump, -0.7).normalized()
 		var face_c := Vector3(0.0, 1.0, -0.3)
 		if shoulder_carry:
 			# Up by the shoulder: hand at the chest, the caman standing up
 			# past the shoulder and a little back, the bas curling back.
-			hand = Vector3(0.2 * mx, 0.24 + bob, -0.2 - 0.05 * pump)
+			hand = Vector3(0.2 * mx, 0.24 + bob, -0.2 - 0.05 * pump) + lean_fwd
 			cd = Vector3(0.22 * mx, 0.9, 0.34 + 0.05 * pump).normalized()
 			face_c = Vector3(0.0, 0.3, 1.0)
 		var d_c: Vector3 = yaw_b * cd
 		var grip_c: Vector3 = hips_g.origin + yaw_b * hand
 		var carry_t := Transform3D(_caman_basis(d_c, yaw_b * face_c), grip_c - d_c * GRIP_LOW)
 		ct = ct.interpolate_with(carry_t, carry)
-		carry_top = hips_g.origin + yaw_b * Vector3(-0.17 * mx, 0.24 - 0.08 * pump + bob, -0.16 + 0.22 * pump)
+		carry_top = hips_g.origin + yaw_b * (Vector3(-0.17 * mx, 0.24 - 0.08 * pump + bob, -0.16 + 0.22 * pump) + lean_fwd * 1.3)
 	# Keep both grips within arm's reach: slide the caman towards the shoulders.
 	for iter in 3:
 		var grips := [[top_side, GRIP_TOP], [low_side, GRIP_LOW]]
