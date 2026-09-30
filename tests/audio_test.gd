@@ -57,6 +57,12 @@ func _run() -> void:
 	if strikes == 0 or thwacks != strikes:
 		push_error("every strike should thwack")
 		ok = false
+	if audio.heard.get("whistle_half", 0) != 1 or audio.heard.get("whistle_full", 0) != 1:
+		push_error("half time and full time should each get their whistle")
+		ok = false
+	if audio.heard.get("whistle", 0) == 0:
+		push_error("restarts should get a whistle")
+		ok = false
 	if cheers != goals:
 		push_error("every goal should get a cheer")
 		ok = false
