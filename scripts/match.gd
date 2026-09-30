@@ -41,6 +41,7 @@ const THROW_UP_SET := 1.2   # seconds the pair stand ready before the ball goes 
 const THROW_UP_TOSS := 8.0   # yd/s: the referee's throw
 const THROW_UP_GAP := 0.42   # each centre stands this far from the spot, face to face
 const SET_PIECE_PAUSE := 2.2 # hit-outs and corners: play stops while players get set
+const FREE_HIT_PAUSE := 1.2  # a free hit: a moment to line it up, opponents 5 yards off
 const SET_PIECE_MIN := 1.0   # a human taker can't hit it before this
 const FEET_HEIGHT := 0.35     # yards: a ball below this is stopped with the feet
 const FEET_EXTRA := 0.15      # feet planted either side reach a little wider than the body
@@ -164,7 +165,7 @@ var gather_keeper: Player = null   # a saved ball dropping to the keeper
 var foul_pending = null            # [offender, fouled] seen by the referee
 var gather_t := 0.0
 var team_ai: TeamAI
-var set_piece := ""                # "Hit-out", "Corner" or "Penalty hit" while one is being taken
+var set_piece := ""                # "Hit-out", "Corner", "Free hit" or "Penalty hit" while one is being taken
 var set_piece_taker: Player = null
 var set_piece_t := 0.0             # seconds since it was awarded
 var throw_up_pair: Array = []     # the two centres contesting the throw-up
@@ -1767,6 +1768,15 @@ func award_free_hit(team: int, spot: Vector2, text: String) -> void:
 	var toward := (target_goal(team) - spot).normalized()
 	penalty_taker = null
 	_place_taker(taker, spot, toward)
+	# The taker stands over the ball and hits it (or passes it) from the
+	# spot, aiming with the stick like a hit-out; they can't run with it.
+	# Everyone else plays on and can make runs.
+	set_piece = "Free hit"
+	set_piece_taker = taker
+	restart_base = toward
+	restart_aim = 0.0
+	taker.think = FREE_HIT_PAUSE
+	protected_timer = FREE_HIT_PAUSE
 	_say(text, 2.2)
 	events.append({"type": "Free hit", "team": team, "taker": taker})
 
