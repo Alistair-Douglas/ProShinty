@@ -297,34 +297,65 @@ func _test_card_rate() -> void:
 	m.free()
 
 
-func _test_swing_into_player() -> void:
-	print("Swing misses the ball and hits a player")
-	var m = _new_match()
+func _swing_setup(m, q_has_ball: bool, q_faces_swinger: bool) -> Array:
 	var p = _outfield(m, 0, "CHF")
 	var q = _outfield(m, 1, "CHB")
+	for o in m.squads[1]:
+		if o != q:
+			o.pos = Vector2(120, o.pos.y)
 	p.pos = Vector2(60, 30)
 	p.facing = Vector2.RIGHT
 	q.pos = Vector2(61.2, 30)
-	var called := false
-	for i in 20:  # the follow-through doesn't always catch them
-		m.events.append({"type": "hit", "team": 0, "kind": "fresh_air", "curve": 0.0, "shy": false, "by": p})
-		m.referee.step(0.0)
-		if m.referee.calls.size() > 0:
-			called = true
-			break
-	_check(called and m.referee.calls[-1]["kind"] == "swing", "foul for swinging into the player")
-	var m2 = _new_match()
-	p = _outfield(m2, 0, "CHF")
+	q.facing = Vector2.LEFT if q_faces_swinger else Vector2.RIGHT
+	m.carrier = q if q_has_ball else null
+	return [p, q]
+
+
+## Swing at fresh air until the follow-through catches someone (it doesn't
+## every time). Returns the swing_contact event, or {}.
+func _swing_until_contact(m, p) -> Dictionary:
+	for i in 40:
+		var n: int = m.events.size()
+		m._fresh_air(p, false)
+		for k in range(n, m.events.size()):
+			if m.events[k]["type"] == "swing_contact":
+				return m.events[k]
+	return {}
+
+
+func _test_swing_into_player() -> void:
+	print("Swing misses the ball and hits a player")
+	var m = _new_match()
+	var pq := _swing_setup(m, false, true)
+	var e := _swing_until_contact(m, pq[0])
+	m.referee.step(0.0)
+	_check(not e.is_empty() and pq[1].stagger >= 0.7, "the swing catches the player and knocks them over")
+	_check(m.referee.calls.size() > 0 and m.referee.calls[-1]["kind"] == "swing", "foul for swinging into a player without the ball")
+	m.free()
+	m = _new_match()
+	pq = _swing_setup(m, true, false)
+	_swing_until_contact(m, pq[0])
+	m.referee.step(0.0)
+	_check(m.referee.calls.size() > 0 and m.referee.calls[-1]["kind"] == "swing", "foul for a swing into the back of the ball carrier")
+	m.free()
+	m = _new_match()
+	pq = _swing_setup(m, true, true)
+	e = _swing_until_contact(m, pq[0])
+	m.referee.step(0.0)
+	_check(not e.is_empty() and m.referee.calls.is_empty(), "no foul for a swing through the front of the ball carrier")
+	_check(m.carrier != pq[1], "the carrier goes down and loses the ball")
+	m.free()
+	m = _new_match()
+	var p = _outfield(m, 0, "CHF")
 	p.pos = Vector2(60, 30)
 	p.facing = Vector2.RIGHT
-	for q2 in m2.squads[1]:
+	for q2 in m.squads[1]:
 		q2.pos = Vector2(100, q2.pos.y)
 	for i in 20:
-		m2.events.append({"type": "hit", "team": 0, "kind": "fresh_air", "curve": 0.0, "shy": false, "by": p})
-		m2.referee.step(0.0)
-	_check(m2.referee.calls.is_empty(), "a swing at fresh air with nobody near is fine")
+		m._fresh_air(p, false)
+	m.referee.step(0.0)
+	_check(m.referee.calls.is_empty(), "a swing at fresh air with nobody near is fine")
 	m.free()
-	m2.free()
 
 
 func _test_late_block_no_foul() -> void:

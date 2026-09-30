@@ -27,8 +27,8 @@ const HEAD_LOCAL := Vector3(0.0, -CAMAN_LENGTH + 0.015, -0.055)  ## caman head c
 ## Ready stance, hips space: butt of the caman and its direction to the head.
 const READY_P := Vector3(0.16, 0.0, -0.26)
 const READY_D := Vector3(-0.08, -0.55, -0.83)
-## Stumble power from which the player goes down (a stagger of about 0.9 s).
-const FALL_AT := 0.68
+## Stumble power from which the player goes down (a stagger of about 0.65 s).
+const FALL_AT := 0.5
 ## Seconds a fallen player takes to get back up.
 const GET_UP := 0.55
 
