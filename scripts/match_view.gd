@@ -146,7 +146,7 @@ func _update_player(p, f: Dictionary, delta: float) -> void:
 		model.cancel_charge()
 	# The caman head goes where the match's stick physics put it.
 	model.set_reach(w(Vector2(p.stick.x, p.stick.y), p.stick.z) if p.reach > 0.05 else null, p.reach, p.one_hand)
-	f["ring"].visible = p == m.human
+	f["ring"].visible = false   # the red marker over the head is enough
 	f["arrow"].visible = p == m.human
 	f["tag"].visible = p == m.human or p.is_keeper()
 
@@ -219,6 +219,13 @@ func _build_aim_arrow() -> void:
 func _update_aim_arrow() -> void:
 	var p = m.human
 	var on: bool = p != null and p in m.players and (p == m.set_piece_taker_now() or (p.shy_ready and m.carrier == p))
+	if p != null and m.in_throw_up(p):
+		# The throw-up: from the spot, where your centre will knock it.
+		var d: Vector2 = m.throw_up_dir(p)
+		aim_arrow.visible = true
+		aim_arrow.position = w(m.PITCH / 2.0 + d * 0.9, 0.05)
+		aim_arrow.rotation = Vector3(0, atan2(-d.x, -d.y), 0)
+		return
 	aim_arrow.visible = on
 	if on:
 		aim_arrow.position = w(p.pos + p.facing * 0.9, 0.05)
@@ -254,9 +261,10 @@ func _build_player(p) -> Dictionary:
 	var ring := _mesh(_torus(0.75, 0.95), _mat(Color(1, 0.92, 0.2), true))
 	ring.position = Vector3(0, 0.04, 0)
 	root.add_child(ring)
-	var arrow := _mesh(_cone(0.25, 0.4), _mat(Color(1, 0.92, 0.2), true))
-	arrow.rotation_degrees = Vector3(180, 0, 0)
-	arrow.position = Vector3(0, 2.6, 0)
+	var arrow := MeshInstance3D.new()
+	arrow.mesh = _marker_mesh()
+	arrow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	arrow.position = Vector3(0, 2.75, 0)
 	root.add_child(arrow)
 	var tag := Label3D.new()
 	tag.text = str(p.number)
@@ -355,6 +363,24 @@ func _cylinder(r: float, h: float) -> CylinderMesh:
 	c.bottom_radius = r
 	c.height = h
 	return c
+
+
+## The controlled player's marker, as in FIFA: a small flat red triangle,
+## point down, floating over the head and always turned to the camera.
+func _marker_mesh() -> ArrayMesh:
+	var v := PackedVector3Array([Vector3(-0.2, 0.34, 0), Vector3(0.2, 0.34, 0), Vector3(0, 0, 0)])
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = v
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(0.9, 0.06, 0.08)
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mesh.surface_set_material(0, mat)
+	return mesh
 
 
 func _cone(r: float, h: float) -> CylinderMesh:

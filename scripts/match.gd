@@ -30,7 +30,10 @@ const MID_SHOT := 1.5
 const TOP_CORNER := 2.85        # just under the bar (3.33)
 const SHOT_DRAG := 0.012        # flight time allowance per yard for the ball slowing
 const GOAL_PAUSE := 3.0
-const HALF_TIME_PAUSE := 3.0
+const HALF_TIME_PAUSE := 7.0     # long enough to see everyone walk off towards the dugouts
+const EXTRA_TIME_PAUSE := 4.0    # the break before extra time: players stay out on the pitch
+const THROW_UP_AIM_MAX := 1.1   # rad: how far off straight up the park a throw-up can be aimed
+const WALK_SPEED := 1.6          # yd/s: walking off at half time and full time
 const PENALTY_SPOT := 20.0   # penalty hit, yards from the goal line
 const FREE_HIT_BACK := 5.0   # opponents stand this far off a set piece
 const SWING_CATCH := 0.5     # a swing that misses the ball catches a player in its path
@@ -148,6 +151,8 @@ var state_timer := 0.0
 var half := 1
 var clock := 0.0
 var half_seconds := 180.0
+var extra_time := true    # a draw at full time goes to two halves of extra time
+var break_kind := ""      # during State.HALF_TIME: "half" (walk off) or "extra" (before extra time)
 var human_side := 0
 var human: Player = null
 var difficulty := 1
@@ -175,6 +180,7 @@ var last_team := -1
 var referee := Referee.new()
 var subs := Subs.new()             # benches and substitutions (substitutions.gd)
 var penalty_taker: Player = null
+var penalty_side := 0.0           # the corner a computer penalty taker has picked (+1 or -1 across the goal)
 var gather_keeper: Player = null   # a saved ball dropping to the keeper
 var foul_pending = null            # [offender, fouled] seen by the referee
 var gather_t := 0.0
@@ -187,6 +193,7 @@ var throw_up_tossed := false
 var throw_up_t := 0.0              # seconds since the ball went up
 var throw_up_ideal := 0.0          # when it drops to where a caman meets it overhead
 var throw_up_swing := {}           # Player -> when they swing at it
+var throw_up_aim := {}             # Player -> where they'll knock it, as an angle off straight up the park
 var shy_lift: Player = null        # taking a shy with the ball still in the hand
 var shy_lift_t := 0.0
 var shy_lift_from := Vector3.ZERO
@@ -223,6 +230,7 @@ func _setup() -> void:
 	human_side = int(config.get("human_side", 0))
 	difficulty = int(config.get("difficulty", 1))
 	half_seconds = float(config.get("half_seconds", 180.0))
+	extra_time = bool(config.get("extra_time", true))
 	if config.has("seed"):
 		seed(int(config["seed"]))
 	kits = TeamData.match_kits(teams[0], teams[1])
@@ -296,11 +304,11 @@ func step(dt: float) -> void:
 			if shy_taker() == null and set_piece_taker_now() == null:
 				clock += dt   # the clock stops while a shy, hit-out or corner is taken
 			_update_players(dt)
-			_take_penalty()
+			_take_penalty(dt)
 			_update_ball(dt)
 			referee.step(dt)
 			_check_ball_out()
-			if clock >= half_seconds and state == State.PLAY:
+			if clock >= half_length() and state == State.PLAY:
 				_end_half()
 		State.GOAL:
 			state_timer -= dt
@@ -312,13 +320,15 @@ func step(dt: float) -> void:
 				_start_throw_up()
 		State.HALF_TIME:
 			state_timer -= dt
+			_walk_off(dt, break_kind == "half")
 			if state_timer <= 0.0:
-				half = 2
+				half += 1
 				clock = 0.0
-				attack_dir = [-1, 1]
+				# Ends change every half, extra time included.
+				attack_dir = [1, -1] if half % 2 == 1 else [-1, 1]
 				_start_throw_up()
 		State.FULL_TIME:
-			pass
+			_walk_off(dt, true)
 
 
 func _say(text: String, seconds: float = 2.0) -> void:
@@ -341,6 +351,7 @@ func _start_throw_up() -> void:
 	throw_up_tossed = false
 	throw_up_t = 0.0
 	throw_up_swing = {}
+	throw_up_aim = {}
 	for p in players:
 		# Everyone else starts in their normal positions across the pitch,
 		# forwards up in the other half beside the backs marking them.
@@ -356,6 +367,8 @@ func _start_throw_up() -> void:
 			p.facing = face
 			p.throw_up = true
 			throw_up_pair.append(p)
+			# The computer picks a spot up the park; you aim yours with the stick.
+			throw_up_aim[p] = 0.0 if p == human else randf_range(-0.9, 0.9)
 		p.vel = Vector2.ZERO
 		p.desired = Vector2.ZERO
 		p.stagger = 0.0
@@ -372,13 +385,22 @@ func _start_throw_up() -> void:
 func _end_half() -> void:
 	carrier = null
 	ball_vel = Vector2.ZERO
-	if half == 1:
+	_clear_set_piece()
+	penalty_taker = null
+	if half == 1 or half == 3:
 		state = State.HALF_TIME
-		state_timer = HALF_TIME_PAUSE
-		_say("Half time", HALF_TIME_PAUSE)
+		break_kind = "half" if half == 1 else "extra"
+		state_timer = HALF_TIME_PAUSE if half == 1 else EXTRA_TIME_PAUSE
+		_say("Half time" if half == 1 else "Half time in extra time", state_timer)
+	elif half == 2 and extra_time and score[0] == score[1]:
+		# Level at full time: two halves of extra time, 15 minutes each.
+		state = State.HALF_TIME
+		break_kind = "extra"
+		state_timer = EXTRA_TIME_PAUSE
+		_say("Full time: level\nExtra time: two halves of 15 minutes", EXTRA_TIME_PAUSE)
 	else:
 		state = State.FULL_TIME
-		_say("Full time", 9999.0)
+		_say("Full time" if half == 2 else "Full time after extra time", 9999.0)
 		var game := get_node_or_null("/root/Game") if is_inside_tree() else null
 		if game:
 			game.last_result = {"home": teams[0]["name"], "away": teams[1]["name"], "score": score.duplicate()}
@@ -725,11 +747,13 @@ func _ai_carrier(p: Player, dt: float) -> void:
 	_steer_dir(p, dir, pressure < 6.0)
 
 
-func _ai_shoot(p: Player) -> void:
+func _ai_shoot(p: Player, pick: float = 0.0) -> void:
 	var goal := target_goal(p.team)
 	var keeper := _keeper_of(1 - p.team)
 	var side := 1.0 if randf() < 0.5 else -1.0
-	if keeper != null and abs(keeper.pos.y - goal.y) > 0.4:
+	if pick != 0.0:
+		side = pick   # a corner already picked out (a penalty hit)
+	elif keeper != null and abs(keeper.pos.y - goal.y) > 0.4:
 		side = -sign(keeper.pos.y - goal.y)
 	var aim := goal + Vector2(0, side * (GOAL_W / 2.0 - SHOT_INSIDE))
 	var d := p.pos.distance_to(goal)
@@ -1199,6 +1223,14 @@ func _step_throw_up(dt: float) -> void:
 		p.desired = Vector2.ZERO
 		_move(p, dt)
 		Body.update_stick(self, p, dt)
+	if human in throw_up_pair and not manual_step:
+		# Aim the knock up the park with the stick, like lining up a free hit
+		# (the arrow on the grass shows where it'll go).
+		var raw := Input.get_vector("move_left", "move_right", "move_up", "move_down")
+		var fwd := Vector2(attack_dir[human.team], 0)
+		if raw.length() > 0.15 and raw.dot(fwd) > -0.3:
+			var want: float = clamp(fwd.angle_to(raw), -THROW_UP_AIM_MAX, THROW_UP_AIM_MAX)
+			throw_up_aim[human] = move_toward(throw_up_aim.get(human, 0.0), want, RESTART_AIM_RATE * dt)
 	if not throw_up_tossed:
 		state_timer -= dt
 		if state_timer <= 0.0:
@@ -1227,7 +1259,7 @@ func _toss_throw_up() -> void:
 		var sigma: float = lerp(0.16, 0.05, p.r("control") / 100.0) - _skill_mod(p.team) * 0.3
 		throw_up_swing[p] = throw_up_ideal + randfn(0.0, max(sigma, 0.03))
 	if human in throw_up_pair:
-		_say("Throw-up: press Hit as it drops", 1.6)
+		_say("Throw-up: aim with the stick, press Hit as it drops", 1.6)
 
 
 func _resolve_throw_up() -> void:
@@ -1259,12 +1291,19 @@ func _resolve_throw_up() -> void:
 		return
 	var w: Player = a if errs[0] < errs[1] else b
 	var clean: float = clamp(1.0 - min(errs[0], errs[1]) / 0.28, 0.2, 1.0)
-	var dir := Vector2(attack_dir[w.team], 0).rotated(randf_range(-1.0, 1.0))
-	ball_vel = dir * lerp(4.0, 12.0, clean)
+	# Knocked where the winner aimed it, less exactly the scrappier the contact.
+	var dir := throw_up_dir(w).rotated(randfn(0.0, lerp(0.35, 0.08, clean)))
+	ball_vel = dir * lerp(5.0, 15.0, clean)
 	ball_vz = randf_range(0.5, 3.5)
 	last_team = w.team
 	events.append({"type": "strike", "by": w, "at": ball_pos})
 	events.append({"type": "throw_up_won", "team": w.team})
+
+
+## Where a centre in the throw-up means to knock it: up the park, off to
+## one side or the other as they've aimed.
+func throw_up_dir(p: Player) -> Vector2:
+	return Vector2(attack_dir[p.team], 0).rotated(throw_up_aim.get(p, 0.0))
 
 
 ## True for a centre in the throw-up while their caman is raised or swinging.
@@ -2022,6 +2061,7 @@ func award_penalty(team: int, text: String) -> void:
 	var toward := (goal - spot).normalized()
 	_place_taker(taker, spot, toward)
 	penalty_taker = taker
+	penalty_side = 0.0
 	# Taken like a hit-out: play stops, the taker stands over the ball on the
 	# spot and aims it (the camera comes round behind), then strikes it.
 	set_piece = "Penalty hit"
@@ -2056,13 +2096,27 @@ func _place_taker(taker: Player, spot: Vector2, toward: Vector2) -> void:
 
 
 ## The computer strikes its penalty hits at goal once players have stood back.
-func _take_penalty() -> void:
+## Like a free hit, the taker stands over the ball and lines it up first:
+## they pick a corner early and turn the aim round to it, then hit it.
+func _take_penalty(dt: float) -> void:
 	if penalty_taker == null:
 		return
 	if carrier != penalty_taker:
 		penalty_taker = null
-	elif penalty_taker != human and protected_timer <= 0.2:
-		_ai_shoot(penalty_taker)
+		return
+	if penalty_taker == human:
+		return
+	var p := penalty_taker
+	var goal := target_goal(p.team)
+	if penalty_side == 0.0:
+		penalty_side = 1.0 if randf() < 0.5 else -1.0
+	var aim := goal + Vector2(0, penalty_side * (GOAL_W / 2.0 - SHOT_INSIDE))
+	var want: float = clamp(restart_base.angle_to(aim - p.pos), -PI / 2.0, PI / 2.0)
+	restart_aim = move_toward(restart_aim, want, RESTART_AIM_RATE * dt)
+	p.facing = restart_base.rotated(restart_aim)
+	if protected_timer <= 0.2:
+		_ai_shoot(p, penalty_side)
+		penalty_side = 0.0
 
 
 ## Sent off by the referee: the team plays on a player short.
@@ -2091,5 +2145,44 @@ func _goal(team: int) -> void:
 	events.append({"type": "goal", "team": team, "half": half, "clock": clock})
 
 
+## Length of the current half: extra time halves are 15 minutes to a 45.
+func half_length() -> float:
+	return half_seconds if half <= 2 else half_seconds / 3.0
+
+
+## Match time in seconds as the clock on the TV shows it (45-minute halves,
+## then 15-minute halves of extra time).
+func match_seconds() -> float:
+	var start: float = [0.0, 45.0, 90.0, 105.0][clampi(half - 1, 0, 3)] * 60.0
+	var mins: float = 45.0 if half <= 2 else 15.0
+	return start + clock / half_length() * mins * 60.0
+
+
 func match_minute() -> int:
-	return int(clock / half_seconds * 45.0) + (45 if half == 2 else 0)
+	return int(match_seconds() / 60.0)
+
+
+## Half time and full time: play is over, so the players walk off towards
+## their team's dugout (or, before extra time, just stand and get a breather).
+func _walk_off(dt: float, to_dugout: bool) -> void:
+	for p in players:
+		p.sprinting = false
+		p.shielding = false
+		p.swing_t = -1.0
+		p.desired = Vector2.ZERO
+		if to_dugout:
+			# Gathered along the touchline in front of the dugout, a little
+			# spread out so they don't all walk to one spot.
+			var d: Vector2 = dugout(p.team) + Vector2((p.number - 8) * 0.9, 0.0)
+			var off: Vector2 = d - p.pos
+			if off.length() > 0.6:
+				p.desired = off.normalized() * WALK_SPEED * lerpf(0.9, 1.1, p.number / 15.0)
+		_move(p, dt)
+	_separate()
+
+
+## Where a team's dugout is on the near touchline, in pitch yards (as the
+## benches in subs_bench.gd place it: the home side's is in the half it
+## defends first). Players walking off stop on the line in front of it.
+func dugout(t: int) -> Vector2:
+	return Vector2(PITCH.x / 2.0 + (-9.84 if t == 0 else 9.84), -1.2)
