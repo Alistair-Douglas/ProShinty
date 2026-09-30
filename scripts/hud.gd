@@ -72,10 +72,20 @@ func _draw() -> void:
 		centre_text = "Full time: %s %d - %d %s" % [teams[0]["name"], m.score[0], m.score[1], teams[1]["name"]]
 		sub = "Press Space or Enter for the menu"
 	elif m.message_timer > 0.0 and not m.message.begins_with("GOAL"):  # the TV graphics show goals
+		# Calls in play (a shy, a foul, a save) sit small in the bottom left,
+		# above the player panel, out of the way of the play.
 		var lines: PackedStringArray = m.message.split("\n", true, 1)
-		centre_text = lines[0]
-		if lines.size() > 1:
-			sub = lines[1]  # e.g. the referee's card
+		var head := lines[0]
+		var note := lines[1] if lines.size() > 1 else ""
+		var bw: float = max(font.get_string_size(head, HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x,
+			font.get_string_size(note, HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x) + 28
+		var bh := 56.0 if note != "" else 36.0
+		var box := Rect2(Vector2(20, screen.y - 74 - bh), Vector2(min(bw, w * 0.45), bh))
+		draw_rect(box, Color(0, 0, 0, 0.6))
+		draw_rect(Rect2(box.position, Vector2(4, bh)), Color(1, 0.85, 0.2, 0.9))
+		draw_string(font, box.position + Vector2(14, 25), head, HORIZONTAL_ALIGNMENT_LEFT, box.size.x - 20, 20, Color.WHITE)
+		if note != "":
+			draw_string(font, box.position + Vector2(14, 46), note, HORIZONTAL_ALIGNMENT_LEFT, box.size.x - 20, 13, Color(1, 1, 1, 0.8))
 	if centre_text != "":
 		var box := Rect2(Vector2(w / 2.0 - 330, screen.y / 2.0 - 40), Vector2(660, 80 if sub != "" else 56))
 		draw_rect(box, Color(0, 0, 0, 0.65))

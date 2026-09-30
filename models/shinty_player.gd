@@ -41,7 +41,8 @@ const SKIN_TONES := [
 
 ## Actions and their total duration in seconds (swing and pass scale with power).
 const ACTIONS := {
-	"swing": 0.78, "pass": 0.55, "volley": 0.62, "tackle": 0.55, "trap": 0.4, "feet_trap": 0.55,
+	"swing": 0.78, "pass": 0.55, "volley": 0.62, "tackle": 0.55, "trap": 0.4, "feet_trap": 0.6,
+	"thigh_trap": 0.6, "chest_trap": 0.65,
 	"save_left": 0.9, "save_right": 0.9, "save_feet": 0.7, "save_high_left": 0.8, "save_high_right": 0.8,
 	"celebrate": 1.6,
 	"shy": 2.0, "stumble": 0.7, "poke": 0.35, "block": 0.6, "cleek": 0.45, "barge": 0.4,
@@ -938,19 +939,61 @@ func _action_pose(rot: Dictionary) -> Array:
 			var d3 := ready_d.slerp(Vector3(0.06, -0.8, -0.6).normalized(), k)
 			return [p3, d3, 0.0, hips_off]
 		&"feet_trap":
-			# The ball stopped with the feet: planted and together, knees soft,
-			# the caman lifted out of the way until it's dead.
-			var k := sin(clampf(t / _action_len, 0.0, 1.0) * PI)
-			_crouch(rot, 0.3 * k)
+			# The ball stopped with the feet: planted and together, knees
+			# bent and the body over the ball, the caman lifted out of the
+			# way until it's dead.
+			var u := clampf(t / _action_len, 0.0, 1.0)
+			var k := sin(minf(1.0, u * 3.0) * PI * 0.5) * (1.0 - _ease(maxf(0.0, (u - 0.6) / 0.4)))
+			_crouch(rot, 0.45 * k)
 			for side in ["Left", "Right"]:
 				var sgn := -1.0 if side == "Left" else 1.0
-				rot[side + "UpperLeg"] = rot[side + "UpperLeg"].lerp(Vector3(0.1, 0, -sgn * 0.04), k)
-				rot[side + "LowerLeg"] = rot[side + "LowerLeg"].lerp(Vector3(-0.3, 0, 0), k)
-				rot[side + "Foot"] = rot[side + "Foot"].lerp(Vector3(0.18, 0, 0), k)
-			rot["Spine"] += Vector3(-0.15 * k, 0, 0)
-			var p5 := ready_p.lerp(Vector3(0.22, 0.12, -0.2), k)
-			var d5 := ready_d.slerp(Vector3(0.35, -0.55, -0.76).normalized(), k)
+				rot[side + "UpperLeg"] = rot[side + "UpperLeg"].lerp(Vector3(0.2, 0, -sgn * 0.08), k)
+				rot[side + "LowerLeg"] = rot[side + "LowerLeg"].lerp(Vector3(-0.45, 0, 0), k)
+				rot[side + "Foot"] = rot[side + "Foot"].lerp(Vector3(0.25, 0, 0), k)
+			rot["Spine"] += Vector3(-0.3 * k, 0, 0)
+			rot["Neck"] += Vector3(-0.35 * k, 0, 0)   # eyes on the ball at the feet
+			# A little jump to get the feet in line first: up off the grass,
+			# knees tucked, and down together onto the ball.
+			var jump := sin(clampf(u / 0.24, 0.0, 1.0) * PI)
+			hips_off.y += 0.11 * jump
+			for side in ["Left", "Right"]:
+				rot[side + "LowerLeg"] += Vector3(-0.5 * jump, 0, 0)
+				rot[side + "UpperLeg"] += Vector3(0.3 * jump, 0, 0)
+			var p5 := ready_p.lerp(Vector3(0.3, 0.2, -0.1), k)
+			var d5 := ready_d.slerp(Vector3(0.6, -0.5, -0.62).normalized(), k)
 			return [p5, d5, 0.0, hips_off]
+		&"thigh_trap":
+			# A ball at knee to waist height: the right thigh comes up to
+			# meet it and gives with it, so it drops dead in front; the caman
+			# held out of the way to the side.
+			var u := clampf(t / _action_len, 0.0, 1.0)
+			var k := sin(minf(1.0, u * 3.0) * PI * 0.5) * (1.0 - _ease(maxf(0.0, (u - 0.55) / 0.45)))
+			var give := sin(clampf((u - 0.25) / 0.3, 0.0, 1.0) * PI) * 0.25
+			rot["RightUpperLeg"] = rot["RightUpperLeg"].lerp(Vector3(1.35 - give, 0, 0.05), k)
+			rot["RightLowerLeg"] = rot["RightLowerLeg"].lerp(Vector3(-1.5, 0, 0), k)
+			rot["RightFoot"] = rot["RightFoot"].lerp(Vector3(0.3, 0, 0), k)
+			rot["LeftUpperLeg"] = rot["LeftUpperLeg"].lerp(Vector3(0.1, 0, 0), k)
+			rot["LeftLowerLeg"] = rot["LeftLowerLeg"].lerp(Vector3(-0.25, 0, 0), k)
+			rot["Spine"] += Vector3(-0.15 * k, 0, 0)
+			rot["Neck"] += Vector3(-0.3 * k, 0, 0)
+			var p9 := ready_p.lerp(Vector3(0.38, 0.3, 0.0), k)
+			var d9 := ready_d.slerp(Vector3(0.7, -0.6, -0.3).normalized(), k)
+			return [p9, d9, 0.0, hips_off]
+		&"chest_trap":
+			# A ball in the air taken on the chest: lean back and puff the
+			# chest out to meet it, then give with it so it drops at the feet;
+			# the caman held out wide and low, out of the way.
+			var u := clampf(t / _action_len, 0.0, 1.0)
+			var k := sin(minf(1.0, u * 3.0) * PI * 0.5) * (1.0 - _ease(maxf(0.0, (u - 0.55) / 0.45)))
+			var give := sin(clampf((u - 0.25) / 0.3, 0.0, 1.0) * PI)
+			_crouch(rot, 0.25 * k)
+			rot["Spine"] += Vector3((0.45 + 0.15 * give) * k, 0, 0)   # lean back into it
+			rot["Chest"] += Vector3((0.2 - 0.3 * give) * k, 0, 0)       # chest out, then cushion
+			rot["Neck"] += Vector3(-0.4 * k, 0, 0)   # chin down, watching it onto the chest
+			hips_off.z = 0.08 * k
+			var p10 := ready_p.lerp(Vector3(0.45, 0.25, 0.05), k)
+			var d10 := ready_d.slerp(Vector3(0.75, -0.55, -0.1).normalized(), k)
+			return [p10, d10, 0.0, hips_off]
 		&"save_feet":
 			# Keeper: feet together and planted, knees bent, the caman blade
 			# down in front of the feet so nothing goes through the legs.
