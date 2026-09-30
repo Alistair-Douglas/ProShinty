@@ -437,8 +437,8 @@ func _restart_spot(p):
 	if taker == null:
 		taker = m.shy_taker()
 		kind = "Shy"
-	if taker == null:
-		return null
+	if taker == null or kind == "Free hit":
+		return null   # a free hit: everyone else plays on and can make runs
 	if preset_for.size() != 3 or preset_for[0] != taker or preset_for[1] != kind \
 			or preset_for[2].distance_to(m.ball_pos) > 3.0:
 		_build_presets(taker, kind)
