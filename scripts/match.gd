@@ -123,6 +123,9 @@ class Player:
 	var read_swing := -1     # AI: the opponent swing already reacted to
 	var overswing := 0.0     # human: 0..1 past full power
 	var shielding := false   # carrier holding the ball up, body between it and the man
+	var judge := Vector3.ZERO  # how far off this player's read of the ball in the air is
+	var judge_flight := -1     # the flight that read was made for
+	var use_body := false      # going to take this ball on the body, stick out of the way
 	var hold_t := 0.0        # AI: how long to keep holding it up
 
 	func r(key: String) -> float:
@@ -203,6 +206,7 @@ var restart_long := false          # and whether it's a long hit to them rather 
 var restart_base := Vector2.RIGHT  # straight in from the line (a shy) or the default aim
 var dribble_vel := Vector2.ZERO    # a dribbled ball rolling ahead of its carrier
 var dribble_taps := 0
+var flight := 0                    # bumped each time the ball is sent somewhere new (players re-read it)
 
 
 
@@ -1193,9 +1197,12 @@ func _contact(p: Player) -> void:
 		events.append({"type": "beat_to_it", "team": p.team})
 	carrier = null
 	if not shy:
-		var at: Vector3 = p.stick if mine else Body.rest_spot(p)
-		ball_pos = Vector2(at.x, at.y)
+		# Struck where it is: the caman is steered to the ball (the view's
+		# set_meet), not the ball pulled onto the caman.
+		if mine:
+			ball_pos = Vector2(p.stick.x, p.stick.y)
 		ball_z = max(ball_z, 0.2)
+	flight += 1
 	ball_vel = res["ball_vel"]
 	ball_vz = res["ball_vz"]
 	ball_sim.set_spin(res["spin"])
@@ -1744,25 +1751,18 @@ func _ball_touches(before: Vector3) -> void:
 	var grip: float = 0.55 if p.one_hand and not best_keeper else 1.0
 	if ball_z > FEET_HEIGHT and not best_keeper:
 		grip *= lerp(1.0, 0.5, _running(p))   # a ball in the air is hard to kill on the run
-	if sp < (8.0 + p.r("control") * 0.08) * grip and not best_keeper:
-		_take_control(p)
-		anim(p, "trap")
-		return
-	if p.one_hand and not best_keeper and randf() < 0.5:
-		# A one-handed block: the stick kills the ball's pace where it is.
-		ball_vel = ball_vel.rotated(randf_range(-0.5, 0.5)) * 0.15
-		ball_vz = 0.0
-		last_team = p.team
-		events.append({"type": "one_hand_block", "team": p.team})
+	flight += 1
+	if not best_keeper:
+		if ball_z <= FEET_HEIGHT and sp < (8.0 + p.r("control") * 0.08) * grip:
+			_take_control(p)
+			anim(p, "trap")
+			return
+		_stick_touch(p, sp, grip)
 		return
 	var stretch: float = clamp((p.pos.distance_to(ball_pos) - 1.0) / 1.2, 0.0, 1.0)
 	var chance: float
 	if best_keeper:
 		chance = clamp(0.36 + p.r("keeping") / 100.0 * 0.5 - (sp - 20.0) * 0.012 - stretch * 0.3 + _skill_mod(p.team), 0.2, 0.95)
-	else:
-		chance = clamp(p.r("control") / 100.0 * (18.0 / sp) * lerp(1.0, 0.7, stretch) * grip + _skill_mod(p.team), 0.05, 0.9)
-		if p.team == last_team:
-			chance += 0.15
 	# Straight at the keeper: it hits the body. Low, the feet are together
 	# and the stick is down in front of them, so it never goes through the
 	# legs; higher, it comes off the body or the stick and back out.
@@ -1786,14 +1786,129 @@ func _ball_touches(before: Vector3) -> void:
 		else:
 			_take_control(p)
 			anim(p, "trap")
-	elif best_keeper and randf() < 0.5:
+	elif randf() < 0.5:
 		# Fingertips: a touch that takes the pace off but doesn't stop it.
 		ball_vel = ball_vel.rotated(randf_range(-0.3, 0.3)) * 0.7
 		last_team = p.team
-	elif not best_keeper and randf() < 0.4:
-		ball_vel = ball_vel.rotated(randf_range(-1.2, 1.2)) * 0.5
-		ball_vz = max(ball_vz, randf_range(0.0, 2.0))
-		last_team = p.team
+	else:
+		# Off the keeper's caman: wood, so it comes off it rather than through it.
+		_stick_rebound(p, p.r("keeping") / 100.0, ball_z > FEET_HEIGHT)
+
+
+## An outfield player's caman has got to the ball. Nothing goes through a
+## stick: it is controlled, knocked down, cleared, or comes off the wood.
+## Along the ground a good touch kills it. In the air, control decides:
+## a good player holds the caman up sideways with the curve of the bas down
+## so the face knocks it down onto the grass, and a back under pressure in
+## their own half swats it away with the back of the stick, like a shy. A
+## poor one has it ping off the stick (or misses it altogether, see
+## player_physics, or takes it on the body instead).
+func _stick_touch(p: Player, sp: float, grip: float) -> void:
+	var c: float = p.r("control") / 100.0
+	var stretch: float = clamp((p.pos.distance_to(ball_pos) - 1.0) / 1.2, 0.0, 1.0)
+	var mate: float = 0.15 if p.team == last_team else 0.0
+	if ball_z <= FEET_HEIGHT:
+		var chance: float = clamp(c * (18.0 / sp) * lerp(1.0, 0.7, stretch) * grip + _skill_mod(p.team) + mate, 0.05, 0.9)
+		if randf() < chance:
+			_take_control(p)
+			anim(p, "trap")
+		else:
+			_stick_rebound(p, c, false)
+		return
+	var defending: bool = own_frac(p.team, ball_pos.x) < 0.4 and (p.role == "DEF" or _nearest_opponent_dist(p) < 4.0)
+	if defending and ball_z > 0.8 and not p.one_hand:
+		var clean: float = clamp(lerp(0.4, 0.92, c) - stretch * 0.25 - maxf(sp - 20.0, 0.0) * 0.01 + _skill_mod(p.team), 0.15, 0.95)
+		if randf() < clean:
+			_air_clear(p, c)
+		else:
+			_stick_rebound(p, c, true)
+		return
+	var kill: float = clamp((c * 1.2 - 0.25) * clamp(16.0 / maxf(sp, 1.0), 0.4, 1.4) * lerp(1.0, 0.6, stretch) * grip \
+		+ _skill_mod(p.team) + mate, 0.03, 0.95)
+	if randf() < kill:
+		_air_kill(p, c)
+	else:
+		_stick_rebound(p, c, true)
+
+
+## Where a player who has just killed the ball puts it: the way they want to
+## go (or are facing), edged away from the nearest opponent.
+func _useful_dir(p: Player) -> Vector2:
+	var want: Vector2 = p.desired if p.desired.length() > 0.5 else p.facing
+	want = want.normalized()
+	var near: Player = null
+	var nd := 4.0
+	for o in squads[1 - p.team]:
+		var d: float = o.pos.distance_to(p.pos)
+		if d < nd:
+			nd = d
+			near = o
+	if near != null and nd > 0.05:
+		want = (want - (near.pos - p.pos) / nd * 0.6 * (1.0 - nd / 4.0)).normalized()
+	return want if want.length() > 0.1 else p.facing
+
+
+## Knocked down out of the air with the face of the bas: it drops onto the
+## grass just in front, going where the player wants it, ready to gather.
+func _air_kill(p: Player, c: float) -> void:
+	ball_vel = _useful_dir(p) * lerp(0.8, 2.0, c) + p.vel * 0.7
+	ball_vz = -lerp(2.0, 4.0, c)
+	ball_sim.set_spin(Vector3.ZERO)
+	p.touch_block = 0.15
+	last_team = p.team
+	anim(p, "air_kill")
+	events.append({"type": "air_kill", "team": p.team})
+
+
+## A back clearing it first time out of the air with the back of the stick,
+## swatted away up the park like a shy, off towards the wing away from trouble.
+func _air_clear(p: Player, c: float) -> void:
+	var up: Vector2 = (target_goal(p.team) - p.pos).normalized()
+	var wing: float = signf(PITCH.y / 2.0 - ball_pos.y)
+	var dir: Vector2 = up.rotated(-wing * attack_dir[p.team] * randf_range(0.0, 0.5) + randfn(0.0, lerp(0.45, 0.12, c)))
+	if dir.dot(up) < 0.2:
+		dir = up
+	ball_vel = dir * lerp(13.0, 22.0, p.r("shooting") / 100.0) * randf_range(0.85, 1.05)
+	ball_vz = randf_range(3.0, 6.0)
+	ball_sim.set_spin(Vector3.ZERO)
+	p.touch_block = 0.35
+	last_team = p.team
+	anim(p, "air_clear")
+	events.append({"type": "hit", "team": p.team, "kind": "clear", "curve": 0.0, "shy": false})
+	events.append({"type": "strike", "by": p, "at": ball_pos})
+
+
+## Off the wood: the ball bounces off the caman like off a plank, the face
+## pointing back at it. Soft hands (control) take more of the pace off and
+## send it roughly where the player wants; poor ones, or a ball in the air,
+## have it ping off anywhere.
+func _stick_rebound(p: Player, c: float, air: bool) -> void:
+	var head := Vector2(p.stick.x, p.stick.y)
+	var incoming := ball_vel.normalized() if ball_vel.length() > 0.1 else (head - p.pos).normalized()
+	var out := head - p.pos
+	out = out.normalized() if out.length() > 0.05 else p.facing
+	var n := (-incoming + out * 0.5).normalized()
+	var e: float = lerp(0.6, 0.3, c) * (0.75 if p.one_hand else 1.0)
+	if air:
+		e = lerp(0.75, 0.35, c)
+	var rel := ball_vel - p.vel
+	var vn := rel.dot(n)
+	if vn < 0.0:
+		var tang := rel - n * vn
+		rel = -n * vn * e + tang * 0.7
+	var v := rel + p.vel
+	# Some say in where it goes, and a poor touch scatters it.
+	var steer := clampf(v.angle_to(_useful_dir(p)), -0.35, 0.35) * c
+	v = v.rotated(steer + randfn(0.0, lerp(0.7, 0.12, c) * (1.3 if air else 1.0)))
+	ball_vel = v
+	if air:
+		ball_vz = absf(ball_vz) * e * 0.5 + randf_range(0.5, 3.5) * (1.2 - c)
+	else:
+		ball_vz = max(0.0, ball_vz) + randf_range(0.0, 1.0) * (1.0 - c)
+	ball_sim.set_spin(Vector3.ZERO)
+	p.touch_block = 0.3
+	last_team = p.team
+	events.append({"type": "stick_rebound", "team": p.team, "air": air})
 
 
 ## 0 standing still, 1 flat out.
@@ -1825,15 +1940,20 @@ func _body_touch(p: Player, sp: float) -> void:
 		var front := (ball_pos - p.pos)
 		front = front.normalized() if front.length() > 0.05 else p.facing
 		ball_pos = p.pos + front * (Body.BODY_R + 0.12)
-		ball_vel = -front * 0.4 + p.vel * 0.6   # dead at their feet, moving with them
+		# Softened, and dropped where it's useful: a yard or so the way they
+		# want to go, moving with them; better players place it better.
+		ball_vel = _useful_dir(p) * lerp(0.4, 1.6, p.r("control") / 100.0) + p.vel * 0.6
 		ball_vz = 0.0 if feet else min(ball_vz, 0.0)
 		ball_sim.set_spin(Vector3.ZERO)
-		# Seen: feet together for a ball along the ground, the thigh for one
-		# at knee to waist height, the chest for anything higher.
-		anim(p, "feet_trap" if feet else ("thigh_trap" if ball_z < THIGH_HEIGHT else "chest_trap"))
+		flight += 1
+		# Seen: feet together for a ball along the ground, legs together and
+		# straight like a pencil for one at knee to waist height, the chest
+		# for anything higher.
+		anim(p, "feet_trap" if feet else ("pencil" if ball_z < THIGH_HEIGHT else "chest_trap"))
 		events.append({"type": "body_stop", "team": p.team, "feet": feet})
 		return
 	if sp > 4.0:
+		flight += 1
 		# Off the legs or body: it loses most of its pace and kicks off sideways.
 		var n := (ball_pos - p.pos).normalized()
 		ball_vel = (ball_vel * 0.25).bounce(n) if ball_vel.dot(n) < 0.0 else ball_vel * 0.4
@@ -1874,7 +1994,7 @@ func _feet_stop(p: Player, sp: float, limit: float) -> void:
 		var front := (ball_pos - at)
 		front = front.normalized() if front.length() > 0.05 else p.facing
 		ball_pos = at + front * (Body.BODY_R + 0.12)
-		ball_vel = -front * 0.4 + p.vel * 0.6
+		ball_vel = _useful_dir(p) * lerp(0.4, 1.6, p.r("control") / 100.0) + p.vel * 0.6
 		ball_vz = 0.0
 		ball_sim.set_spin(Vector3.ZERO)
 		events.append({"type": "body_stop", "team": p.team, "feet": true})

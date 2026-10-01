@@ -258,6 +258,17 @@ static func update_stick(m, p, dt: float) -> void:
 			p.stick_target = p.save_point
 		elif m.carrier == null and near < REACT_RADIUS + (1.5 if keeper_area else 0.0):
 			p.stick_target = ahead
+			if m.ball_z > m.FEET_HEIGHT and not keeper_area:
+				# A ball in the air: the caman goes where the player reads
+				# it, and a poor read misses it. Some would rather take it
+				# on the body, and hold the stick out of the way.
+				read_air_ball(m, p)
+				if p.use_body and m.ball_z < BODY_HEIGHT:
+					var side: Vector2 = right_of(p) * p.hand * 0.35
+					p.stick_target = rest + Vector3(side.x, side.y, 0.0)
+				else:
+					var run: float = clampf(p.vel.length() / p.top_speed(), 0.0, 1.0)
+					p.stick_target = ahead + p.judge * lerpf(1.0, 1.5, run)
 		elif m.carrier != null and m.carrier.team != p.team and near < max_reach(p) + 0.8:
 			p.stick_target = ball  # stick on the ball, hockey style
 		if p.stick_target != null:
@@ -321,6 +332,20 @@ static func _clear_bodies(m, p, head: Vector3, keeper_area: bool) -> Vector3:
 				else hands + dir.rotated(side * 0.02) * r
 		head = _clamp_reach(p, Vector3(h.x, h.y, head.z), keeper_area)
 	return head
+
+
+## How a player reads a ball in the air, once per flight: how far off their
+## caman will be (a good ball player is spot on, a poor one can be a foot or
+## two out and miss it), and whether they'd rather take it on the body (feet
+## together or the chest), which poorer players choose more often.
+static func read_air_ball(m, p) -> void:
+	if p.judge_flight == m.flight:
+		return
+	p.judge_flight = m.flight
+	var c: float = p.r("control") / 100.0
+	var sigma: float = lerpf(0.55, 0.05, c)
+	p.judge = Vector3(randfn(0.0, sigma * 0.5), randfn(0.0, sigma * 0.5), randfn(0.0, sigma))
+	p.use_body = randf() > lerpf(0.15, 0.95, c)
 
 
 ## Closest the ball came to point `q` while it moved from `a` to `b` (3D).

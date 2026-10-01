@@ -146,6 +146,15 @@ func _update_player(p, f: Dictionary, delta: float) -> void:
 		model.cancel_charge()
 	# The caman head goes where the match's stick physics put it.
 	model.set_reach(w(Vector2(p.stick.x, p.stick.y), p.stick.z) if p.reach > 0.05 else null, p.reach, p.one_hand)
+	# A hit on its way: the bas is steered to where the ball will be when the
+	# caman arrives, so the stick is seen to meet it.
+	if p.swing_t >= 0.0 and not p.shy_toss:
+		var t: float = p.swing_t
+		var at: Vector2 = m.ball_pos + m.ball_vel * t
+		var z: float = maxf(0.0, m.ball_z + m.ball_vz * t - 0.5 * m.GRAVITY * t * t)
+		model.set_meet(w(at, z + ShintyBallPhysics.RADIUS * ShintyMatchAdapter.TO_YARDS))
+	else:
+		model.set_meet(null)
 	f["ring"].visible = false   # the red marker over the head is enough
 	f["arrow"].visible = p == m.human
 	f["tag"].visible = p == m.human or p.is_keeper()
