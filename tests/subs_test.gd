@@ -55,10 +55,20 @@ func _run() -> void:
 	_check(s.request(off, s.bench[0][0]) != "", "a player can't be taken off twice")
 	var waited := false
 	var steps := 0
+	var holding := 0
 	while s.used[0] == 0 and steps < 60 * 400:
 		if not s.ball_dead():
 			waited = true
+		# Nobody is at the controls: if the restart falls to your own man (who
+		# may be the one coming off), take it after a few seconds, as a player
+		# would, rather than stand over the ball for ever.
+		holding = holding + 1 if m.restart_taker() != null and m.restart_taker() == m.human else 0
+		if holding == 60 * 3:
+			Input.action_press("pass")
 		m.step(1.0 / 60.0)
+		if holding >= 60 * 3:
+			Input.action_release("pass")
+			holding = 0
 		steps += 1
 	_check(s.used[0] == 1, "the change was made at a dead ball")
 	_check(waited, "it waited for play to stop")

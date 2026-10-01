@@ -234,8 +234,10 @@ func _drive_menu_matches() -> bool:
 		change_scene_to_file("res://scenes/main_menu.tscn")
 		_match_frames = -1000000
 		return false
-	if _match_frames > 60 * 60 * 8:
-		_fail("menu match %d never reached full time" % (_venue + 1))
+	# Two 2-minute halves, plus extra time after a draw (two more 40-second
+	# halves), the breaks, and the clock stopped for restarts.
+	if _match_frames > 60 * 60 * 12:
+		_fail("menu match %d never reached full time (half %d, clock %.0f, state %d, score %s)" % [_venue + 1, m.half, m.clock, m.state, m.score])
 		quit(1)
 		return true
 	return false
