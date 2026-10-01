@@ -69,6 +69,7 @@ const BANGER_BOOST := 1.25    # and the ball flies this much faster than a norma
 const JOG := 0.6             # jogging (no sprint): this share of top speed
 const SHIELD_SPEED := 0.45   # shielding the ball: walking pace, body between ball and man
 const BATTLE_TIME := 0.8     # a stick battle for the ball lasts this long
+const SWEEP_ZONE := 0.35    # yards: the caman head sweeps this far either side of the strike spot, low over the grass
 const BATTLE_SLOW := 0.35    # both players are near enough stood still while they fight for it
 
 enum State { THROW_UP, PLAY, GOAL, HALF_TIME, FULL_TIME }
@@ -101,6 +102,7 @@ class Player:
 	var hop := Vector2.ZERO  # a sideways jump, feet together, to get in line with a ball
 	var hop_t := 0.0         # time left in the jump
 	var stick := Vector3.ZERO    # caman head: pitch x, y and height
+	var stick_prev := Vector3.ZERO  # where it was last step (swept contact)
 	var stick_target = null      # Vector3 the caman is reaching for
 	var save_point = null        # keeper: where the shot will cross
 	var reach := 0.0         # 0 = carried, 1 = full stretch (for the view)
@@ -1164,11 +1166,16 @@ func _contact(p: Player) -> void:
 		if carrier != null and carrier.swing_t >= 0.0 and carrier.swing_t < Counters.CLASH_WINDOW:
 			Counters.clash(self, p, carrier)
 			return
-		# First-time hit: how far the ball is from where the caman comes through.
-		var spot := Body.rest_spot(p) + Vector3(p.facing.x, p.facing.y, 0.0) * 0.1
-		offset = max(0.0, spot.distance_to(Vector3(ball_pos.x, ball_pos.y, ball_z)) - Body.CONTACT_R)
-		if ball_z > REACH_HEIGHT or offset > 0.7:
+		# First-time hit: how close the ball comes to the caman as it sweeps
+		# through the hitting zone (see _sweep_meet), not just where the
+		# ball happens to be on the contact frame.
+		var met := _sweep_meet(p, req)
+		offset = max(0.0, met[0] - Body.CONTACT_R)
+		if met[1].z > REACH_HEIGHT or offset > 0.7:
 			offset = 99.0
+		else:
+			ball_pos = Vector2(met[1].x, met[1].y)
+			ball_z = met[1].z
 	else:
 		offset = 99.0   # a team-mate has it
 	var mine := carrier == p
@@ -1218,6 +1225,29 @@ func _contact(p: Player) -> void:
 			_say(note[res["kind"]], 1.0)
 		elif abs(res["curve"]) > 5.0 and req["speed"] > 22.0:
 			_say("Bending it " + ("left" if res["curve"] > 0.0 else "right"), 1.0)
+
+
+## Swept contact for a first-time hit. Through the hitting zone the caman head
+## travels along the line of the hit, fast, low over the grass, while the ball
+## goes its own way. Find when the two come closest within that sweep (or a
+## frame either side, whichever is longer) and how close: a ball moving across
+## the swing is met where the paths cross, rather than missed because it was a
+## frame early or late. Returns [distance, where the ball was met].
+func _sweep_meet(p: Player, req: Dictionary) -> Array:
+	var spot := Body.rest_spot(p) + Vector3(p.facing.x, p.facing.y, 0.0) * 0.1
+	var dir: Vector2 = req.get("dir", p.facing)
+	var hs: float = ShintyStrike.head_speed(clampf(req.get("share", 0.6), 0.0, 1.0), p.r(req.get("skill_key", "shooting"))) * ShintyMatchAdapter.TO_YARDS
+	var window: float = maxf(SWEEP_ZONE / maxf(hs, 1.0), 1.0 / 60.0)
+	var ball := Vector3(ball_pos.x, ball_pos.y, ball_z)
+	var bv := Vector3(ball_vel.x, ball_vel.y, ball_vz)
+	var rel := ball - spot
+	var relv := bv - Vector3(dir.x, dir.y, 0.0) * hs
+	var t := 0.0
+	if relv.length_squared() > 1e-6:
+		t = clampf(-rel.dot(relv) / relv.length_squared(), -window, window)
+	var at := ball + bv * t
+	at.z = maxf(0.0, at.z)
+	return [(rel + relv * t).length(), at]
 
 
 ## The throw-up: the two centres stand face to face with their camans raised
@@ -1718,7 +1748,7 @@ func _ball_touches(before: Vector3) -> void:
 		if p.touch_block > 0.0 or p.stagger > 0.0:
 			continue
 		var keeping: bool = p.is_keeper() and p.pos.distance_to(own_goal(p.team)) < 14.0
-		var d: float = Body.path_distance(p.stick, before, now)
+		var d: float = Body.swept_distance(p.stick_prev, p.stick, before, now)
 		var reach := Body.CONTACT_R
 		if keeping:
 			# Hands and body: anywhere within the keeper's reach and height.

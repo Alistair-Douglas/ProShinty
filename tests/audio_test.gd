@@ -57,7 +57,17 @@ func _run() -> void:
 	if strikes == 0 or thwacks != strikes:
 		push_error("every strike should thwack")
 		ok = false
-	if audio.heard.get("whistle_half", 0) != 1 or audio.heard.get("whistle_full", 0) != 1:
+	# A draw goes to extra time, so there can be more than one break: each
+	# one gets its whistle (half time two blasts, the others the full one).
+	var halves := 0
+	var fulls := 0
+	for e in m.events:
+		if e["type"] == "half_end":
+			if e.get("half", 1) == 1:
+				halves += 1
+			else:
+				fulls += 1
+	if halves != 1 or fulls < 1 or audio.heard.get("whistle_half", 0) != halves or audio.heard.get("whistle_full", 0) != fulls:
 		push_error("half time and full time should each get their whistle")
 		ok = false
 	if audio.heard.get("whistle", 0) == 0:

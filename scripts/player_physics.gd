@@ -39,6 +39,7 @@ static func setup(p) -> void:
 	p.mass = float(ShintyPlayerModel.body_from_stats(p.data)["weight_kg"])
 	p.hand = -1.0 if str(p.data.get("hand", "R")).to_upper().begins_with("L") else 1.0
 	p.stick = rest_spot(p)
+	p.stick_prev = p.stick
 
 
 ## Right-hand side of the way the player faces (pitch coordinates).
@@ -215,6 +216,7 @@ static func _knock(m, p, dv: float, by) -> void:
 ## Move each caman head towards what its player is reaching for, at the
 ## speed hands can move it, never further than arms and stick allow.
 static func update_stick(m, p, dt: float) -> void:
+	p.stick_prev = p.stick
 	var rest := rest_spot(p)
 	var target := rest
 	var keeper_area: bool = p.is_keeper() and p.pos.distance_to(m.own_goal(p.team)) < 14.0
@@ -354,6 +356,14 @@ static func path_distance(q: Vector3, a: Vector3, b: Vector3) -> float:
 	var l2 := ab.length_squared()
 	var t := 0.0 if l2 < 1e-8 else clampf((q - a).dot(ab) / l2, 0.0, 1.0)
 	return q.distance_to(a + ab * t)
+
+
+## Swept contact: closest the ball came to the caman head over a step in
+## which both moved (the head from `head_a` to `head_b`, the ball from `a`
+## to `b`), so a fast ball and a moving stick can't pass through each other
+## between frames.
+static func swept_distance(head_a: Vector3, head_b: Vector3, a: Vector3, b: Vector3) -> float:
+	return path_distance(Vector3.ZERO, a - head_a, b - head_b)
 
 
 # ---------------------------------------------------------------- keeper
