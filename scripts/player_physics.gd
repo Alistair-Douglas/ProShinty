@@ -39,6 +39,7 @@ static func setup(p) -> void:
 	p.mass = float(ShintyPlayerModel.body_from_stats(p.data)["weight_kg"])
 	p.hand = -1.0 if str(p.data.get("hand", "R")).to_upper().begins_with("L") else 1.0
 	p.stick = rest_spot(p)
+	p.stick_prev = p.stick
 
 
 ## Right-hand side of the way the player faces (pitch coordinates).
@@ -215,6 +216,7 @@ static func _knock(m, p, dv: float, by) -> void:
 ## Move each caman head towards what its player is reaching for, at the
 ## speed hands can move it, never further than arms and stick allow.
 static func update_stick(m, p, dt: float) -> void:
+	p.stick_prev = p.stick
 	var rest := rest_spot(p)
 	var target := rest
 	var keeper_area: bool = p.is_keeper() and p.pos.distance_to(m.own_goal(p.team)) < 14.0
@@ -258,6 +260,17 @@ static func update_stick(m, p, dt: float) -> void:
 			p.stick_target = p.save_point
 		elif m.carrier == null and near < REACT_RADIUS + (1.5 if keeper_area else 0.0):
 			p.stick_target = ahead
+			if m.ball_z > m.FEET_HEIGHT and not keeper_area:
+				# A ball in the air: the caman goes where the player reads
+				# it, and a poor read misses it. Some would rather take it
+				# on the body, and hold the stick out of the way.
+				read_air_ball(m, p)
+				if p.use_body and m.ball_z < BODY_HEIGHT:
+					var side: Vector2 = right_of(p) * p.hand * 0.35
+					p.stick_target = rest + Vector3(side.x, side.y, 0.0)
+				else:
+					var run: float = clampf(p.vel.length() / p.top_speed(), 0.0, 1.0)
+					p.stick_target = ahead + p.judge * lerpf(1.0, 1.5, run)
 		elif m.carrier != null and m.carrier.team != p.team and near < max_reach(p) + 0.8:
 			p.stick_target = ball  # stick on the ball, hockey style
 		if p.stick_target != null:
@@ -323,12 +336,34 @@ static func _clear_bodies(m, p, head: Vector3, keeper_area: bool) -> Vector3:
 	return head
 
 
+## How a player reads a ball in the air, once per flight: how far off their
+## caman will be (a good ball player is spot on, a poor one can be a foot or
+## two out and miss it), and whether they'd rather take it on the body (feet
+## together or the chest), which poorer players choose more often.
+static func read_air_ball(m, p) -> void:
+	if p.judge_flight == m.flight:
+		return
+	p.judge_flight = m.flight
+	var c: float = p.r("control") / 100.0
+	var sigma: float = lerpf(0.55, 0.05, c)
+	p.judge = Vector3(randfn(0.0, sigma * 0.5), randfn(0.0, sigma * 0.5), randfn(0.0, sigma))
+	p.use_body = randf() > lerpf(0.15, 0.95, c)
+
+
 ## Closest the ball came to point `q` while it moved from `a` to `b` (3D).
 static func path_distance(q: Vector3, a: Vector3, b: Vector3) -> float:
 	var ab := b - a
 	var l2 := ab.length_squared()
 	var t := 0.0 if l2 < 1e-8 else clampf((q - a).dot(ab) / l2, 0.0, 1.0)
 	return q.distance_to(a + ab * t)
+
+
+## Swept contact: closest the ball came to the caman head over a step in
+## which both moved (the head from `head_a` to `head_b`, the ball from `a`
+## to `b`), so a fast ball and a moving stick can't pass through each other
+## between frames.
+static func swept_distance(head_a: Vector3, head_b: Vector3, a: Vector3, b: Vector3) -> float:
+	return path_distance(Vector3.ZERO, a - head_a, b - head_b)
 
 
 # ---------------------------------------------------------------- keeper

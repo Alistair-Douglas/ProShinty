@@ -23,6 +23,7 @@ const CAMAN_LENGTH := 1.14  ## a full-size caman, measured off a real one
 const GRIP_TOP := 0.05     ## distance of the top hand from the butt of the caman
 const GRIP_LOW := 0.24     ## distance of the lower hand from the butt
 const HAND_GRIP := 0.065   ## wrist to the middle of the grip
+const MEET_MAX := 0.7   ## m: furthest a swing is steered to meet the ball
 const HEAD_LOCAL := Vector3(0.0, -CAMAN_LENGTH + 0.015, -0.055)  ## caman head centre in caman space
 ## Ready stance, hips space: butt of the caman and its direction to the head.
 const READY_P := Vector3(0.16, 0.0, -0.26)
@@ -42,7 +43,7 @@ const SKIN_TONES := [
 ## Actions and their total duration in seconds (swing and pass scale with power).
 const ACTIONS := {
 	"swing": 0.78, "pass": 0.55, "volley": 0.62, "tackle": 0.55, "trap": 0.4, "feet_trap": 0.6,
-	"thigh_trap": 0.6, "chest_trap": 0.65,
+	"thigh_trap": 0.6, "chest_trap": 0.65, "pencil": 0.6, "air_kill": 0.5, "air_clear": 0.45,
 	"save_left": 0.9, "save_right": 0.9, "save_feet": 0.7, "save_high_left": 0.8, "save_high_right": 0.8,
 	"celebrate": 1.6,
 	"shy": 2.0, "stumble": 0.7, "poke": 0.35, "block": 0.6, "cleek": 0.45, "barge": 0.4,
@@ -124,6 +125,7 @@ var _reach_target = null          # world point the caman head reaches for
 ## curl each bas in over the other.
 var reach_face = null
 var _reach_want := 0.0
+var _meet_target = null           # world point the bas meets the ball at in a hit (set_meet)
 var _reach := 0.0                 # smoothed 0..1
 var _free_hand = null             # skeleton-space target for a hand off the caman
 var _free_low = null              # the same for the lower hand (one-handed reach)
@@ -264,6 +266,17 @@ func set_reach(target, amount: float = 1.0, one_handed: bool = false) -> void:
 	_one_hand = one_handed and target != null
 
 
+## Where the ball will be when this swing meets it (world space), or null.
+## Through the downswing the caman is steered so the bas goes through that
+## point on the contact frame, rather than through wherever the canned swing
+## happens to pass, so a hit always looks like it met the ball. After contact
+## the point is held for the follow-through.
+func set_meet(target) -> void:
+	if _struck and _is_hit_action(_action):
+		return
+	_meet_target = target
+
+
 ## Seconds from starting `action` at `power` to the caman meeting the ball.
 ## `from_charge` is how much of the backswing was already held (release_swing).
 ## Match logic without a model (headless) uses this to time its hits.
@@ -290,6 +303,7 @@ func play_action(action: StringName, power: float = 1.0, contact_height: float =
 	if action == &"swing" or action == &"pass":
 		_action_len *= lerpf(0.75, 1.0, _action_power)
 	_struck = false
+	_meet_target = null
 	_charging = false
 	_carry_from = _carry
 	_action_age = 0.0
@@ -694,7 +708,7 @@ func _pose(_delta: float) -> void:
 			hips_off += r[3]
 
 	# Reaching: bend and lunge towards the target (hockey-style reach).
-	var reaching := _reach > 0.01 and _reach_target != null and (_action == &"" or _action == &"poke" or _action == &"block")
+	var reaching := _reach > 0.01 and _reach_target != null and (_action == &"" or _action in [&"poke", &"block", &"trap", &"air_kill", &"air_clear"])
 	if reaching:
 		var loc: Vector3 = global_transform.affine_inverse() * (_reach_target as Vector3)
 		var flat := Vector2(loc.x, loc.z).length()
@@ -748,13 +762,18 @@ func _pose(_delta: float) -> void:
 	var d_sk: Vector3 = (yaw_b * cam_d).normalized()
 	# A shy is struck with the back of the bas, so the face is turned round.
 	# So is a block: the stick is turned so its back sits over the ball.
-	var back_face := _action == &"shy" or _action == &"block"
+	# So is a clearance out of the air, swatted away like a shy.
+	var back_face := _action == &"shy" or _action == &"block" or _action == &"air_clear"
 	var face_dir := Vector3(0.0, 0.3, 1.0) if back_face else Vector3(0.0, -0.3, -1.0)
 	if _action == &"block":
 		face_dir = Vector3(0.0, -1.0, 0.2)   # hook turned down over the ball
+	elif _action == &"air_kill":
+		# A ball out of the air: the caman held up sideways, the curve of the
+		# bas turned down, so its face knocks the ball down onto the grass.
+		face_dir = Vector3(0.0, -1.0, -0.25)
 	# The hook of the bas faces up, as a shinty player carries it, except for
 	# a block and through a hit, where the face turns to meet the ball.
-	var up := 0.0 if back_face else _hook_up()
+	var up := 0.0 if back_face or _action == &"air_kill" else _hook_up()
 	var face_w: Vector3 = yaw_b * face_dir + Vector3.UP * 2.0 * up
 	var cb := _caman_basis(d_sk, face_w)
 	var ct := Transform3D(cb, p_sk)
@@ -785,6 +804,17 @@ func _pose(_delta: float) -> void:
 				var rf: Vector3 = face_w if reach_face == null else _skel.global_transform.basis.inverse() * (reach_face as Vector3)
 				var rt := Transform3D(_caman_basis(dn, rf), tgt - dn * head_len)
 				ct = ct.interpolate_with(rt, _reach)
+	# A hit: steer the bas through the ball (set_meet), most strongly at contact.
+	if _meet_target != null and _is_hit_action(_action) and _action != &"shy":
+		var tm := _swing_times()
+		var mw := 0.0
+		if _action_t <= tm[1]:
+			mw = _ease((_action_t - tm[0]) / maxf(0.01, tm[1] - tm[0]))
+		else:
+			mw = 1.0 - _ease((_action_t - tm[1]) / maxf(0.01, (tm[2] - tm[1]) * 0.6))
+		if mw > 0.0:
+			var mt: Vector3 = _skel.global_transform.affine_inverse() * (_meet_target as Vector3)
+			ct.origin += (mt - ct * HEAD_LOCAL).limit_length(MEET_MAX) * mw
 	# Running off the ball the caman is carried in the lower hand, low and
 	# across the front of the body with the head out in front just off the
 	# grass (as at The Dell), and the top hand is free to pump like a
@@ -994,6 +1024,39 @@ func _action_pose(rot: Dictionary) -> Array:
 			var p10 := ready_p.lerp(Vector3(0.45, 0.25, 0.05), k)
 			var d10 := ready_d.slerp(Vector3(0.75, -0.55, -0.1).normalized(), k)
 			return [p10, d10, 0.0, hips_off]
+		&"pencil":
+			# A ball at knee to waist height taken on the legs: a little hop,
+			# then feet together and legs straight like a pencil, leaning over
+			# it so it comes off the shins and thighs and drops in front; the
+			# caman held out to the side, out of the way.
+			var u := clampf(t / _action_len, 0.0, 1.0)
+			var k := sin(minf(1.0, u * 3.0) * PI * 0.5) * (1.0 - _ease(maxf(0.0, (u - 0.6) / 0.4)))
+			var hop := sin(clampf(u / 0.3, 0.0, 1.0) * PI)
+			hips_off.y += 0.09 * hop
+			for side in ["Left", "Right"]:
+				var sgn := -1.0 if side == "Left" else 1.0
+				rot[side + "UpperLeg"] = rot[side + "UpperLeg"].lerp(Vector3(0.12, 0, sgn * 0.06), k)
+				rot[side + "LowerLeg"] = rot[side + "LowerLeg"].lerp(Vector3(-0.08, 0, 0), k)
+				rot[side + "Foot"] = rot[side + "Foot"].lerp(Vector3(0.15, 0, 0), k)
+			rot["Spine"] += Vector3(-0.35 * k, 0, 0)
+			rot["Neck"] += Vector3(-0.35 * k, 0, 0)
+			var p11 := ready_p.lerp(Vector3(0.4, 0.3, 0.0), k)
+			var d11 := ready_d.slerp(Vector3(0.75, -0.55, -0.3).normalized(), k)
+			return [p11, d11, 0.0, hips_off]
+		&"air_kill":
+			# Up on the toes under it, reaching up; set_reach() takes the bas
+			# to the ball with the curve turned down.
+			var k := sin(clampf(t / _action_len, 0.0, 1.0) * PI)
+			rot["Spine"] += Vector3(0.12 * k, 0, 0)
+			hips_off.y += 0.04 * k
+			return [ready_p, ready_d, 0.0, hips_off]
+		&"air_clear":
+			# Swatting it away out of the air with the back of the stick:
+			# shoulders turn into it as the stick comes through.
+			var k := sin(clampf(t / _action_len, 0.0, 1.0) * PI)
+			var u := clampf(t / _action_len, 0.0, 1.0)
+			rot["Spine"] += Vector3(0.1 * k, 0, 0)
+			return [ready_p, ready_d, lerpf(-0.6, 0.5, _ease(u)) * k, hips_off]
 		&"save_feet":
 			# Keeper: feet together and planted, knees bent, the caman blade
 			# down in front of the feet so nothing goes through the legs.
