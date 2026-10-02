@@ -200,6 +200,9 @@ func _setup_input() -> void:
 	# and ui_cancel only have keys.
 	_add_button("ui_accept", JOY_BUTTON_A)
 	_add_button("ui_cancel", JOY_BUTTON_B)
+	# Change a picker (club, pitch, ...) with the right stick or bumpers.
+	_bind("menu_prev", [], [JOY_BUTTON_LEFT_SHOULDER], [JOY_AXIS_RIGHT_X, -1.0])
+	_bind("menu_next", [], [JOY_BUTTON_RIGHT_SHOULDER], [JOY_AXIS_RIGHT_X, 1.0])
 
 
 func _add_button(action: String, button: JoyButton) -> void:

@@ -142,10 +142,10 @@ func _screen(name: String) -> Control:
 
 const SCREEN_INFO := {
 	"hub": ["", "hub", "▲ ▼  Move       Enter / Ⓐ  Select"],
-	"kickoff": ["KICK OFF", "kickoff", "◀ ▶  Change       ▲ ▼  Move       Enter / Ⓐ  Play       Esc / Ⓑ  Back"],
-	"squads": ["SQUADS", "squads", "◀ ▶  Change club       Esc / Ⓑ  Back"],
+	"kickoff": ["KICK OFF", "kickoff", "◀ ▶ / LB RB  Change       ▲ ▼  Move       Enter / Ⓐ  Play       Esc / Ⓑ  Back"],
+	"squads": ["SQUADS", "squads", "◀ ▶ / LB RB  Change club       Esc / Ⓑ  Back"],
 	"controls": ["CONTROLS", "wide", "Esc / Ⓑ  Back"],
-	"camans": ["CAMAN DESIGNER", "designer", "▲ ▼  Move       ◀ ▶  Change       Drag  Turn the caman       Esc / Ⓑ  Back"],
+	"camans": ["CAMAN DESIGNER", "designer", "▲ ▼  Move       ◀ ▶ / LB RB  Change       Drag  Turn the caman       Esc / Ⓑ  Back"],
 	"problem": ["", "", ""],
 }
 

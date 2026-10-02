@@ -23,9 +23,15 @@ func _initialize() -> void:
 		# A controller's A button selects, like Enter.
 		[8, func(): _shot("menu_hub"); print("focus: ", root.gui_get_focus_owner().get_class()); _joy(JOY_BUTTON_A)],
 		[6, func(): _shot("menu_kickoff_start"); print("screen: ", m.call().current); m.call().away_pick.grab_focus()],
-		[1, func(): _key(KEY_RIGHT)],
+		[1, func(): _joy(JOY_BUTTON_RIGHT_SHOULDER)],   # RB changes the away club
 		[1, func(): m.call().home_pick.grab_focus()],
-		[1, func(): _key(KEY_LEFT)],
+		[1, func(): _key(KEY_LEFT)],                   # the arrow keys still change it
+		[1, func(): _joy(JOY_BUTTON_DPAD_RIGHT)],      # the d-pad moves on to the away card
+		[2, func():
+			var on_away: bool = root.gui_get_focus_owner() == m.call().away_pick
+			print("d-pad right from home card reaches away card: ", on_away)
+			if not on_away:
+				push_error("the d-pad didn't move off the home card")],
 		[6, func():
 			var s = m.call()
 			_shot("menu_kickoff")

@@ -51,10 +51,19 @@ func step(dir: int) -> void:
 
 
 func _gui_input(e: InputEvent) -> void:
-	if e.is_action_pressed("ui_left", true):
+	# A controller's right stick and bumpers change the value, and its left
+	# stick and d-pad move between controls, so it never gets stuck here.
+	# The keyboard's arrows still change it.
+	if e.is_action_pressed("menu_prev", true):
 		step(-1)
 		accept_event()
-	elif e.is_action_pressed("ui_right", true):
+	elif e.is_action_pressed("menu_next", true):
+		step(1)
+		accept_event()
+	elif e is InputEventKey and e.is_action_pressed("ui_left", true):
+		step(-1)
+		accept_event()
+	elif e is InputEventKey and e.is_action_pressed("ui_right", true):
 		step(1)
 		accept_event()
 	elif e is InputEventMouseButton and e.pressed:
