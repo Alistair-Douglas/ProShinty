@@ -196,6 +196,19 @@ func _setup_input() -> void:
 	_bind("sprint", [KEY_SHIFT], [JOY_BUTTON_RIGHT_SHOULDER])
 	_bind("pause", [KEY_ESCAPE, KEY_P], [JOY_BUTTON_START])
 	_bind("quit_match", [KEY_M], [JOY_BUTTON_BACK])
+	# Menus on a controller: A selects and B goes back. Godot's own ui_accept
+	# and ui_cancel only have keys.
+	_add_button("ui_accept", JOY_BUTTON_A)
+	_add_button("ui_cancel", JOY_BUTTON_B)
+
+
+func _add_button(action: String, button: JoyButton) -> void:
+	for e in InputMap.action_get_events(action):
+		if e is InputEventJoypadButton and e.button_index == button:
+			return
+	var b := InputEventJoypadButton.new()
+	b.button_index = button
+	InputMap.action_add_event(action, b)
 
 
 func _bind(action: String, keys: Array, buttons: Array = [], axis: Array = [], mouse: Array = []) -> void:
