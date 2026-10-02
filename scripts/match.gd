@@ -57,6 +57,8 @@ const FREE_HIT_PAUSE := 1.2  # a free hit: a moment to line it up, opponents 5 y
 const SET_PIECE_MIN := 1.0   # a human taker can't hit it before this
 const FEET_HEIGHT := 0.35     # yards: a ball below this is stopped with the feet
 const FEET_EXTRA := 0.15      # feet planted either side reach a little wider than the body
+const RATING_MID := 65.0     # ratings either side of this are pushed further out in play
+const RATING_STRETCH := 1.6
 const HOP_REACH := 0.45       # yd: how far sideways a player jumps, feet together, to stop a ground ball (at full control)
 const HOP_TIME := 0.14        # s: how long that jump takes
 const FEET_GAP := 0.2         # yd: land further off the ball's line than this and it bounces past
@@ -130,8 +132,10 @@ class Player:
 	var use_body := false      # going to take this ball on the body, stick out of the way
 	var hold_t := 0.0        # AI: how long to keep holding it up
 
+	## A rating as play uses it: stretched away from the middle so the gap
+	## between a top Premiership player and a lower-league one shows.
 	func r(key: String) -> float:
-		return float(data.get(key, 50))
+		return clampf(RATING_MID + (float(data.get(key, 50)) - RATING_MID) * RATING_STRETCH, 1.0, 99.0)
 
 	func top_speed() -> float:
 		return 5.8 + r("pace") / 100.0 * 3.0
