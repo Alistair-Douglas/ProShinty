@@ -60,7 +60,7 @@ func _draw() -> void:
 				# Overswing: no extra power, just more chance of a miss-hit.
 				draw_rect(Rect2(c + Vector2(40, 0), Vector2(40 * (m.charge - 1.0), 6)), Color(0.9, 0.1, 0.1))
 	var help := Game.hint(
-		"Move L Stick   Aim R Stick   Pass/Poke A   Shoot B   Long hit X   Through/Block Y   Sprint RT   Shield LT   Switch LB   Cleek RB   Barge L3   Pause Start",
+		"Move L Stick   Pass/Poke A   Shoot B   Long hit X   Through/Block Y   Sprint RT   Shield LT   Switch LB   Cleek RB   Barge L3   Pause Start",
 		"Move WASD/Arrows   Sprint Shift   Shoot Space/Click   Long hit X   Shield Z   Pass/Poke E   Through/Block F   Cleek C   Barge R   Switch Q   Pause Esc")
 	draw_rect(Rect2(Vector2(0, screen.y - 24), Vector2(w, 24)), Color(0, 0, 0, 0.45))
 	draw_string(font, Vector2(0, screen.y - 7), help, HORIZONTAL_ALIGNMENT_CENTER, w, 13, Color(1, 1, 1, 0.8))
