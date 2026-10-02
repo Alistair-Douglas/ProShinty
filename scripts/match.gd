@@ -33,7 +33,9 @@ const GOAL_PAUSE := 3.0
 const HALF_TIME_PAUSE := 7.0     # long enough to see everyone walk off towards the dugouts
 const EXTRA_TIME_PAUSE := 4.0    # the break before extra time: players stay out on the pitch
 const THROW_UP_AIM_MAX := 1.1   # rad: how far off straight up the park a throw-up can be aimed
-const WALK_SPEED := 1.6          # yd/s: walking off at half time and full time
+const THROUGH_LEAD := 8.0       # yd: a through ball is played this far ahead of the runner
+const WALK_SPEED := 1.6
+const MOUSE_AIM_MS := 4000      # the mouse aims hits while it's been moved this recently          # yd/s: walking off at half time and full time
 const PENALTY_SPOT := 20.0   # penalty hit, yards from the goal line
 const FREE_HIT_BACK := 5.0   # opponents stand this far off a set piece
 const SWING_CATCH := 0.5     # a swing that misses the ball catches a player in its path
@@ -169,6 +171,8 @@ var charge := -1.0
 ## "time": s, "effort": {player: extra}}. Empty when there isn't one.
 var battle := {}
 const SHOOT_RANGE := 70.0   # the shoot button aims at goal from within this many yards
+var charge_aim := Vector2.RIGHT   # where the stick pointed as the hit button went down
+var charge_steer := Vector2.ZERO  # and the steer for a shot (zero: the far corner)
 var charge_kind := "shoot"   # which button is being held: "shoot" (at goal) or "hit" (long)
 var steer := Vector2.ZERO   # smoothed human steering direction
 var message := ""
@@ -202,6 +206,7 @@ var throw_up_aim := {}             # Player -> where they'll knock it, as an ang
 var shy_lift: Player = null        # taking a shy with the ball still in the hand
 var shy_lift_t := 0.0
 var shy_lift_from := Vector3.ZERO
+var mouse_moved_ms := -100000      # when the mouse last moved (it aims hits for a while after)
 var restart_aim := 0.0             # the player's aim at a restart, off restart_base
 var restart_target: Player = null  # who a computer restart taker has picked out (turns to face them first)
 var restart_long := false          # and whether it's a long hit to them rather than a pass
@@ -912,7 +917,11 @@ func _human_control(dt: float) -> void:
 			human = pick
 			charge = -1.0
 			return
-	var aim := mv.normalized() if mv.length() > 0.15 else p.facing
+	# A pass or hit goes where the stick points the moment the button goes
+	# down (not the smoothed run, which lags behind it), so it can be steered
+	# without changing how you run; on keyboard and mouse, at the pointer.
+	var hit_aim := _hit_aim(p)
+	var aim := hit_aim if hit_aim != Vector2.ZERO else (raw.normalized() if raw.length() > 0.15 else p.facing)
 	p.shielding = carrier == p and Input.is_action_pressed("shield") and p.swing_t < 0.0
 	if in_battle(p):
 		# Fighting for the ball: every press of a stick button is more effort.
@@ -930,6 +939,8 @@ func _human_control(dt: float) -> void:
 		# is straight ahead (not the pitch's own directions, which made left
 		# swing the aim round to the right).
 		var rel: Vector2 = restart_base * -raw.y + restart_base.rotated(PI / 2.0) * raw.x
+		if hit_aim != Vector2.ZERO:
+			rel = hit_aim   # the mouse: aim at the pointer
 		if rel.length() > 0.15 and rel.normalized().dot(restart_base) > -0.9:
 			var want: float = clamp(restart_base.angle_to(rel), -PI / 2.0, PI / 2.0)
 			restart_aim = move_toward(restart_aim, want, RESTART_AIM_RATE * dt)
@@ -941,8 +952,16 @@ func _human_control(dt: float) -> void:
 		# Also how you swing at an opponent's ball: beat their swing to it.
 		charge = 0.0
 		charge_kind = "hit" if Input.is_action_just_pressed("hit") else "shoot"
+		# Aimed as the button goes down; the swing keeps that direction.
+		charge_aim = aim
+		charge_steer = hit_aim if hit_aim != Vector2.ZERO else raw
 	if Input.is_action_just_pressed("block"):
-		Counters.start_block(self, p)
+		# Y / F: with the ball it's a through ball (as in FIFA); without it,
+		# a block on an opponent's swing.
+		if carrier == p and p.swing_t < 0.0 and p != set_piece_taker_now() and not p.shy_ready:
+			_human_through(p, aim)
+		else:
+			Counters.start_block(self, p)
 	if Input.is_action_just_pressed("cleek"):
 		Counters.start_cleek(self, p)
 	if Input.is_action_just_pressed("barge"):
@@ -956,15 +975,31 @@ func _human_control(dt: float) -> void:
 			# hit on a ball arriving is up to you. Miss it and it's fresh air.
 			var restart: bool = p == set_piece_taker_now() or (p.shy_ready and carrier == p)
 			if charge_kind == "shoot" and not restart:
-				_human_shoot(p, mv, charge)
+				_human_shoot(p, charge_steer, charge)
 			else:
-				_human_hit(p, aim, charge)
+				_human_hit(p, aim if restart else charge_aim, charge)
 			charge = -1.0
 	if Input.is_action_just_pressed("pass"):
 		if carrier == p or _ball_in_reach(p):
 			_human_pass(p, aim)
 		elif carrier != null and carrier.team != p.team and p.pos.distance_to(carrier.pos) < REACH + 0.8:
 			_try_tackle(p, carrier)
+
+
+## On keyboard and mouse, hits are aimed at the pointer while the mouse has
+## been used lately. Zero otherwise.
+func _hit_aim(p: Player) -> Vector2:
+	var view := get_node_or_null("View")
+	if view != null and Time.get_ticks_msec() - mouse_moved_ms < MOUSE_AIM_MS:
+		var at = view.pitch_at_screen(get_viewport().get_mouse_position())
+		if at != null and (at - p.pos).length() > 0.5:
+			return (at - p.pos).normalized()
+	return Vector2.ZERO
+
+
+func _input(e: InputEvent) -> void:
+	if e is InputEventMouseMotion:
+		mouse_moved_ms = Time.get_ticks_msec()
 
 
 ## Turn 8-way keyboard input into a full 360-degree steer: the direction
@@ -1078,6 +1113,42 @@ func _human_pass(p: Player, aim: Vector2) -> void:
 		_pass_to(p, best)
 	else:
 		_strike_speed(p, aim, 18.0, 0.5, "passing")
+
+
+## A through ball: played into the space ahead of a team-mate making a run
+## (the one most in line with the stick), for them to run onto.
+func _human_through(p: Player, aim: Vector2) -> void:
+	var best: Player = null
+	var best_score := -INF
+	for m in squads[p.team]:
+		if m == p or m.is_keeper():
+			continue
+		var off: Vector2 = m.pos - p.pos
+		var d := off.length()
+		if d < 4.0 or d > 55.0:
+			continue
+		var cosang := aim.dot(off / d)
+		var fwd: float = (m.pos.x - p.pos.x) * attack_dir[p.team]
+		if cosang < 0.3 or fwd < 0.0:
+			continue
+		var s := cosang * 30.0 + fwd * 0.3 - d * 0.3
+		if s > best_score:
+			best_score = s
+			best = m
+	if best == null:
+		_strike_speed(p, aim, 20.0, 0.4, "passing")
+		return
+	# Into space ahead of them: where they're running, or up the park.
+	var run: Vector2 = best.vel.normalized() if best.vel.length() > 2.0 else Vector2(attack_dir[p.team], 0)
+	if run.x * attack_dir[p.team] < 0.2:
+		run = (run + Vector2(attack_dir[p.team], 0) * 0.8).normalized()
+	var spot: Vector2 = best.pos + run * THROUGH_LEAD
+	spot = Vector2(clampf(spot.x, 2.0, PITCH.x - 2.0), clampf(spot.y, 2.0, PITCH.y - 2.0))
+	var d := p.pos.distance_to(spot)
+	var speed: float = clampf(d * 0.75 + 10.0, 14.0, 34.0)
+	_strike_speed(p, (spot - p.pos).normalized(), speed, 0.4, "passing")
+	if p.team == human_side:
+		human = best
 
 
 # ---------------------------------------------------------------- ball
