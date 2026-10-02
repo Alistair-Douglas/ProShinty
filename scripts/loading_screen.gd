@@ -166,7 +166,7 @@ func _build_matchup_bar() -> void:
 	_bar.size = Vector2(380, 16)
 	_bar.draw.connect(_draw_bar)
 	add_child(_bar)
-	_prompt = ShintyStyle.label("PRESS SPACE OR  Ⓐ  TO PLAY", 24, "black", ShintyStyle.GOLD)
+	_prompt = ShintyStyle.label(Game.hint("PRESS  A  TO PLAY", "PRESS SPACE TO PLAY"), 24, "black", ShintyStyle.GOLD)
 	_prompt.position = Vector2(844, 664)
 	_prompt.visible = false
 	add_child(_prompt)

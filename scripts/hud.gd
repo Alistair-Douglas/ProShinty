@@ -59,18 +59,23 @@ func _draw() -> void:
 			if m.charge > 1.0:
 				# Overswing: no extra power, just more chance of a miss-hit.
 				draw_rect(Rect2(c + Vector2(40, 0), Vector2(40 * (m.charge - 1.0), 6)), Color(0.9, 0.1, 0.1))
-	var help := "Move WASD/Arrows   Sprint Shift   Shoot Space/Click   Long hit X   Shield Z   Pass/Poke E   Block F   Cleek C   Barge R   Switch Q   Pause Esc"
+	var help := Game.hint(
+		"Move L Stick   Sprint RB   Shoot X   Long hit RT   Shield LT   Pass/Poke A   Block Y   Cleek B   Barge L3   Switch LB   Pause Start",
+		"Move WASD/Arrows   Sprint Shift   Shoot Space/Click   Long hit X   Shield Z   Pass/Poke E   Block F   Cleek C   Barge R   Switch Q   Pause Esc")
 	draw_rect(Rect2(Vector2(0, screen.y - 24), Vector2(w, 24)), Color(0, 0, 0, 0.45))
 	draw_string(font, Vector2(0, screen.y - 7), help, HORIZONTAL_ALIGNMENT_CENTER, w, 13, Color(1, 1, 1, 0.8))
 	var centre_text := ""
 	var sub := ""
 	if m.paused:
 		centre_text = "Paused"
-		sub = "Esc / Start to resume    Enter / A for team and subs    M / Back to quit to menu" if m.human_side >= 0 \
-			else "Esc to resume, M to quit to menu"
+		if m.human_side >= 0:
+			sub = Game.hint("Start to resume    A for team and subs    Back to quit to menu",
+				"Esc to resume    Enter for team and subs    M to quit to menu")
+		else:
+			sub = Game.hint("Start to resume    Back to quit to menu", "Esc to resume    M to quit to menu")
 	elif m.state == m.State.FULL_TIME:
 		centre_text = "Full time: %s %d - %d %s" % [teams[0]["name"], m.score[0], m.score[1], teams[1]["name"]]
-		sub = "Press Space or Enter for the menu"
+		sub = Game.hint("Press A for the menu", "Press Space or Enter for the menu")
 	elif m.message_timer > 0.0 and not m.message.begins_with("GOAL"):  # the TV graphics show goals
 		# Calls in play (a shy, a foul, a save) sit small in the bottom left,
 		# above the player panel, out of the way of the play.

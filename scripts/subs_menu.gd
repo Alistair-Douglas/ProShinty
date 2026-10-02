@@ -250,7 +250,7 @@ func _draw() -> void:
 	elif line == "" and not off_names.is_empty():
 		line = "Off (can't come back on): " + ", ".join(off_names)
 	draw_string(semi, Vector2(o.x + 18, o.y + H - 46), line, HORIZONTAL_ALIGNMENT_LEFT, W - 36, 16, ShintyStyle.BAD if note != "" else ShintyStyle.MUTED)
-	var help := "Stick / arrows move    A / Enter pick    B / Esc back    Y / F computer subs: %s" % ("ON" if s.auto[t] else "OFF")
+	var help := Game.hint("L Stick move    A pick    B back    Y computer subs: %s", "Arrows move    Enter pick    Esc back    F computer subs: %s") % ("ON" if s.auto[t] else "OFF")
 	draw_string(bold, Vector2(o.x + 18, o.y + H - 18), help, HORIZONTAL_ALIGNMENT_LEFT, W - 36, 16, ShintyStyle.TEXT)
 
 

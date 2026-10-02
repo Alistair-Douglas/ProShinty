@@ -13,6 +13,9 @@ var venue := -1  # ShintyPitch.Venue; -1 until picked = the home team's ground
 var last_result := {}
 ## 0 Low, 1 Medium, 2 High (ShintyPitch.Detail). Saved between runs.
 var graphics_quality := 1
+## Which buttons the on-screen hints show: 0 controller, 1 keyboard. Saved.
+var hint_device := 0
+const HINT_DEVICES := ["Controller", "Keyboard"]
 
 ## Camans from the caman designer, saved between runs, by club id:
 ## {"team": design, "players": {shirt number: design}}. A player with their
@@ -37,7 +40,22 @@ func _ready() -> void:
 		graphics_quality = clampi(int(cfg.get_value("graphics", "quality")), 0, 2)
 	elif RenderingServer.get_video_adapter_type() == RenderingDevice.DEVICE_TYPE_DISCRETE_GPU:
 		graphics_quality = 2  # first run on a gaming GPU: the full look
+	if cfg.has_section_key("controls", "show"):
+		hint_device = clampi(int(cfg.get_value("controls", "show")), 0, 1)
 	_apply_graphics()
+
+
+## Pick the on-screen hint for the chosen device (Settings > Controls).
+func hint(controller: String, keyboard: String) -> String:
+	return keyboard if hint_device == 1 else controller
+
+
+func set_hint_device(i: int) -> void:
+	hint_device = clampi(i, 0, 1)
+	var cfg := ConfigFile.new()
+	cfg.load(SETTINGS_PATH)
+	cfg.set_value("controls", "show", hint_device)
+	cfg.save(SETTINGS_PATH)
 
 
 func set_graphics_quality(q: int, remember := true) -> void:
