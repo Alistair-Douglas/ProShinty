@@ -28,6 +28,12 @@ const HEAD_LOCAL := Vector3(0.0, -CAMAN_LENGTH + 0.015, -0.055)  ## caman head c
 ## Ready stance, hips space: butt of the caman and its direction to the head.
 const READY_P := Vector3(0.16, 0.0, -0.26)
 const READY_D := Vector3(-0.08, -0.55, -0.83)
+## Gathering a ball off to the side or behind, the body turns to face it
+## instead of the stick going round behind the back: the most it turns
+## (radians), and the share of that taken by the hips (the chest does the
+## rest, ending square to the ball).
+const REACH_TURN_MAX := 2.0
+const REACH_TURN_HIPS := 0.45
 ## Stumble power from which the player goes down (a stagger of about 0.65 s).
 const FALL_AT := 0.5
 ## Seconds a fallen player takes to get back up.
@@ -721,6 +727,7 @@ func _pose(_delta: float) -> void:
 			hips_off += r[3]
 
 	# Reaching: bend and lunge towards the target (hockey-style reach).
+	var reach_yaw := 0.0   # extra turn of the hands' frame towards the reach
 	var reaching := _reach > 0.01 and _reach_target != null and (_action == &"" or _action in [&"poke", &"block", &"trap", &"air_kill", &"air_clear"])
 	if reaching:
 		var loc: Vector3 = global_transform.affine_inverse() * (_reach_target as Vector3)
@@ -735,7 +742,16 @@ func _pose(_delta: float) -> void:
 		var lead := "Left" if (loc.x < 0.0) != left_handed else "Right"
 		rot[lead + "UpperLeg"] += Vector3(0.55 * lean, 0, 0)
 		rot[lead + "LowerLeg"] += Vector3(-0.35 * lean, 0, 0)
-		twist += clampf(-loc.x * 0.4, -0.5, 0.5) * lean * side_sign
+		# Turn round to face it: hips first, then the chest, the feet staying
+		# planted. A ball behind is gathered in front of the turned body,
+		# never by putting the stick round behind the back.
+		var turn := clampf(atan2(-loc.x, -loc.z), -REACH_TURN_MAX, REACH_TURN_MAX) * _reach
+		var hips_turn := turn * REACH_TURN_HIPS
+		rot["Hips"] += Vector3(0, hips_turn * side_sign, 0)
+		rot["LeftUpperLeg"] += Vector3(0, -hips_turn * side_sign, 0)
+		rot["RightUpperLeg"] += Vector3(0, -hips_turn * side_sign, 0)
+		twist += (turn - hips_turn) * side_sign
+		reach_yaw = (turn - hips_turn) * 0.5
 
 	# Torso twist through the swing
 	rot["Spine"] += Vector3(0, twist * 0.35, 0)
@@ -770,7 +786,7 @@ func _pose(_delta: float) -> void:
 	var hips_g := _skel.get_bone_global_pose(_bone["Hips"])
 	# twist and rot are already mirrored for left-handers, so this turns the
 	# caman with the torso either way.
-	var yaw_b := Basis(Vector3.UP, twist * 0.5 + rot["Hips"].y)
+	var yaw_b := Basis(Vector3.UP, twist * 0.5 + rot["Hips"].y + reach_yaw)
 	var p_sk: Vector3 = hips_g.origin + yaw_b * cam_p
 	var d_sk: Vector3 = (yaw_b * cam_d).normalized()
 	# A shy is struck with the back of the bas, so the face is turned round.
