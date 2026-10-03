@@ -4,12 +4,14 @@ extends Control
 
 const TeamData := preload("res://scripts/team_data.gd")
 const SubsMenu := preload("res://scripts/subs_menu.gd")
+const StatsPanel := preload("res://scripts/stats_panel.gd")
 
 var match_node: Node
 var view: Node
 var font: Font
 var tv: ShintyTVGraphics
 var subs_menu: Control
+var stats_panel: Control
 
 
 func _ready() -> void:
@@ -25,6 +27,11 @@ func _ready() -> void:
 	subs_menu = SubsMenu.new()
 	subs_menu.match_node = match_node
 	add_child(subs_menu)
+	stats_panel = StatsPanel.new()
+	stats_panel.match_node = match_node
+	stats_panel.subs_menu = subs_menu
+	stats_panel.tv = tv
+	add_child(stats_panel)
 
 
 func _process(_delta: float) -> void:
@@ -86,7 +93,7 @@ func _draw() -> void:
 		draw_string(font, box.position + Vector2(14, 25), head, HORIZONTAL_ALIGNMENT_LEFT, box.size.x - 20, 20, Color.WHITE)
 		if note != "":
 			draw_string(font, box.position + Vector2(14, 46), note, HORIZONTAL_ALIGNMENT_LEFT, box.size.x - 20, 13, Color(1, 1, 1, 0.8))
-	if centre_text != "":
+	if centre_text != "" and not stats_panel.is_showing():   # the stats screen has its own title and buttons
 		var box := Rect2(Vector2(w / 2.0 - 330, screen.y / 2.0 - 40), Vector2(660, 80 if sub != "" else 56))
 		draw_rect(box, Color(0, 0, 0, 0.65))
 		var size := 28
