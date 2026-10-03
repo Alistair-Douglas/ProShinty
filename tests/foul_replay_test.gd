@@ -38,7 +38,11 @@ func _process(_d: float) -> bool:
 		return false
 	var dir = m.get_node("View").director
 	var gfx = dir.graphics
-	if foul_frame < 0 and frame >= 200 and m.state == m.State.PLAY and not dir.playing and m.set_piece == "":
+	if foul_frame < 0 and frame % 100 == 0:
+		print("frame %d: state %s, set piece '%s', replay %s" % [frame, m.state, m.set_piece, dir.playing])
+	# Wait for open play, but don't wait for ever on a set piece.
+	var open_play: bool = m.set_piece == "" or frame >= 400
+	if foul_frame < 0 and frame >= 200 and m.state == m.State.PLAY and not dir.playing and open_play:
 		# A push in the back by a home player, with no-one on the ball so the
 		# referee can't play advantage.
 		m.referee.always_sees = true
