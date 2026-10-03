@@ -6,15 +6,26 @@ extends RefCounted
 ## the game folder can't be written to, which then wins).
 ##
 ## The moves themselves are built in code (shinty_player.gd). A tweak sits on
-## top of one: how long it takes, and at each of three moments (wind-up,
-## strike, finish) how far to turn a few joints and move the caman. In
-## between those moments the tweak fades in and out, so the move stays smooth.
+## top of one. For a one-off move (a swing, a trap, a save) that's how long it
+## takes, and at each of three moments (wind-up, strike, finish) how far to
+## turn a few joints and move the caman; in between, the tweak fades in and
+## out so the move stays smooth. For walking, jogging and sprinting the
+## moments are each foot coming forward, plus all the time. For a held pose
+## (standing, carrying, a held backswing, reaching, the throw-up) there's one.
 ## Angles are stored in degrees and the caman in centimetres, for a
 ## right-hander; left-handers get the mirror image.
 
 const RES_PATH := "res://data/poses.json"
 const USER_PATH := "user://poses.json"
 const PHASES := ["Wind-up", "Strike", "Finish"]
+const STRIDE_PHASES := ["Left foot forward", "Right foot forward", "All the time"]
+const HELD_PHASES := ["Held"]
+## Poses that aren't one-off actions: name -> "stride" or "held".
+const STATES := {
+	"stand": "held", "walk": "stride", "jog": "stride", "sprint": "stride",
+	"carry_low": "held", "carry_shoulder": "held", "backswing_hold": "held",
+	"reach": "held", "throw_up": "held",
+}
 
 ## What can be adjusted at each moment: [key, label, bone or "caman"/"twist",
 ## axis (0 x, 1 y, 2 z), range]. Turning a joint the other way is a minus.
@@ -123,6 +134,50 @@ static func reset(action: String, phase: int = -1) -> void:
 	version += 1
 
 
+## The moments that can be set for a move or pose, by name.
+static func phase_names(name: String) -> Array:
+	match STATES.get(name, ""):
+		"stride":
+			return STRIDE_PHASES
+		"held":
+			return HELD_PHASES
+	return PHASES
+
+
+## Whether a move has a length to change (one-off actions do).
+static func has_length(name: String) -> bool:
+	return not STATES.has(name)
+
+
+## A walk, jog or sprint at stride phase `ph` (radians; the left leg is
+## forward while sin(ph) > 0), faded by `amount`.
+static func stride(name: String, ph: float, amount: float) -> Dictionary:
+	if amount <= 0.001:
+		return {}
+	var s := sin(ph)
+	return _blend(name, [maxf(0.0, s) * amount, maxf(0.0, -s) * amount, amount])
+
+
+## A held pose (standing, carrying, ...), faded by `amount`.
+static func held(name: String, amount: float) -> Dictionary:
+	if amount <= 0.001:
+		return {}
+	return _blend(name, [amount, 0.0, 0.0])
+
+
+## Adds tweak `b` onto `a` (both as returned by at/stride/held).
+static func add(a: Dictionary, b: Dictionary) -> Dictionary:
+	if b.is_empty():
+		return a
+	if a.is_empty():
+		return b
+	var rot: Dictionary = a["rot"].duplicate()
+	for k in b["rot"]:
+		rot[k] = rot.get(k, Vector3.ZERO) + b["rot"][k]
+	return {"rot": rot, "caman": a["caman"] + b["caman"], "twist": a["twist"] + b["twist"],
+		"tilt": a["tilt"] + b["tilt"], "grip": a["grip"] + b["grip"]}
+
+
 ## The adjustment `t` seconds into an action of length `len`, whose three
 ## moments fall at `times`: {"rot": {bone: Vector3 radians}, "caman":
 ## Vector3 metres, "twist": radians, "tilt": Vector2 radians (caman head up,
@@ -150,6 +205,18 @@ static func at(action: String, t: float, times: Array, len: float) -> Dictionary
 			if i < 3:
 				w[i] = k
 			break
+	return _blend(action, w)
+
+
+## The three moments' values mixed by weights `w`.
+static func _blend(action: String, w: Array) -> Dictionary:
+	ensure_loaded()
+	var tw: Dictionary = data.get(action, {})
+	if tw.is_empty():
+		return {}
+	var keys: Array = tw["keys"]
+	if keys[0].is_empty() and keys[1].is_empty() and keys[2].is_empty():
+		return {}
 	var rot := {}
 	var caman := Vector3.ZERO
 	var twist := 0.0

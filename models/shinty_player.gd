@@ -130,6 +130,9 @@ var _reach_target = null          # world point the caman head reaches for
 ## usual, hook up). The toe points the other way; the menu throw-up uses it to
 ## curl each bas in over the other.
 var reach_face = null
+## A held pose the match puts the player in that the model can't tell for
+## itself: &"throw_up" while standing over the throw-up. Pose tweaks use it.
+var held_pose := &""
 var _reach_want := 0.0
 var _meet_target = null           # world point the bas meets the ball at in a hit (set_meet)
 var _reach := 0.0                 # smoothed 0..1
@@ -718,9 +721,45 @@ func _pose(_delta: float) -> void:
 		twist = -1.2 * k
 		_crouch(rot, 0.4 * k)
 
-	# Where the hands hold the shaft, from the butt (the pose editor can move them).
+	# Hand-made adjustments from the training ground's pose editor (see
+	# ShintyPoseTweaks): standing, walking, jogging, sprinting, a held
+	# backswing, reaching and the throw-up. Carrying is below.
+	var carry_w := _carry
+	if _action != &"":
+		carry_w = _carry_from * (1.0 - _ease(_action_age / maxf(0.01, _carry_fade)))
+	var reach_ok := _reach > 0.01 and _reach_target != null and (_action == &"" or _action in [&"poke", &"block", &"trap", &"air_kill", &"air_clear"])
+	var throw_up := held_pose == &"throw_up"
+	var ht := ShintyPoseTweaks.held("stand", 1.0 - moving)
+	ht = ShintyPoseTweaks.add(ht, ShintyPoseTweaks.stride("walk", ph, moving * (1.0 - gait)))
+	ht = ShintyPoseTweaks.add(ht, ShintyPoseTweaks.stride("jog", ph, gait * (1.0 - sprint)))
+	ht = ShintyPoseTweaks.add(ht, ShintyPoseTweaks.stride("sprint", ph, gait * sprint))
+	if _charging or _charge > 0.0:
+		ht = ShintyPoseTweaks.add(ht, ShintyPoseTweaks.held("backswing_hold", _ease(_charge)))
+	# Reaching (and the throw-up, which reaches overhead) moves the hands by
+	# moving where the caman reaches to.
+	var reach_tw := {}
+	if reach_ok and not throw_up:
+		reach_tw = ShintyPoseTweaks.held("reach", 1.0)
+	if throw_up:
+		reach_tw = ShintyPoseTweaks.held("throw_up", 1.0)
+	if not reach_tw.is_empty():
+		for b in reach_tw["rot"]:
+			rot[b] = rot.get(b, Vector3.ZERO) + reach_tw["rot"][b] * (_reach if not throw_up else 1.0)
+		twist += reach_tw["twist"] * (_reach if not throw_up else 1.0)
+	var carry_tw := ShintyPoseTweaks.held("carry_shoulder" if shoulder_carry else "carry_low", carry_w)
+	for t in [ht, carry_tw]:
+		if not t.is_empty():
+			for b in t["rot"]:
+				rot[b] = rot.get(b, Vector3.ZERO) + t["rot"][b]
+			twist += t["twist"]
+	# Where the hands hold the shaft, from the butt.
 	var grip_top := GRIP_TOP
 	var grip_low := GRIP_LOW
+	if not ht.is_empty():
+		cam_p += ht["caman"]
+		cam_d = cam_d.rotated(Vector3.RIGHT, ht["tilt"].x).rotated(Vector3.UP, ht["tilt"].y).normalized()
+		grip_top = maxf(0.0, GRIP_TOP + ht["grip"].x)
+		grip_low = maxf(grip_top + 0.08, GRIP_LOW + ht["grip"].y)
 	if _action != &"":
 		var r := _action_pose(rot)
 		if r.size() > 0:
@@ -737,12 +776,12 @@ func _pose(_delta: float) -> void:
 			cam_p += tw["caman"]
 			twist += tw["twist"]
 			cam_d = cam_d.rotated(Vector3.RIGHT, tw["tilt"].x).rotated(Vector3.UP, tw["tilt"].y).normalized()
-			grip_top = maxf(0.0, GRIP_TOP + tw["grip"].x)
-			grip_low = maxf(grip_top + 0.08, GRIP_LOW + tw["grip"].y)
+			grip_top = maxf(0.0, grip_top + tw["grip"].x)
+			grip_low = maxf(grip_top + 0.08, grip_low + tw["grip"].y)
 
 	# Reaching: bend and lunge towards the target (hockey-style reach).
 	var reach_yaw := 0.0   # extra turn of the hands' frame towards the reach
-	var reaching := _reach > 0.01 and _reach_target != null and (_action == &"" or _action in [&"poke", &"block", &"trap", &"air_kill", &"air_clear"])
+	var reaching := reach_ok
 	if reaching:
 		var loc: Vector3 = global_transform.affine_inverse() * (_reach_target as Vector3)
 		var flat := Vector2(loc.x, loc.z).length()
@@ -826,6 +865,9 @@ func _pose(_delta: float) -> void:
 	if reaching:
 		# Point the caman from the hands to the target, head on the target.
 		var tgt: Vector3 = _skel.global_transform.affine_inverse() * (_reach_target as Vector3)
+		if not reach_tw.is_empty():
+			var c: Vector3 = reach_tw["caman"]
+			tgt += Vector3(-c.x if left_handed else c.x, c.y, c.z)
 		var head_len := HEAD_LOCAL.length()
 		if _one_hand:
 			# Top hand at the very end of the handle, arm straight at the target.
@@ -863,9 +905,7 @@ func _pose(_delta: float) -> void:
 	# grass (as at The Dell), and the top hand is free to pump like a
 	# runner's. When a swing starts the top hand joins the stick by the top of
 	# the backswing, so the hit itself is always two-handed.
-	var carry := _carry
-	if _action != &"":
-		carry = _carry_from * (1.0 - _ease(_action_age / maxf(0.01, _carry_fade)))
+	var carry := carry_w
 	var carry_top = null
 	if carry > 0.001:
 		var mx := -1.0 if left_handed else 1.0
@@ -887,9 +927,17 @@ func _pose(_delta: float) -> void:
 			hand = Vector3(0.2 * mx, 0.24 + bob, -0.2 - 0.05 * pump) + lean_fwd
 			cd = Vector3(0.22 * mx, 0.9, 0.34 + 0.05 * pump).normalized()
 			face_c = Vector3(0.0, 0.3, 1.0)
+		var carry_grip := GRIP_LOW
+		if not carry_tw.is_empty():
+			# Tweaks are for a right-hander: mirror them across for a left.
+			var off: Vector3 = carry_tw["caman"] / maxf(carry, 0.001)
+			hand += Vector3(off.x * mx, off.y, off.z)
+			var tilt: Vector2 = carry_tw["tilt"] / maxf(carry, 0.001)
+			cd = cd.rotated(Vector3.RIGHT, tilt.x).rotated(Vector3.UP, tilt.y * mx).normalized()
+			carry_grip = maxf(0.05, GRIP_LOW + carry_tw["grip"].y / maxf(carry, 0.001))
 		var d_c: Vector3 = yaw_b * cd
 		var grip_c: Vector3 = hips_g.origin + yaw_b * hand
-		var carry_t := Transform3D(_caman_basis(d_c, yaw_b * face_c), grip_c - d_c * GRIP_LOW)
+		var carry_t := Transform3D(_caman_basis(d_c, yaw_b * face_c), grip_c - d_c * carry_grip)
 		ct = ct.interpolate_with(carry_t, carry)
 		var top_run := Vector3(-0.17 * mx, 0.24 - 0.08 * pump + bob, -0.16 + 0.22 * pump) + lean_fwd * 1.3
 		var top_walk := Vector3(-0.23 * mx, -0.14, 0.02 + 0.14 * swing_w)

@@ -27,7 +27,8 @@ const RESET_X := 35.0          # you start this many yards out from the goal you
 ## [label, kind, what, power]. Kinds: "pose" plays a one-off animation on
 ## your player with no ball involved; "feed" sends a ball at you to deal
 ## with for real; "set" sets up a restart; "run" runs a circle on its own
-## until you touch the stick.
+## and "hold" holds a pose, both until you touch the stick. The third entry
+## of a pose, run or hold is its name in the pose editor (ShintyPoseTweaks).
 const MOVES := [
 	["Full swing", "pose", "swing", 1.0],
 	["Half swing", "pose", "swing", 0.5],
@@ -66,6 +67,12 @@ const MOVES := [
 	["Run a circle: walk", "run", "walk", 0.0],
 	["Run a circle: jog", "run", "jog", 0.0],
 	["Run a circle: sprint", "run", "sprint", 0.0],
+	["Carry: low in one hand", "run", "carry_low", 0.0],
+	["Carry: on the shoulder", "run", "carry_shoulder", 0.0],
+	["Standing still", "hold", "stand", 0.0],
+	["Hold the backswing", "hold", "backswing_hold", 0.0],
+	["Reach for a ball", "hold", "reach", 0.0],
+	["Throw-up stance", "hold", "throw_up", 0.0],
 ]
 
 var move_index := 0
@@ -78,6 +85,9 @@ var practice_keeper: Player = null
 var practice_defender: Player = null
 var circle_pace := ""             # "walk", "jog" or "sprint" while running a circle on its own
 var circle_centre := Vector2.ZERO
+var hold_pose := ""               # "stand", "backswing_hold", "reach" or "throw_up" while held
+## Shoulder or low carry for your player while showing a carry (null: their own).
+var force_shoulder = null
 var _held_t := 0.0                # how long the keeper or defender has had it
 var editing := false              # the pose editor is open: the picked move repeats
 var editor: Control
@@ -177,6 +187,8 @@ func _start_throw_up() -> void:
 func reset_ball() -> void:
 	state = State.PLAY
 	circle_pace = ""
+	hold_pose = ""
+	force_shoulder = null
 	_clear_set_piece()
 	penalty_taker = null
 	gather_keeper = null
@@ -284,7 +296,7 @@ func _ball_back(dt: float) -> void:
 		if _held_t >= BALL_BACK_AFTER:
 			_say("Saved" if carrier == practice_keeper or gather_keeper != null else "Tackled", 1.0)
 			reset_ball()
-	elif carrier == null and shy_lift == null and set_piece_taker_now() == null \
+	elif carrier == null and shy_lift == null and set_piece_taker_now() == null and circle_pace == "" and hold_pose == "" \
 			and ball_vel.length() < 3.0 and ball_z < 0.1 and ball_pos.distance_to(human.pos) > LOOSE_FAR:
 		_held_t += dt
 		if _held_t >= LOOSE_BACK_AFTER:
@@ -310,13 +322,22 @@ func _ai_team(t: int, dt: float) -> void:
 
 
 func _human_control(dt: float) -> void:
-	if editing:
+	var raw_in := Input.get_vector("move_left", "move_right", "move_up", "move_down")
+	if hold_pose != "":
+		if raw_in.length() > 0.3 and not editing:
+			hold_pose = ""   # the stick takes over again
+			charge = -1.0
+		else:
+			_hold(hold_pose)
+			return
+	if editing and circle_pace == "":
 		human.desired = Vector2.ZERO
 		return
 	if circle_pace != "":
 		var raw := Input.get_vector("move_left", "move_right", "move_up", "move_down")
-		if raw.length() > 0.3:
+		if raw.length() > 0.3 and not editing:
 			circle_pace = ""   # the stick takes over again
+			force_shoulder = null
 		else:
 			_run_circle()
 			return
@@ -331,7 +352,7 @@ func _run_circle() -> void:
 		off = Vector2(10.0, 0.0)
 	var tangent := off.normalized().rotated(PI / 2.0)
 	var radial := -off.normalized() * (off.length() - 10.0) * 0.3
-	var speed: float = {"walk": WALK_SPEED, "jog": p.top_speed() * JOG, "sprint": p.top_speed()}[circle_pace]
+	var speed: float = {"walk": WALK_SPEED, "jog": p.top_speed() * JOG, "sprint": p.top_speed()}.get(circle_pace, p.top_speed() * JOG)
 	p.desired = (tangent + radial).normalized() * speed
 	p.sprinting = circle_pace == "sprint"
 
@@ -379,10 +400,47 @@ func play_move(i: int) -> void:
 		"set":
 			_set_piece_drill(str(mv[2]))
 		"run":
-			if carrier == human:
-				carrier = null   # leave the ball where it is
+			reset_ball()
 			circle_pace = str(mv[2])
 			circle_centre = human.pos + human.facing.rotated(-PI / 2.0) * 10.0
+			# The ball waits in the middle, far enough off for the caman to be
+			# carried, not played.
+			_park_ball(circle_centre)
+			if circle_pace.begins_with("carry"):
+				force_shoulder = circle_pace == "carry_shoulder"
+		"hold":
+			reset_ball()
+			hold_pose = str(mv[2])
+			match hold_pose:
+				"reach":
+					# A ball sitting out to the side, just within reach.
+					_park_ball(human.pos + human.facing.rotated(PI / 3.0) * 1.5)
+				"backswing_hold":
+					pass   # the ball stays at your feet
+				_:
+					_park_ball(human.pos + human.facing * 15.0)
+
+
+## Leaves the ball lying still at `at`, nobody's.
+func _park_ball(at: Vector2) -> void:
+	carrier = null
+	ball_pos = at
+	ball_z = 0.0
+	ball_vel = Vector2.ZERO
+	ball_vz = 0.0
+	flight += 1
+
+
+## Keeps your player in a held pose (see play_move).
+func _hold(kind: String) -> void:
+	human.desired = Vector2.ZERO
+	match kind:
+		"backswing_hold":
+			charge = 1.0   # the view holds the caman up at the top
+			charge_kind = "hit"
+		"reach":
+			human.touch_block = 0.5   # reaching for it, not taking it
+			human.facing = (ball_pos - human.pos).rotated(-PI / 3.0).normalized()
 
 
 ## Sends a ball at you from up the pitch, as if from a teammate.
@@ -454,8 +512,8 @@ func _set_piece_drill(kind: String) -> void:
 ## Opens the pose editor on the picked move (a pose from the list).
 func open_editor() -> bool:
 	var mv: Array = MOVES[move_index]
-	if mv[1] != "pose" or editor == null:
-		_say("Pick a move from the top of the list to edit it", 2.0)
+	if not str(mv[1]) in ["pose", "run", "hold"] or editor == null:
+		_say("Pick a move, a run, a carry or a held pose to edit", 2.0)
 		paused = false
 		return false
 	paused = false
@@ -464,12 +522,16 @@ func open_editor() -> bool:
 	close_cam = true
 	reset_ball()
 	_loop_t = 0.3
+	if mv[1] != "pose":
+		play_move(move_index)   # runs and held poses just keep going
+		_loop_t = INF
 	editor.open(str(mv[2]), str(mv[0]))
 	return true
 
 
 func close_editor() -> void:
 	editing = false
+	reset_ball()
 	close_cam = _cam_before
 	editor.visible = false
 	set_speed(0)

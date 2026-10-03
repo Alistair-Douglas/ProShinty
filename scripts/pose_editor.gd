@@ -15,6 +15,8 @@ var _title: Label
 var _phase_buttons: Array = []
 var _length: HSlider
 var _length_value: Label
+var _length_row: Control
+var _phases: HFlowContainer
 var _sliders := {}    # slider key -> [HSlider, value Label]
 var _speed_button: Button
 var _note: Label
@@ -47,16 +49,12 @@ func _ready() -> void:
 	_title = ShintyStyle.label("POSE EDITOR", 26, "black", ShintyStyle.GOLD)
 	col.add_child(_title)
 
-	var phases := HBoxContainer.new()
-	phases.add_theme_constant_override("separation", 6)
-	col.add_child(phases)
-	for i in ShintyPoseTweaks.PHASES.size():
-		var b := _button(ShintyPoseTweaks.PHASES[i], func(): _set_phase(i))
-		b.toggle_mode = true
-		phases.add_child(b)
-		_phase_buttons.append(b)
+	_phases = HFlowContainer.new()
+	_phases.add_theme_constant_override("h_separation", 6)
+	col.add_child(_phases)
 
 	var lrow := _row(col, "How long it takes")
+	_length_row = lrow[0].get_parent()
 	_length = lrow[0]
 	_length_value = lrow[1]
 	_length.min_value = 0.5
@@ -108,9 +106,22 @@ func open(p_action: String, label: String) -> void:
 	_title.text = "POSE EDITOR: " + label.to_upper()
 	_note.text = "Each slider sets the move at the moment picked above; it blends in and out between moments. Set for a right-hander: left-handers get the mirror image."
 	visible = true
-	_set_phase(1)
+	# One-off moves have a wind-up, strike and finish; a run has each foot
+	# forward; a held pose has just the one.
+	for b in _phase_buttons:
+		b.queue_free()
+	_phase_buttons = []
+	var names: Array = ShintyPoseTweaks.phase_names(action)
+	for i in names.size():
+		var b := _button(names[i], func(): _set_phase(i))
+		b.toggle_mode = true
+		_phases.add_child(b)
+		_phase_buttons.append(b)
+	_length_row.visible = ShintyPoseTweaks.has_length(action)
+	var first := 1 if names.size() == 3 and ShintyPoseTweaks.has_length(action) else (2 if names.size() == 3 else 0)
+	_set_phase(first)
 	_refresh_speed()
-	_phase_buttons[1].grab_focus()
+	_phase_buttons[first].grab_focus()
 
 
 func _unhandled_input(e: InputEvent) -> void:

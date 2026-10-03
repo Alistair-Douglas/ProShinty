@@ -71,6 +71,28 @@ func _pose_tweaks(teams: Array) -> void:
 	print("hands apart on a pass: %.2f m, lower hand moved down %.2f m" % [gap_before, gap_after])
 	assert(gap_after > gap_before + 0.1, "the lower hand slides down the shaft")
 	ShintyPoseTweaks.reset("pass")
+
+	# Standing, running and carrying are tunable too.
+	var spine_at := func(speed: float, bone: String) -> Vector3:
+		var p := ShintyPlayerModel.new()
+		p.manual_update = true
+		root.add_child(p)
+		p.setup(teams[0]["players"][10], teams[0])
+		for i in 40:
+			p.set_locomotion(Vector3(0, 0, -speed))
+			p.advance(1.0 / 60.0)
+		var sk: Skeleton3D = p.find_children("*", "Skeleton3D", true, false)[0]
+		var e := sk.get_bone_pose_rotation(sk.find_bone(bone)).get_euler()
+		p.free()
+		return e
+	for st in [["stand", 0.0, "Spine", "spine_bend", 0], ["walk", 1.2, "Spine", "spine_bend", 2], ["jog", 3.5, "Spine", "spine_bend", 2],
+			["sprint", 8.0, "Spine", "spine_bend", 2], ["carry_low", 3.5, "Chest", "chest_bend", 0]]:
+		var base: Vector3 = spine_at.call(st[1], st[2])
+		ShintyPoseTweaks.set_value(st[0], st[4], st[3], 20.0)
+		var bent: Vector3 = spine_at.call(st[1], st[2])
+		ShintyPoseTweaks.reset(st[0])
+		print("%s: %s bend %.2f -> %.2f rad" % [st[0], st[2], base.x, bent.x])
+		assert(bent.x < base.x - 0.1, "%s can be tuned" % st[0])
 	ShintyPoseTweaks.set_value("swing", 0, "caman_up", 30.0)
 	var path := ShintyPoseTweaks.save()
 	assert(path != "", "tweaks saved")

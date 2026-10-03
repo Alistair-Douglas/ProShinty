@@ -2,6 +2,8 @@ extends "res://scripts/match_view.gd"
 ## The match view for the training ground, plus a close camera that orbits
 ## your player, for watching moves and animations up close.
 
+const Body := preload("res://scripts/player_physics.gd")
+
 var cam_yaw := 0.0        # round the player, world-fixed so a run can be watched go by
 var cam_dist := 6.0
 var _was_close := false
@@ -16,6 +18,17 @@ func _process(delta: float) -> void:
 		if m.close_cam:
 			figures[p]["tag"].visible = false   # the number and marker would fill the screen
 			figures[p]["arrow"].visible = false
+	# Showing a carry or the throw-up stance in the training ground.
+	var you = m.human
+	if you != null and figures.has(you) and not director.playing:
+		var model: ShintyPlayerModel = figures[you]["model"]
+		if not figures[you].has("own_shoulder"):
+			figures[you]["own_shoulder"] = model.shoulder_carry
+		model.shoulder_carry = figures[you]["own_shoulder"] if m.force_shoulder == null else m.force_shoulder
+		if m.hold_pose == "throw_up":
+			# Caman raised high, crossed over the spot in front, as at a throw-up.
+			model.held_pose = &"throw_up"
+			model.set_reach(w(you.pos + you.facing * 0.5, Body.OVERHEAD), 1.0)
 
 
 func _update_camera(delta: float) -> void:
