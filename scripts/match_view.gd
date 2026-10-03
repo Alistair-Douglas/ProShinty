@@ -131,7 +131,6 @@ func _process(delta: float) -> void:
 	_update_referee(delta)
 	_update_aim_arrow()
 	ball.position = w(m.ball_pos, m.ball_z + ShintyBallPhysics.RADIUS * ShintyMatchAdapter.TO_YARDS)
-	_camera_buttons()
 	_update_camera(delta)
 	director.after_frame(delta)
 
@@ -210,6 +209,7 @@ func _camera_buttons() -> void:
 
 
 func _update_camera(delta: float) -> void:
+	_camera_buttons()
 	if prematch != null:
 		prematch.place_camera(camera, delta)
 		return
