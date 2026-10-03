@@ -96,6 +96,18 @@ func w(v: Vector2, height: float = 0.0) -> Vector3:
 	return pitch.sim_to_world(v, height)
 
 
+## The point on the grass under a screen position (the mouse pointer), in
+## pitch yards, or null if it's above the horizon.
+func pitch_at_screen(pos: Vector2):
+	var from := camera.project_ray_origin(pos)
+	var dir := camera.project_ray_normal(pos)
+	var ground_y: float = pitch.sim_to_world(Vector2.ZERO).y
+	if dir.y > -0.001:
+		return null
+	var hit := from + dir * ((ground_y - from.y) / dir.y)
+	return pitch.world_to_sim(hit)
+
+
 # ---------------------------------------------------------------- per frame
 
 func _process(delta: float) -> void:
@@ -204,6 +216,12 @@ func _update_camera(delta: float) -> void:
 			var to_d := (d_centre - at).normalized()
 			shy_eye = at - to_d * 6.0 + Vector3(0, 5.5, 0)
 			shy_look = at.lerp(d_centre, 0.6) + Vector3(0, 0.5, 0)
+		elif m.set_piece == "Free hit":
+			# Free hit: behind the taker, looking along their aim, which can
+			# come all the way round (a free hit can go backwards).
+			var fw := (w(set_piece_taker.pos + set_piece_taker.facing) - at).normalized()
+			shy_eye = at - fw * 7.0 + Vector3(0, 3.5, 0)
+			shy_look = at + fw * 18.0 + Vector3(0, 1.0, 0)
 		else:
 			# Hit-out: from behind the goal, over the keeper's shoulder, up the park.
 			var up_park := (goal - at).normalized()
