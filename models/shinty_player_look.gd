@@ -377,7 +377,7 @@ func _boot(foot: Node3D, inside: float) -> void:
 		var thick := lerpf(0.012, 0.008, clampf(-z / 0.2, 0.0, 1.0))
 		var lift := maxf(0.0, (-z - 0.17) * 0.25)  # toe spring
 		sole_st.append([z + signf(z) * 0.002, hw, -0.06 + lift, -0.06 + lift + thick, st[4] if st.size() > 4 else 0.0])
-	_mesh(foot, ShintyMesh.shoe(sole_st, 12 if detail else 8, 8.0, 8.0), ShintyMesh.solid(sole_col, 0.55))
+	_mesh(foot, ShintyMesh.shoe(sole_st, 10 if detail else 8, 8.0, 8.0), ShintyMesh.solid(sole_col, 0.55))
 	if not detail:
 		return
 	# Side flash on both sides, from under the heel collar forward along the midfoot.
@@ -499,27 +499,33 @@ func _surname() -> String:
 
 func _head() -> void:
 	var skin := ShintyMesh.skin(m.skin_color)
-	var hair_col: Color = _pick(HAIR_COLOURS, 1)
-	if m.skin_color.get_luminance() < 0.35:
-		hair_col = Color("141111")
+	var look := _face_look()
+	var hair_col: Color = look.hair
+	var style: String = look.style
+	var facial: String = look.facial
 	var hair := ShintyMesh.solid(hair_col, 0.85)
 	var neck := _attach("Neck")
 	_mesh(neck, _loft([[-0.02, 0.058, 0.056], [0.06, 0.052, 0.05, 0.004], [0.13, 0.05, 0.048, 0.008]], seg), skin)
 
 	var head := _attach("Head")
 	var c := Vector3(0, 0.11, 0)
-	# Skull and face in one sculpted piece: chin, jaw, cheekbones, brow.
-	var jaw := 0.066 + 0.01 * m.build
-	_mesh(head, _loft([
-		[-0.112, 0.006, 0.005, -0.087], [-0.106, 0.022, 0.019, -0.08], [-0.1, 0.034, 0.03, -0.074], [-0.08, jaw * 0.85, 0.058, -0.045],
-		[-0.05, jaw, 0.08, -0.018], [-0.015, 0.074, 0.094, -0.006], [0.02, 0.079, 0.1, 0.0],
+	# Skull and face in one sculpted piece: chin, jaw, cheekbones, brow. Each
+	# player's face is a little different: jaw width, chin length, cheeks.
+	var jaw: float = (0.066 + 0.01 * m.build) * look.jaw
+	var chin: float = look.chin
+	var cheek: float = look.cheek
+	var face := [
+		[-0.112 - chin, 0.006, 0.005, -0.087], [-0.106 - chin, 0.022 * look.jaw, 0.019, -0.08],
+		[-0.1 - chin * 0.8, 0.034 * look.jaw, 0.03, -0.074], [-0.08 - chin * 0.4, jaw * 0.85, 0.058, -0.045],
+		[-0.05, jaw, 0.08, -0.018], [-0.015, 0.074 * cheek, 0.094, -0.006], [0.02, 0.079, 0.1, 0.0],
 		[0.06, 0.079, 0.1, 0.006], [0.095, 0.068, 0.086, 0.01], [0.118, 0.04, 0.052, 0.012],
-		[0.128, 0.01, 0.014, 0.012]], seg + 4, 2.1), skin, c)
-	# Nose, brow ridge, lips, ears
+		[0.128, 0.01, 0.014, 0.012]]
+	_mesh(head, _loft(face, seg + 2, 2.1), skin, c)
 	# Nose: narrow bridge, rounded tip, wider at the nostrils.
-	var nose := ShintyMesh.sweep(PackedVector3Array([Vector3(0, 0.032, -0.088), Vector3(0, 0.008, -0.1),
-		Vector3(0, -0.012, -0.109), Vector3(0, -0.022, -0.106)]),
-		PackedVector2Array([Vector2(0.0065, 0.005), Vector2(0.008, 0.008), Vector2(0.0125, 0.011), Vector2(0.013, 0.007)]), 10)
+	var ns: float = look.nose
+	var nose := ShintyMesh.sweep(PackedVector3Array([Vector3(0, 0.032, -0.088), Vector3(0, 0.008, -0.1 + (1.0 - ns) * 0.012),
+		Vector3(0, -0.012, -0.109 + (1.0 - ns) * 0.016), Vector3(0, -0.022, -0.106 + (1.0 - ns) * 0.012)]),
+		PackedVector2Array([Vector2(0.0065, 0.005), Vector2(0.008, 0.008) * ns, Vector2(0.0125, 0.011) * ns, Vector2(0.013, 0.007) * ns]), 8)
 	_mesh(head, nose, skin, c)
 	if detail:
 		# Brow ridge (under the helmet's front edge when one is worn).
@@ -527,37 +533,119 @@ func _head() -> void:
 			_mesh(head, ShintyMesh.sweep(PackedVector3Array([Vector3(-0.058, 0.04, -0.078), Vector3(-0.03, 0.043, -0.088),
 				Vector3(0, 0.044, -0.09), Vector3(0.03, 0.043, -0.088), Vector3(0.058, 0.04, -0.078)]),
 				PackedVector2Array([Vector2(0.003, 0.003), Vector2(0.006, 0.006), Vector2(0.006, 0.006), Vector2(0.006, 0.006), Vector2(0.003, 0.003)]), 8), skin, c)
+		# Lips: a fuller lower lip and a thinner upper one with a dip in the
+		# middle, a touch further out under a beard so they still show.
 		var lip := ShintyMesh.solid(m.skin_color.lerp(Color(0.62, 0.3, 0.3), 0.35), 0.5)
-		_mesh(head, ShintyMesh.sweep(PackedVector3Array([Vector3(-0.022, -0.044, -0.094), Vector3(0, -0.042, -0.1), Vector3(0.022, -0.044, -0.094)]),
-			PackedVector2Array([Vector2(0.004, 0.005), Vector2(0.006, 0.007), Vector2(0.004, 0.005)]), 8), lip, c)
+		var lz := -0.003 if facial == "beard" else 0.0
+		_mesh(head, ShintyMesh.sweep(PackedVector3Array([Vector3(-0.022, -0.043, -0.094 + lz), Vector3(-0.01, -0.0405, -0.099 + lz),
+			Vector3(0, -0.0415, -0.1 + lz), Vector3(0.01, -0.0405, -0.099 + lz), Vector3(0.022, -0.043, -0.094 + lz)]),
+			PackedVector2Array([Vector2(0.002, 0.002), Vector2(0.0035, 0.004), Vector2(0.003, 0.0035), Vector2(0.0035, 0.004), Vector2(0.002, 0.002)]), 6), lip, c)
+		_mesh(head, ShintyMesh.sweep(PackedVector3Array([Vector3(-0.02, -0.0455, -0.094 + lz), Vector3(0, -0.048, -0.0995 + lz),
+			Vector3(0.02, -0.0455, -0.094 + lz)]),
+			PackedVector2Array([Vector2(0.0025, 0.003), Vector2(0.0055, 0.0055), Vector2(0.0025, 0.003)]), 6), lip, c)
 		# Eyes: white, iris, pupil; eyebrows in the hair colour.
 		var white := ShintyMesh.solid(Color("f2eee6"), 0.25)
 		var iris := ShintyMesh.solid(_pick(EYE_COLOURS, 2), 0.2)
 		var pupil := ShintyMesh.solid(Color("0b0b0c"), 0.1)
 		for sx in [-1.0, 1.0]:
 			var e := c + Vector3(sx * 0.034, 0.02, -0.084)
-			_mesh(head, _ellipsoid(0.0135, 0.009, 0.008), white, e)
-			_mesh(head, _ellipsoid(0.0068, 0.0068, 0.004), iris, e + Vector3(0, 0, -0.0065))
-			_mesh(head, _ellipsoid(0.0032, 0.0032, 0.002), pupil, e + Vector3(0, 0, -0.0092))
-			if not m.wear_helmet:  # otherwise tucked under the helmet's brim
-				var brow := _mesh(head, _loft([[-0.016, 0.004, 0.003], [0.016, 0.003, 0.002]], 6), hair,
-					e + Vector3(sx * 0.002, 0.017, -0.011))
-				brow.rotation.z = PI / 2 + sx * 0.12
-			# Ears
-			var ear := _mesh(head, _ellipsoid(0.01, 0.028, 0.018), skin, c + Vector3(sx * 0.08, 0.005, 0.012))
-			ear.rotation.y = sx * 0.3
-	# Hair: close crop under the helmet, visible at the back and sides.
-	_mesh(head, _loft([
-		[0.0, 0.082, 0.1, 0.012], [0.05, 0.083, 0.102, 0.008], [0.095, 0.072, 0.09, 0.01],
-		[0.12, 0.042, 0.056, 0.012], [0.131, 0.01, 0.014, 0.012]], seg, 2.1, false, -0.3, PI + 0.3), hair, c)
-	# Some players have a beard or stubble.
-	if detail and _chance(5) < 0.35 and m.skin_color.get_luminance() > 0.2:
-		var beard := ShintyMesh.solid(hair_col.lerp(m.skin_color, 0.35), 0.95)
-		_mesh(head, _loft([
-			[-0.109, 0.02, 0.018, -0.084], [-0.1, 0.036, 0.032, -0.075], [-0.08, jaw * 0.87, 0.06, -0.046],
-			[-0.05, jaw * 1.02, 0.082, -0.018], [-0.02, 0.075, 0.094, -0.008]], seg, 2.1, false, PI + 0.25, TAU - 0.25), beard, c)
+			_mesh(head, _ellipsoid(0.0135, 0.009, 0.008, 6, 10), white, e)
+			_mesh(head, _ellipsoid(0.0068, 0.0068, 0.004, 4, 8), iris, e + Vector3(0, 0, -0.0065))
+			_mesh(head, _ellipsoid(0.0032, 0.0032, 0.002, 3, 6), pupil, e + Vector3(0, 0, -0.0092))
+			var brow := _mesh(head, _loft([[-0.016, 0.004, 0.003], [0.016, 0.003, 0.002]], 6), hair,
+				e + Vector3(sx * 0.002, 0.017, -0.011))
+			brow.rotation.z = PI / 2 + sx * 0.12
+			if not m.wear_helmet:  # otherwise inside the helmet's ear pads
+				var ear := _mesh(head, _ellipsoid(0.01, 0.028, 0.018, 6, 8), skin, c + Vector3(sx * 0.08, 0.005, 0.012))
+				ear.rotation.y = sx * 0.3
+	# Hair. A crop sits close to the skull; a buzz cut closer still and
+	# showing the skin through; long hair also hangs below the helmet at the
+	# back of the neck.
+	var cap_off := -0.002 if style == "buzz" else (0.004 if style == "long" else 0.0)
+	var cap_col := hair_col.lerp(m.skin_color, 0.45) if style == "buzz" else hair_col
+	var cap := []
+	for r in [[0.0, 0.082, 0.1, 0.012], [0.05, 0.083, 0.102, 0.008], [0.095, 0.072, 0.09, 0.01],
+			[0.12, 0.042, 0.056, 0.012], [0.131, 0.01, 0.014, 0.012]]:
+		cap.append([r[0] + (cap_off if r[0] > 0.125 else 0.0), r[1] + cap_off, r[2] + cap_off, r[3]])
+	var cap_mat := hair if cap_col == hair_col else ShintyMesh.solid(cap_col, 0.95)
+	_mesh(head, _loft(cap, seg, 2.1, false, -0.3, PI + 0.3), cap_mat, c)
+	if not m.wear_helmet:  # the front, from a hairline across the forehead
+		_mesh(head, _loft(cap.slice(1), seg, 2.1, false, PI - 0.1, TAU + 0.1), cap_mat, c)
+	if style == "long":
+		_mesh(head, _loft([[-0.125, 0.058, 0.066, 0.034], [-0.105, 0.066, 0.078, 0.03], [-0.07, 0.074, 0.09, 0.022],
+			[-0.03, 0.082, 0.1, 0.014], [0.0, 0.085, 0.103, 0.012], [0.035, 0.084, 0.102, 0.01]], seg, 2.2, false, 0.3, PI - 0.3), hair, c)
+	# Facial hair: a shell over the jaw and chin, close for stubble and
+	# standing off for a beard, or just the chin and lip for a goatee.
+	if detail and facial != "none":
+		var fh_col := hair_col.lerp(m.skin_color, 0.15)
+		match facial:
+			"stubble":
+				_face_shell(head, face, -0.02, 0.0018, 0.0, PI + 0.2, TAU - 0.2,
+					ShintyMesh.skin(m.skin_color.lerp(hair_col, 0.3)), c)
+			"beard":
+				_face_shell(head, face, -0.018, 0.003, 0.009, PI + 0.15, TAU - 0.15, ShintyMesh.solid(fh_col, 0.95), c)
+				_moustache(head, ShintyMesh.solid(fh_col, 0.95), c, 0.004)
+			"goatee":
+				_face_shell(head, face, -0.07, 0.003, 0.006, PI + 0.85, TAU - 0.85, ShintyMesh.solid(fh_col, 0.95), c)
+				_moustache(head, ShintyMesh.solid(fh_col, 0.95), c, 0.0)
+			"moustache":
+				_moustache(head, ShintyMesh.solid(fh_col, 0.95), c, 0.0)
 	if m.wear_helmet:
 		_helmet(head, c)
+
+
+## How this player looks: hair colour, hair style, facial hair and face
+## shape. Squad data can set "hair" (a colour name or hex), "hair_style"
+## (crop, buzz, long) and "facial_hair" (none, stubble, beard, goatee,
+## moustache); anything left out is picked from the player's seed so the
+## same player always looks the same.
+func _face_look() -> Dictionary:
+	var p := m.player_data
+	var hair_col: Color = _pick(HAIR_COLOURS, 1)
+	if m.skin_color.get_luminance() < 0.35:
+		hair_col = Color("141111")
+	var named := {"black": "151313", "dark": "2a1d14", "brown": "4a3020", "mid": "6b4a2b", "light": "a0703c",
+		"fair": "c9a063", "blond": "c9a063", "blonde": "c9a063", "red": "8e3b1e", "ginger": "b5562a",
+		"grey": "7d7a76", "gray": "7d7a76", "white": "c8c5bf"}
+	var h := str(p.get("hair", "")).strip_edges().to_lower()
+	if named.has(h):
+		hair_col = Color(named[h])
+	elif h != "" and Color.html_is_valid(h):
+		hair_col = Color.html(h)
+	var style := str(p.get("hair_style", "")).strip_edges().to_lower()
+	if not style in ["crop", "buzz", "long"]:
+		var r := _chance(11)
+		style = "crop" if r < 0.6 else ("buzz" if r < 0.85 else "long")
+	var facial := str(p.get("facial_hair", "")).strip_edges().to_lower()
+	if not facial in ["none", "stubble", "beard", "goatee", "moustache"]:
+		var r := _chance(5)
+		facial = "none" if r < 0.42 else ("stubble" if r < 0.72 else ("beard" if r < 0.86 else ("goatee" if r < 0.95 else "moustache")))
+	return {"hair": hair_col, "style": style, "facial": facial,
+		"jaw": lerpf(0.93, 1.08, _chance(21)), "chin": lerpf(-0.004, 0.007, _chance(22)),
+		"cheek": lerpf(0.96, 1.04, _chance(23)), "nose": lerpf(0.85, 1.2, _chance(24))}
+
+
+## A shell over the lower face, `off` off the skin (`grow` more at the chin),
+## from under the chin up to height `top`, over the front arc only.
+func _face_shell(head: Node3D, face: Array, top: float, off: float, grow: float, from: float, to: float, mat: Material, c: Vector3) -> void:
+	var rings := []
+	var low: float = face[0][0]
+	for r in face:
+		if r[0] > top:
+			break
+		var k := clampf(1.0 - (r[0] - low) / (top - low), 0.0, 1.0)  # 1 at the chin
+		var o := off + grow * k
+		rings.append([r[0] - (o if r == face[0] else 0.0), r[1] + o, r[2] + o, r[3] - grow * k * 0.4])
+	var t: Array = face[rings.size()] if rings.size() < face.size() else face[-1]
+	var u: float = (top - rings[-1][0]) / maxf(t[0] - rings[-1][0], 0.001)
+	rings.append([top, lerpf(rings[-1][1], t[1] + off, u), lerpf(rings[-1][2], t[2] + off, u), lerpf(rings[-1][3], t[3], u)])
+	_mesh(head, _loft(rings, seg, 2.1, false, from, to), mat, c)
+
+
+func _moustache(head: Node3D, mat: Material, c: Vector3, droop: float) -> void:
+	_mesh(head, ShintyMesh.sweep(PackedVector3Array([Vector3(-0.027, -0.042 - droop, -0.092), Vector3(-0.016, -0.034, -0.099),
+		Vector3(0, -0.0325, -0.103), Vector3(0.016, -0.034, -0.099), Vector3(0.027, -0.042 - droop, -0.092)]),
+		PackedVector2Array([Vector2(0.002, 0.002), Vector2(0.0045, 0.005), Vector2(0.004, 0.0045), Vector2(0.0045, 0.005), Vector2(0.002, 0.002)]), 6), mat, c)
 
 
 ## Helmet in the style players wear: a hurling-type shell with a raised
@@ -630,7 +718,7 @@ func _helmet(head: Node3D, c: Vector3) -> void:
 		# Fixings: rivets at the temples where the cage and strap attach, and
 		# the two clips on the brow.
 		for sx in [-1.0, 1.0]:
-			_mesh(head, _ellipsoid(0.007, 0.007, 0.003), metal, c + Vector3(sx * 0.1, 0.0, -0.035)).rotation.y = sx * PI / 2
+			_mesh(head, _ellipsoid(0.007, 0.007, 0.003, 3, 8), metal, c + Vector3(sx * 0.1, 0.0, -0.035)).rotation.y = sx * PI / 2
 			_mesh(head, _loft([[-0.006, 0.006, 0.004], [0.006, 0.006, 0.004]], 6, 3.0), dark,
 				c + Vector3(sx * 0.014, 0.038, -0.127)).rotation.x = PI / 2
 		var brand := _label("CORRIE", 40, 0.0006)
@@ -672,7 +760,7 @@ func _helmet(head: Node3D, c: Vector3) -> void:
 			rad.append(Vector2(0.0045, 0.0045))
 		_mesh(head, ShintyMesh.sweep(pts, rad, 5), metal)
 	# Chin cup inside the bottom of the cage, and the strap up to the ear pads.
-	_mesh(head, _ellipsoid(0.032, 0.016, 0.022), dark, c + Vector3(0, -0.118, -0.078))
+	_mesh(head, _ellipsoid(0.032, 0.016, 0.022, 5, 10), dark, c + Vector3(0, -0.118, -0.078))
 	for sx in [-1.0, 1.0]:
 		_mesh(head, ShintyMesh.sweep(PackedVector3Array([c + Vector3(sx * 0.094, -0.045, -0.01), c + Vector3(sx * 0.078, -0.09, -0.04),
 			c + Vector3(sx * 0.03, -0.118, -0.07)]), PackedVector2Array([Vector2(0.0025, 0.008), Vector2(0.0025, 0.008), Vector2(0.0025, 0.008)]), 6), dark)
@@ -792,10 +880,9 @@ static func _catmull(p0: float, p1: float, p2: float, p3: float, t: float) -> fl
 		+ (-p0 + 3.0 * p1 - 3.0 * p2 + p3) * t2 * t)
 
 
-func _ellipsoid(rx: float, ry: float, rz: float) -> ArrayMesh:
+func _ellipsoid(rx: float, ry: float, rz: float, n := 7, segs := 10) -> ArrayMesh:
 	var rings := []
-	var n := 7
 	for i in n + 1:
 		var a := lerpf(-PI / 2, PI / 2, float(i) / n)
 		rings.append([sin(a) * ry, maxf(cos(a) * rx, 0.0004), maxf(cos(a) * rz, 0.0004)])
-	return ShintyMesh.loft(rings, 10)
+	return ShintyMesh.loft(rings, segs)
