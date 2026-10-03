@@ -45,8 +45,8 @@ func setup(p_view: Node3D, figures: Array, ball: Node3D) -> void:
 ## Live camera: [eye, look, fov] for the match view.
 func live_camera(delta: float) -> Array:
 	# Where the view draws the ball (between match steps), so the pan is smooth too.
-	var at: Vector3 = view.ball_draw
-	var ball := Vector3(at.x - m.PITCH.x / 2.0, at.z, at.y - m.PITCH.y / 2.0)
+	var drawn: Vector3 = view.ball_draw
+	var ball := Vector3(drawn.x - m.PITCH.x / 2.0, drawn.z, drawn.y - m.PITCH.y / 2.0)
 	var vel := Vector3(m.ball_vel.x, 0.0, m.ball_vel.y)
 	var aspect: float = view.get_viewport().get_visible_rect().size.aspect()
 	return camera.live(delta, ball, vel, m.PITCH.x / 2.0, m.PITCH.y / 2.0, aspect)
