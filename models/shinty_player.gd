@@ -22,6 +22,10 @@ const BASE_HEIGHT := 1.80
 const CAMAN_LENGTH := 1.14  ## a full-size caman, measured off a real one
 const GRIP_TOP := 0.05     ## distance of the top hand from the butt of the caman
 const GRIP_LOW := 0.24     ## distance of the lower hand from the butt
+## Walking carry, hips space (x mirrors for lefties): where the hand hangs,
+## and which way the caman points from butt to bas (down and back, trailing).
+const WALK_HAND := Vector3(0.24, -0.12, 0.0)
+const WALK_STICK := Vector3(0.1, -0.78, 0.62)
 const HAND_GRIP := 0.065   ## wrist to the middle of the grip
 const MEET_MAX := 0.7   ## m: furthest a swing is steered to meet the ball
 const HEAD_LOCAL := Vector3(0.0, -CAMAN_LENGTH + 0.015, -0.055)  ## caman head centre in caman space
@@ -860,13 +864,15 @@ func _pose(_delta: float) -> void:
 		var hand := Vector3(0.2 * mx, 0.04 + bob, -0.16 - 0.05 * pump) + lean_fwd
 		var cd := Vector3(-0.55 * mx, -0.45 + 0.05 * pump, -0.7).normalized()
 		var face_c := Vector3(0.0, 1.0, -0.3)
-		# Walking, the caman hangs relaxed in the hand by the side, head
-		# forward near the grass, swinging a little with the stride; the free
-		# arm hangs and swings the other way.
+		# Walking, the caman hangs loose in the hand down by the side, the bas
+		# trailing behind near the grass and the butt just ahead of the hand,
+		# swinging a little with the stride; the free arm hangs and swings the
+		# other way.
 		var walk_k := 1.0 - gait
 		var swing_w := sin(ph) * moving
-		hand = hand.lerp(Vector3(0.22 * mx, -0.1, -0.04 - 0.1 * swing_w), walk_k)
-		cd = cd.lerp(Vector3(-0.12 * mx, -0.8, -0.58), walk_k).normalized()
+		hand = hand.lerp(Vector3(WALK_HAND.x * mx, WALK_HAND.y, WALK_HAND.z - 0.1 * swing_w), walk_k)
+		cd = cd.lerp(Vector3(WALK_STICK.x * mx, WALK_STICK.y, WALK_STICK.z + 0.08 * swing_w), walk_k).normalized()
+		face_c = face_c.lerp(Vector3(0.0, 0.4, 1.0), walk_k)
 		if shoulder_carry:
 			# Up by the shoulder: hand at the chest, the caman standing up
 			# past the shoulder and a little back, the bas curling back.
