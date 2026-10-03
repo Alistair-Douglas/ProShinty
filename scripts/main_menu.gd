@@ -203,6 +203,8 @@ func _build_hub() -> void:
 	col.add_theme_constant_override("separation", 14)
 	s.add_child(col)
 	var play := _tile(col, "PLAY MATCH", "Pick two clubs and take on the computer", func(): _show("kickoff"), true)
+	_tile(col, "PRACTICE", "Training ground: try every move, slow it down", func():
+		get_tree().change_scene_to_file("res://scenes/practice.tscn"))
 	_tile(col, "SQUADS", "%d clubs, every player rated" % Game.teams.size(), func():
 		squad_pick.select(Game.home_index)
 		_refresh_squad()
