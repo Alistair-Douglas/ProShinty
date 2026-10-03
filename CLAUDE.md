@@ -65,6 +65,13 @@ truly replace each other, then run the tests before pushing.
 - Input pressed from a SceneTree script's `_process` is not "just pressed"
   in the next physics step: press from `_physics_process`.
 - A freed node is not `== null`; use `is_instance_valid`.
+- Headless tests (`-s`) compile match scripts before the autoloads exist:
+  there `Game.SOME_CONST` works but `Game.some_var` or `Game.some_func()`
+  fails to compile and breaks every test. In scripts the match loads, use
+  `get_node_or_null("/root/Game")` instead.
+- Never block the main thread waiting on a worker thread that builds
+  meshes: the worker may be waiting on the renderer, which runs on the main
+  thread, and the game freezes.
 - The ground can be built off the main thread (`build_now()`), but
   `_finish_build()` (scenery batching, collision, environment) must run on
   the main thread because it reads meshes back from the renderer.
