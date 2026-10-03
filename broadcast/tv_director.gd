@@ -47,6 +47,14 @@ func live_camera(delta: float) -> Array:
 	var ball := Vector3(m.ball_pos.x - m.PITCH.x / 2.0, m.ball_z, m.ball_pos.y - m.PITCH.y / 2.0)
 	var vel := Vector3(m.ball_vel.x, 0.0, m.ball_vel.y)
 	var aspect: float = view.get_viewport().get_visible_rect().size.aspect()
+	if camera.view == ShintyTVCamera.View.BEHIND:
+		# Behind your player (in a computer-only match, behind the ball for
+		# the home side).
+		var side: int = maxi(m.human_side, 0)
+		var at := ball
+		if m.human != null and view.figures.has(m.human):
+			at = view.figures[m.human]["root"].get_global_transform_interpolated().origin
+		return camera.behind(delta, at, ball, m.attack_dir[side], m.PITCH.x / 2.0, m.PITCH.y / 2.0)
 	return camera.live(delta, ball, vel, m.PITCH.x / 2.0, m.PITCH.y / 2.0, aspect)
 
 

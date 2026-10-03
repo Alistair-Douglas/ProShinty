@@ -13,6 +13,13 @@ var venue := -1  # ShintyPitch.Venue; -1 until picked = the home team's ground
 var last_result := {}
 ## 0 Low, 1 Medium, 2 High (ShintyPitch.Detail). Saved between runs.
 var graphics_quality := 1
+## Match camera: 0 TV gantry, 1 close TV (lower, nearer the play), 2 end to
+## end behind your player. Saved; changed in Settings or on the pause screen.
+var camera_view := 0
+const CAMERA_NAMES := ["TV", "Close TV", "End to end"]
+## Set by the menu as a match starts: the view plays the pre-match build-up
+## once (tests that load a match straight in skip it).
+var prematch_next := false
 
 ## Camans from the caman designer, saved between runs, by club id:
 ## {"team": design, "players": {shirt number: design}}. A player with their
@@ -37,6 +44,8 @@ func _ready() -> void:
 		graphics_quality = clampi(int(cfg.get_value("graphics", "quality")), 0, 2)
 	elif RenderingServer.get_video_adapter_type() == RenderingDevice.DEVICE_TYPE_DISCRETE_GPU:
 		graphics_quality = 2  # first run on a gaming GPU: the full look
+	if cfg.has_section_key("camera", "view"):
+		camera_view = clampi(int(cfg.get_value("camera", "view")), 0, CAMERA_NAMES.size() - 1)
 	_apply_graphics()
 
 
@@ -48,6 +57,14 @@ func set_graphics_quality(q: int, remember := true) -> void:
 	var cfg := ConfigFile.new()
 	cfg.load(SETTINGS_PATH)
 	cfg.set_value("graphics", "quality", graphics_quality)
+	cfg.save(SETTINGS_PATH)
+
+
+func set_camera_view(v: int) -> void:
+	camera_view = posmod(v, CAMERA_NAMES.size())
+	var cfg := ConfigFile.new()
+	cfg.load(SETTINGS_PATH)
+	cfg.set_value("camera", "view", camera_view)
 	cfg.save(SETTINGS_PATH)
 
 
@@ -196,6 +213,10 @@ func _setup_input() -> void:
 	_bind("sprint", [KEY_SHIFT], [JOY_BUTTON_RIGHT_SHOULDER])
 	_bind("pause", [KEY_ESCAPE, KEY_P], [JOY_BUTTON_START])
 	_bind("quit_match", [KEY_M], [JOY_BUTTON_BACK])
+	# Cameras: a click of the right stick zooms in and out; on the pause
+	# screen Y changes the camera.
+	_bind("camera_zoom", [KEY_V], [JOY_BUTTON_RIGHT_STICK])
+	_bind("camera_next", [KEY_TAB], [JOY_BUTTON_Y])
 
 
 func _bind(action: String, keys: Array, buttons: Array = [], axis: Array = [], mouse: Array = []) -> void:

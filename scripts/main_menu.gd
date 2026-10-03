@@ -368,6 +368,7 @@ func _start() -> void:
 	Game.human_side = side_pick.selected
 	Game.difficulty = diff_pick.selected
 	Game.half_minutes = HALF_LENGTHS[length_pick.selected]
+	Game.prematch_next = true
 	get_tree().change_scene_to_file("res://scenes/loading.tscn")
 
 
@@ -520,6 +521,16 @@ func _build_controls() -> void:
 	mus.size = Vector2(300, 74)
 	mus.changed.connect(func(i): Music.set_volume_step(i))
 	s.add_child(mus)
+	# Match camera (TV, close TV, end to end), remembered; Y changes it on
+	# the pause screen too.
+	var cam := ShintyStepper.new("Match camera", Game.CAMERA_NAMES, Game.camera_view)
+	cam.position = Vector2(1000, 120)
+	cam.size = Vector2(250, 74)
+	cam.changed.connect(func(i): Game.set_camera_view(i))
+	s.add_child(cam)
+	cam.focus_neighbor_bottom = back.get_path()
+	for c in [back, gfx, mus]:
+		c.focus_neighbor_top = cam.get_path()
 	back.focus_neighbor_right = gfx.get_path()
 	gfx.focus_neighbor_left = back.get_path()
 	gfx.focus_neighbor_right = mus.get_path()

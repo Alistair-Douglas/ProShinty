@@ -22,6 +22,7 @@ var shy_blend := 0.0      # 0 = broadcast camera, 1 = shy camera
 var shy_look := Vector3.ZERO
 var shy_eye := Vector3.ZERO
 var director: ShintyTVDirector
+var prematch: ShintyPrematch  # the build-up before the first throw-up, while it runs
 var aim_arrow: Node3D     # where the player is aiming a shy, hit-out or corner
 var crowd: ShintyCrowd
 var goal_judges: ShintyGoalJudges
@@ -60,6 +61,9 @@ func _ready() -> void:
 	camera.fov = 45.0
 	camera.far = 6000.0  # the far shore of the Forth
 	camera.current = true
+	# Placed every drawn frame from the (interpolated) play, so physics
+	# interpolation must leave it alone or it would lag a tick behind.
+	camera.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	add_child(camera)
 	_build_boards()
 	_build_aim_arrow()
@@ -74,6 +78,14 @@ func _ready() -> void:
 	var tracked: Array = figures.values()
 	tracked.append(referee_figure)
 	director.setup(self, tracked, ball)
+	if has_node("/root/Game"):
+		director.camera.view = get_node("/root/Game").camera_view
+		if get_node("/root/Game").prematch_next:
+			get_node("/root/Game").prematch_next = false
+			prematch = ShintyPrematch.new()
+			prematch.name = "Prematch"
+			add_child(prematch)
+			prematch.setup(self)
 	var audio := ShintyMatchAudio.new()
 	audio.name = "Audio"
 	audio.m = m
@@ -93,6 +105,8 @@ func _process(delta: float) -> void:
 	if director.playing:
 		director.step(delta)
 		return
+	if prematch != null:
+		prematch.step(delta)
 	for p in m.players:
 		if not figures.has(p):
 			_add_figure(p)   # a substitute coming on
@@ -105,6 +119,7 @@ func _process(delta: float) -> void:
 	_update_referee(delta)
 	_update_aim_arrow()
 	ball.position = w(m.ball_pos, m.ball_z + ShintyBallPhysics.RADIUS * ShintyMatchAdapter.TO_YARDS)
+	_camera_buttons()
 	_update_camera(delta)
 	director.after_frame(delta)
 
@@ -169,7 +184,23 @@ func _update_referee(delta: float) -> void:
 	ShintyMatchAdapter.update_player(referee_figure, ref.vel, 0.0, false, w(m.ball_pos, m.ball_z))
 
 
+## Right stick click (V) zooms the live camera in and out; on the pause
+## screen Y (Tab) goes round the cameras, and the choice is remembered.
+func _camera_buttons() -> void:
+	var cam := director.camera
+	if m.paused:
+		if Input.is_action_just_pressed("camera_next") and not m.subs.menu_busy():
+			cam.view = (cam.view + 1) % ShintyTVCamera.View.size()
+			if has_node("/root/Game"):
+				get_node("/root/Game").set_camera_view(cam.view)
+	elif Input.is_action_just_pressed("camera_zoom"):
+		cam.zoomed = not cam.zoomed
+
+
 func _update_camera(delta: float) -> void:
+	if prematch != null:
+		prematch.place_camera(camera, delta)
+		return
 	# The TV gantry camera: pans and zooms from high in the stand.
 	var tv: Array = director.live_camera(delta)
 	var eye: Vector3 = tv[0]
