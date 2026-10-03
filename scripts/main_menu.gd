@@ -24,6 +24,7 @@ var hints: Label
 var home_pick: ShintyTeamCard
 var away_pick: ShintyTeamCard
 var pitch_pick: ShintyStepper
+var weather_pick: ShintyStepper
 var side_pick: ShintyStepper
 var diff_pick: ShintyStepper
 var length_pick: ShintyStepper
@@ -292,11 +293,13 @@ func _build_kickoff() -> void:
 	s.add_child(row)
 	side_pick = ShintyStepper.new("You play as", ["Home team", "Away team"], Game.human_side)
 	pitch_pick = ShintyStepper.new("Pitch", ShintyPitch.VENUE_NAMES, maxi(Game.venue, 0))
+	weather_pick = ShintyStepper.new("Weather", ShintyWeather.NAMES, Game.weather)
 	diff_pick = ShintyStepper.new("Difficulty", ["Easy", "Normal", "Hard"], Game.difficulty)
 	length_pick = ShintyStepper.new("Half length", HALF_LENGTHS.map(func(m): return "%d minutes" % m), maxi(HALF_LENGTHS.find(Game.half_minutes), 0))
-	for st in [side_pick, pitch_pick, diff_pick, length_pick]:
-		st.custom_minimum_size = Vector2(280, 74)
+	for st in [side_pick, pitch_pick, weather_pick, diff_pick, length_pick]:
+		st.custom_minimum_size = Vector2(280 if st == pitch_pick else 200, 74)
 		row.add_child(st)
+	weather_pick.custom_minimum_size.x = 220
 	if Game.venue < 0:
 		_pick_home_ground()
 
@@ -322,11 +325,11 @@ func _build_kickoff() -> void:
 		card.focus_neighbor_bottom = side_pick.get_path()
 	home_pick.focus_neighbor_right = away_pick.get_path()
 	away_pick.focus_neighbor_left = home_pick.get_path()
-	for st in [side_pick, pitch_pick]:
+	for st in [side_pick, pitch_pick, weather_pick]:
 		st.focus_neighbor_top = home_pick.get_path()
 	for st in [diff_pick, length_pick]:
 		st.focus_neighbor_top = away_pick.get_path()
-	for st in [side_pick, pitch_pick, diff_pick, length_pick]:
+	for st in [side_pick, pitch_pick, weather_pick, diff_pick, length_pick]:
 		st.focus_neighbor_bottom = start_button.get_path()
 	start_button.focus_neighbor_top = length_pick.get_path()
 	start_button.focus_neighbor_left = back.get_path()
@@ -365,6 +368,7 @@ func _start() -> void:
 	Game.home_index = home_pick.selected
 	Game.away_index = away_pick.selected
 	Game.venue = pitch_pick.selected
+	Game.weather = weather_pick.selected
 	Game.human_side = side_pick.selected
 	Game.difficulty = diff_pick.selected
 	Game.half_minutes = HALF_LENGTHS[length_pick.selected]

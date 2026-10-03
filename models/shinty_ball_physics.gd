@@ -33,6 +33,13 @@ var spin := Vector3.ZERO          ## angular velocity, rad/s
 var ground_y := 0.0
 var hails: Array = []             ## ShintyHailModel nodes to collide with
 var goal_armed := true            ## re-armed on every strike so a goal counts once
+## How wet the pitch is: 0 dry and hard (bounces high, runs on), 0.5 damp
+## (what the constants above are tuned for), 1 soaking (dead bounce, the ball
+## holds up in the grass).
+var wetness := 0.5
+## Wind at 10 m up, m/s. It drags on the ball in the air, less near the
+## ground, so the high ball is pushed most; a rolling ball doesn't feel it.
+var wind := Vector3.ZERO
 
 
 func duplicate_state() -> ShintyBallPhysics:
@@ -41,6 +48,8 @@ func duplicate_state() -> ShintyBallPhysics:
 	c.velocity = velocity
 	c.spin = spin
 	c.ground_y = ground_y
+	c.wetness = wetness
+	c.wind = wind
 	return c
 
 
@@ -125,8 +134,12 @@ func _integrate(h: float, events: Array) -> void:
 	if is_airborne():
 		var s := velocity.length()
 		var acc := Vector3(0, -GRAVITY, 0)
+		# Drag acts on the ball's speed through the air, not over the ground.
+		var air := velocity - wind * clampf(0.3 + (position.y - floor_y) / 8.0, 0.3, 1.0)
+		var sa := air.length()
+		if sa > 0.01:
+			acc -= air * (K_DRAG * sa)
 		if s > 0.01:
-			acc -= velocity * (K_DRAG * s)
 			var w := spin.length()
 			if w > 0.5:
 				var cl := minf(0.3, 1.2 * RADIUS * w / s)
@@ -150,14 +163,16 @@ func _integrate(h: float, events: Array) -> void:
 		velocity.y = 0.0
 		var s := velocity.length()
 		var side := spin.y * exp(-ROLL_SPIN_DECAY * h)
-		if s > BOBBLE_SPEED and randf() < BOBBLE_RATE * s / 15.0 * h:
+		var k := wetness - 0.5
+		if s > BOBBLE_SPEED and randf() < BOBBLE_RATE * (1.0 - k) * s / 15.0 * h:
 			# A bump in the turf: the ball hops a few centimetres.
 			velocity.y = randf_range(0.3, 0.3 + s * 0.05)
 			velocity = velocity.rotated(Vector3.UP, randfn(0.0, TURF_KICK * 0.5))
 			position.y = floor_y + 0.004
 			return
 		if s > 0.0:
-			var ns := maxf(0.0, s - (ROLL_DECEL + ROLL_DRAG * s) * h)
+			# A hard, dry pitch lets it run; wet grass holds it up.
+			var ns := maxf(0.0, s - (ROLL_DECEL * (1.0 + 0.9 * k) + ROLL_DRAG * (1.0 + 0.6 * k) * s) * h)
 			velocity *= ns / s
 			# A ball rolling with sidespin drifts the way it is spinning.
 			if ns > 0.5 and absf(side) > 0.5:
@@ -188,10 +203,12 @@ func _ground_contact(vy: float, bounce: bool) -> void:
 		var side := spin.y
 		spin += r.cross(dv) * (5.0 / (2.0 * RADIUS * RADIUS))
 		spin.y = side
+	var k := wetness - 0.5
 	if bounce or vy > 0.3:
-		flat *= TURF_SOAK   # a real landing, not a ball settling onto the grass
+		flat *= TURF_SOAK - 0.08 * k   # a real landing, not a ball settling onto the grass
 	if bounce:
-		var e := clampf(GROUND_RESTITUTION + 0.1 - 0.012 * vy, 0.28, 0.55) * randf_range(0.9, 1.1)
+		# Hard ground gives a big bounce; a soft, wet one kills it.
+		var e := clampf(GROUND_RESTITUTION + 0.1 - 0.012 * vy, 0.28, 0.55) * randf_range(0.9, 1.1) * (1.0 - 0.55 * k)
 		flat = flat.rotated(Vector3.UP, randfn(0.0, TURF_KICK))
 		velocity = flat + Vector3(0, vy * e, 0)
 		spin.y *= 0.7   # sidespin survives the bounce, so it kicks on
