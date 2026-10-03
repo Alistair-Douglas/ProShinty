@@ -274,15 +274,9 @@ func _body() -> void:
 		_mesh(la, _loft([
 			[0.02, 0.04 * w, 0.041 * w], [-0.05, 0.046 * w, 0.042 * w], [-0.12, 0.041 * w, 0.036 * w],
 			[-0.22, 0.031 * w, 0.026 * w], [-0.275, 0.027, 0.022]], seg), skin)
-		# Hand: a gripping fist with a thumb wrapped round the caman.
-		var hand := _attach(side + "Hand")
-		_mesh(hand, _loft([
-			[0.01, 0.027, 0.021], [-0.03, 0.041, 0.024], [-0.065, 0.044, 0.028, -0.006],
-			[-0.095, 0.036, 0.03, -0.012]], 12, 2.8), skin)
-		if detail:
-			var thumb := _mesh(hand, _loft([[0.0, 0.012, 0.012], [-0.04, 0.011, 0.011], [-0.055, 0.009, 0.009]], 8),
-				skin, Vector3(-sgn * 0.02, -0.035, -0.025))
-			thumb.rotation = Vector3(0.9, 0.0, sgn * 0.5)
+		# Hand: gripping the caman. When it holds the stick the hand bone
+		# is turned so the shaft runs along its X, HAND_GRIP below the wrist.
+		_grip_hand(_attach(side + "Hand"), side, skin)
 
 	for side in ["Left", "Right"]:
 		# Thigh with a front quad bulge; loose shorts leg over the top.
@@ -301,6 +295,50 @@ func _body() -> void:
 		# Boot: shaped upper, contrasting sole, a few studs.
 		var foot := _attach(side + "Foot")
 		_boot(foot, 1.0 if side == "Left" else -1.0)
+
+
+## A hand closed round the shaft, in the hand bone's grip frame: the shaft
+## runs along X (thumb side towards the bas) through (0, -HAND_GRIP, 0), the
+## wrist at the origin. Four fingers curl from the knuckles over the far side
+## of the shaft and tuck into the palm; the thumb wraps the other way over
+## the index finger. The back of the hand faces +Z on the right hand and -Z
+## on the left.
+func _grip_hand(hand: Node3D, side: String, skin: Material) -> void:
+	var g := Vector3(0, -ShintyPlayerModel.HAND_GRIP, 0)
+	var bz := 1.0 if side == "Right" else -1.0
+	var hs := lerpf(0.95, 1.06, m.build)  # bigger hands on bigger players
+	# Palm and back of the hand, wrist to knuckles, closed over the shaft.
+	_mesh(hand, _loft([
+		[0.012, 0.026, 0.02, 0.0], [-0.02, 0.036 * hs, 0.024, 0.0],
+		[-0.05, 0.04 * hs, 0.028, -bz * 0.002], [-0.07, 0.039 * hs, 0.022, bz * 0.006]], seg, 2.6), skin)
+	var r_wrap := 0.0265  # round the taped shaft (up to 1.75 cm radius on a thick keeper's caman)
+	var fingers := [[0.026, 0.0088, 1.0], [0.009, 0.0093, 1.04], [-0.009, 0.009, 1.0], [-0.025, 0.008, 0.9]]
+	if not detail:
+		fingers = [[0.0, 0.009, 1.0]]  # one band for all four, 3.4 cm wide
+	for f in fingers:
+		var pts := PackedVector3Array()
+		var rad := PackedVector2Array()
+		var steps := 6 if detail else 4
+		for k in steps + 1:
+			var u := float(k) / steps
+			# From the knuckle on the back of the hand, round the far side of
+			# the shaft, into the palm.
+			var ang := lerpf(deg_to_rad(15.0), deg_to_rad(178.0 * f[2]), u)
+			# Out at the knuckle, snug round the shaft, the tip pressed in.
+			var rr: float = r_wrap * (lerpf(1.18, 1.0, u * 3.0) if u < 0.34 else lerpf(1.0, 0.86, (u - 0.34) / 0.66))
+			pts.append(g + Vector3(f[0] * hs, -sin(ang) * rr, bz * cos(ang) * rr))
+			var t: float = f[1] * lerpf(1.0, 0.8, u)
+			rad.append(Vector2(t if detail else 0.034 * hs, t))
+		# Mirrored on the right hand, so flip the frame to keep the faces outward.
+		_mesh(hand, ShintyMesh.sweep(pts, rad, 6, 2.0, false, Vector3.RIGHT * -bz), skin)
+	# Thumb: from the heel of the hand on the thumb side, round the near side
+	# of the shaft, its tip resting on the curled index finger.
+	var th := PackedVector3Array([Vector3(0.03, -0.018, -bz * 0.016), Vector3(0.04, -0.045, -bz * 0.02),
+		Vector3(0.036, -0.074, -bz * 0.02), Vector3(0.024, -0.093, -bz * 0.008)])
+	var tr := PackedVector2Array([Vector2(0.013, 0.012), Vector2(0.0105, 0.0105), Vector2(0.0095, 0.009), Vector2(0.008, 0.0075)])
+	for i in th.size():
+		th[i].x *= hs
+	_mesh(hand, ShintyMesh.sweep(th, tr, 6 if detail else 4, 2.0, false, Vector3.RIGHT * -bz), skin)
 
 
 func _sock_mesh() -> ArrayMesh:
