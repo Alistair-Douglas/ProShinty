@@ -83,11 +83,12 @@ func _process(_d: float) -> bool:
 			cam.view = cam_phase / 2
 			cam.zoomed = cam_phase % 2 == 1
 		if cam_frame == 90:
-			var focus: Vector3 = view.ball.global_position
-			var d := c.global_position.distance_to(focus)
+			# How far the camera stands from what it looks at (the ball, or for
+			# end to end the play ahead of your player).
+			var d := cam.eye.distance_to(cam.look)
 			var key := "%s%s" % [Game.CAMERA_NAMES[cam.view], " zoomed" if cam.zoomed else ""]
 			dist[key] = d
-			print("%s: eye %s, %.1f yd from the ball, fov %.1f" % [key, c.global_position, d, c.fov])
+			print("%s: eye %s, %.1f yd from what it looks at, fov %.1f" % [key, c.global_position, d, c.fov])
 			_check(c.global_position.is_finite() and c.fov > 5.0 and c.fov < 80.0, key + " camera sane")
 			_shot("camera_" + key.to_snake_case().replace(" ", "_"))
 			cam_phase += 1
