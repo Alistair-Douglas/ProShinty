@@ -251,6 +251,9 @@ func _process(delta: float) -> void:
 class GroundReaper extends Node:
 	var jobs: Array = []
 
+	func _init() -> void:
+		add_to_group(&"ground_reapers")
+
 	func _process(_delta: float) -> void:
 		for job in jobs.duplicate():
 			if WorkerThreadPool.is_task_completed(job[1]):

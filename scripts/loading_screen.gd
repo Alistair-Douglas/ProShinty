@@ -231,7 +231,10 @@ func _process(delta: float) -> void:
 					set_process(false)
 					return
 			1:
-				if _shown >= FILES_SHARE - 0.001:
+				# Wait for any menu ground still building on another thread
+				# (ShintyMenuBackdrop.GroundReaper): building the match at the
+				# same time can trip over it in the renderer.
+				if _shown >= FILES_SHARE - 0.001 and get_tree().get_nodes_in_group(&"ground_reapers").is_empty():
 					_build_match()
 					_progress = FILES_SHARE + BUILD_SHARE
 					_phase = 2
