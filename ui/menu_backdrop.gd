@@ -192,9 +192,13 @@ func _poll_grounds() -> void:
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_PREDELETE:
-		for job in _building.values():
-			WorkerThreadPool.wait_for_task_completion(job[1])
-			job[0].free()
+		# Don't wait here for a ground still being built: its thread can be
+		# waiting on the renderer, which runs on this (the main) thread, so
+		# waiting would freeze the game. A GroundReaper frees it once done.
+		if not _building.is_empty():
+			var reaper := GroundReaper.new()
+			reaper.jobs = _building.values()
+			Engine.get_main_loop().root.add_child.call_deferred(reaper)
 		for g in _grounds.values():
 			if is_instance_valid(g) and not g.is_inside_tree():
 				g.free()
@@ -240,3 +244,18 @@ func _process(delta: float) -> void:
 	var drift := 0.12 if _shot == "designer" else 1.0  # close to the bench: barely moves
 	tr.origin += Vector3(sin(_time * 0.21) * 0.12, sin(_time * 0.33) * 0.05, cos(_time * 0.17) * 0.1) * drift
 	camera.transform = tr
+
+
+## Outlives the menu to free grounds whose worker threads were still
+## building when the menu closed.
+class GroundReaper extends Node:
+	var jobs: Array = []
+
+	func _process(_delta: float) -> void:
+		for job in jobs.duplicate():
+			if WorkerThreadPool.is_task_completed(job[1]):
+				WorkerThreadPool.wait_for_task_completion(job[1])
+				job[0].free()
+				jobs.erase(job)
+		if jobs.is_empty():
+			queue_free()
