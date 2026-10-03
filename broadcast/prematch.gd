@@ -163,9 +163,9 @@ func place_camera(cam: Camera3D, delta: float) -> void:
 ## towards the stand.
 func _flight_shot(k: float) -> Array:
 	var e := k * k * (3.0 - 2.0 * k)
-	var a := lerpf(-0.55, 1.05, e)
-	var r := lerpf(115.0, 70.0, e)
-	var h := lerpf(55.0, 20.0, e)
+	var a := lerpf(-0.55, 1.2, e)
+	var r := lerpf(115.0, 85.0, e)
+	var h := lerpf(55.0, 32.0, e)   # stays over the trees round the ground
 	var centre: Vector3 = view.w(m.PITCH / 2.0)
 	var eye: Vector3 = centre + Vector3(cos(a) * r, h, sin(a) * r)
 	return [eye, centre + Vector3(0, 0, lerpf(-10.0, 0.0, e)), lerpf(42.0, 36.0, e)]

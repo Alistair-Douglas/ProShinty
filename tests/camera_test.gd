@@ -74,8 +74,6 @@ func _process(_d: float) -> bool:
 		_check(view.ball.visible, "ball shown")
 		clock_at_end = m.clock
 		return false
-	if frame == prematch_done_frame + 120:
-		_check(m.clock > clock_at_end, "clock runs after the build-up")
 	# Cameras: 90 frames each, unzoomed then zoomed.
 	if frame >= prematch_done_frame + 120:
 		var cam: ShintyTVCamera = view.director.camera
@@ -98,6 +96,7 @@ func _process(_d: float) -> bool:
 				_check(dist["TV"] > dist["Close TV"], "close TV nearer than TV")
 				_check(dist["Close TV"] > dist["End to end"], "end to end nearest")
 				_check(dist["End to end zoomed"] < dist["End to end"], "zoom brings end to end in")
+				_check(m.state != m.State.THROW_UP and m.clock > clock_at_end, "the throw-up was played and the clock runs")
 				return _end()
 	return false
 

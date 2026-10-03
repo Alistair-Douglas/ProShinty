@@ -171,8 +171,8 @@ func _update_player(p, f: Dictionary, delta: float) -> void:
 	else:
 		model.set_meet(null)
 	f["ring"].visible = false   # the red marker over the head is enough
-	f["arrow"].visible = p == m.human
-	f["tag"].visible = p == m.human or p.is_keeper()
+	f["arrow"].visible = p == m.human and prematch == null
+	f["tag"].visible = (p == m.human or p.is_keeper()) and prematch == null
 
 
 func _update_referee(delta: float) -> void:
