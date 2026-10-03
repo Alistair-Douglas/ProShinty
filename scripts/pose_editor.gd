@@ -75,7 +75,7 @@ func _ready() -> void:
 		sl.max_value = float(s[4])
 		sl.step = 1.0
 		var key: String = s[0]
-		var unit := " cm" if s[2] == "caman" else "°"
+		var unit := " cm" if s[2] in ["caman", "grip"] else "°"
 		sl.value_changed.connect(func(v):
 			if not _updating:
 				ShintyPoseTweaks.set_value(action, phase, key, v)

@@ -33,6 +33,10 @@ const SLIDERS := [
 	["caman_across", "Hands (+ to the right)", "caman", 0, 40.0],
 	["caman_up", "Hands (+ up)", "caman", 1, 40.0],
 	["caman_out", "Hands (+ out in front)", "caman", 2, 40.0],
+	["caman_tilt", "Caman head (+ up)", "tilt", 0, 45.0],
+	["caman_point", "Caman points (+ left)", "tilt", 1, 45.0],
+	["top_grip", "Top hand (+ down the shaft)", "grip", 0, 40.0],
+	["low_grip", "Lower hand (+ down the shaft)", "grip", 1, 40.0],
 ]
 
 ## Sliders whose plus way is a minus turn of the joint (bending forward, a
@@ -121,7 +125,9 @@ static func reset(action: String, phase: int = -1) -> void:
 
 ## The adjustment `t` seconds into an action of length `len`, whose three
 ## moments fall at `times`: {"rot": {bone: Vector3 radians}, "caman":
-## Vector3 metres, "twist": radians}, or {} when there is none.
+## Vector3 metres, "twist": radians, "tilt": Vector2 radians (caman head up,
+## caman turned left), "grip": Vector2 metres (top and lower hand further
+## down the shaft)}, or {} when there is none.
 static func at(action: String, t: float, times: Array, len: float) -> Dictionary:
 	ensure_loaded()
 	var tw: Dictionary = data.get(action, {})
@@ -147,6 +153,8 @@ static func at(action: String, t: float, times: Array, len: float) -> Dictionary
 	var rot := {}
 	var caman := Vector3.ZERO
 	var twist := 0.0
+	var tilt := Vector2.ZERO
+	var grip := Vector2.ZERO
 	for s in SLIDERS:
 		var v := 0.0
 		for i in 3:
@@ -160,11 +168,15 @@ static func at(action: String, t: float, times: Array, len: float) -> Dictionary
 				caman[int(s[3])] += v * 0.01
 			"twist":
 				twist += deg_to_rad(v)
+			"tilt":
+				tilt[int(s[3])] += deg_to_rad(v)
+			"grip":
+				grip[int(s[3])] += v * 0.01
 			_:
 				var e: Vector3 = rot.get(s[2], Vector3.ZERO)
 				e[int(s[3])] += deg_to_rad(v)
 				rot[s[2]] = e
-	return {"rot": rot, "caman": caman, "twist": twist}
+	return {"rot": rot, "caman": caman, "twist": twist, "tilt": tilt, "grip": grip}
 
 
 ## The three moments of an action, as times into it.

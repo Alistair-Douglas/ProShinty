@@ -49,6 +49,29 @@ func _pose_tweaks(teams: Array) -> void:
 	print("swing head at the top: %s, tweaked %s" % [before, after])
 	assert(after.distance_to(before) > 0.1, "a tweak moves the caman")
 	assert(absf(ShintyPlayerModel.contact_delay("swing", 1.0) - delay_before * 1.5) < 0.01, "length changes the match's contact time")
+	# The hands move along the shaft.
+	ShintyPoseTweaks.reset("swing")
+	var hands := func() -> float:
+		var p := ShintyPlayerModel.new()
+		p.manual_update = true
+		root.add_child(p)
+		p.setup(teams[0]["players"][10], teams[0])
+		p.play_action(&"pass", 1.0)
+		for i in 15:
+			p.advance(1.0 / 60.0)
+		var sk: Skeleton3D = p.find_children("*", "Skeleton3D", true, false)[0]
+		var l := sk.get_bone_global_pose(sk.find_bone("LeftHand")).origin
+		var r := sk.get_bone_global_pose(sk.find_bone("RightHand")).origin
+		p.free()
+		return l.distance_to(r)
+	var gap_before: float = hands.call()
+	ShintyPoseTweaks.set_value("pass", 1, "low_grip", 25.0)
+	ShintyPoseTweaks.set_value("pass", 0, "low_grip", 25.0)
+	var gap_after: float = hands.call()
+	print("hands apart on a pass: %.2f m, lower hand moved down %.2f m" % [gap_before, gap_after])
+	assert(gap_after > gap_before + 0.1, "the lower hand slides down the shaft")
+	ShintyPoseTweaks.reset("pass")
+	ShintyPoseTweaks.set_value("swing", 0, "caman_up", 30.0)
 	var path := ShintyPoseTweaks.save()
 	assert(path != "", "tweaks saved")
 	ShintyPoseTweaks.data = {}

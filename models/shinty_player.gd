@@ -699,6 +699,9 @@ func _pose(_delta: float) -> void:
 		twist = -1.2 * k
 		_crouch(rot, 0.4 * k)
 
+	# Where the hands hold the shaft, from the butt (the pose editor can move them).
+	var grip_top := GRIP_TOP
+	var grip_low := GRIP_LOW
 	if _action != &"":
 		var r := _action_pose(rot)
 		if r.size() > 0:
@@ -714,6 +717,9 @@ func _pose(_delta: float) -> void:
 				rot[b] = rot.get(b, Vector3.ZERO) + tw["rot"][b]
 			cam_p += tw["caman"]
 			twist += tw["twist"]
+			cam_d = cam_d.rotated(Vector3.RIGHT, tw["tilt"].x).rotated(Vector3.UP, tw["tilt"].y).normalized()
+			grip_top = maxf(0.0, GRIP_TOP + tw["grip"].x)
+			grip_low = maxf(grip_top + 0.08, GRIP_LOW + tw["grip"].y)
 
 	# Reaching: bend and lunge towards the target (hockey-style reach).
 	var reaching := _reach > 0.01 and _reach_target != null and (_action == &"" or _action in [&"poke", &"block", &"trap", &"air_kill", &"air_clear"])
@@ -852,11 +858,11 @@ func _pose(_delta: float) -> void:
 		carry_top = hips_g.origin + yaw_b * (Vector3(-0.17 * mx, 0.24 - 0.08 * pump + bob, -0.16 + 0.22 * pump) + lean_fwd * 1.3)
 	# Keep both grips within arm's reach: slide the caman towards the shoulders.
 	for iter in 3:
-		var grips := [[top_side, GRIP_TOP], [low_side, GRIP_LOW]]
+		var grips := [[top_side, grip_top], [low_side, grip_low]]
 		if _free_hand != null or carry > 0.5:
-			grips = [[low_side, GRIP_LOW]]
+			grips = [[low_side, grip_low]]
 		elif _free_low != null:
-			grips = [[top_side, GRIP_TOP]]
+			grips = [[top_side, grip_top]]
 		for g in grips:
 			var grip: Vector3 = ct * Vector3(0, -g[1], 0)
 			var to_grip: Vector3 = grip - _shoulder(g[0])
@@ -874,8 +880,8 @@ func _pose(_delta: float) -> void:
 	_skel.set_bone_pose_scale(caman_bone, Vector3.ONE if _caman.visible else Vector3.ZERO)
 
 	# Both hands grip the shaft: top hand near the butt, lower hand further down.
-	var top := ct * Vector3(0, -GRIP_TOP, 0)
-	var low := ct * Vector3(0, -GRIP_LOW, 0)
+	var top := ct * Vector3(0, -grip_top, 0)
+	var low := ct * Vector3(0, -grip_low, 0)
 	var free_target = null
 	if _free_hand != null:
 		var fh: Vector3 = _free_hand
