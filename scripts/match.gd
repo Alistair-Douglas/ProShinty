@@ -35,6 +35,10 @@ const EXTRA_TIME_PAUSE := 4.0    # the break before extra time: players stay out
 const THROW_UP_AIM_MAX := 1.1   # rad: how far off straight up the park a throw-up can be aimed
 const THROUGH_LEAD := 8.0       # yd: a through ball is played this far ahead of the runner
 const WALK_SPEED := 1.6
+const SHOOTOUT_KICKS := 5       # penalties each before sudden death
+const SHOOTOUT_PAUSE := 2.5
+const PEN_IDLE_MAX := 20.0      # s: a penalty you leave this long is hit for you
+const PEN_GUESS := 0.35         # a keeper's chance of guessing a penalty right, plus up to 0.2 for keeping
 const MOUSE_AIM_MS := 4000      # the mouse aims hits while it's been moved this recently          # yd/s: walking off at half time and full time
 const PENALTY_SPOT := 20.0   # penalty hit, yards from the goal line
 const FREE_HIT_BACK := 5.0   # opponents stand this far off a set piece
@@ -158,7 +162,16 @@ var state_timer := 0.0
 var half := 1
 var clock := 0.0
 var half_seconds := 180.0
-var extra_time := true    # a draw at full time goes to two halves of extra time
+var extra_time := true
+var shootout := false     # level after extra time: penalties (see _start_shootout)
+var shoot_kicks := [[], []]   # per team, true for each penalty scored, false for a miss
+var shoot_order := [[], []]   # each side's takers, best hitter first
+var shoot_turn := 0           # whose penalty is next
+var shoot_wait := 0.0         # pause before the next one
+var shoot_live := false       # a penalty is being taken
+var shoot_t := 0.0            # time since it was struck
+var shoot_event_i := 0        # events from this index on belong to this penalty
+var shoot_result := []        # penalties scored by each side once it's decided    # a draw at full time goes to two halves of extra time
 var break_kind := ""      # during State.HALF_TIME: "half" (walk off) or "extra" (before extra time)
 var human_side := 0
 var human: Player = null
@@ -189,6 +202,7 @@ var last_team := -1
 var referee := Referee.new()
 var subs := Subs.new()             # benches and substitutions (substitutions.gd)
 var penalty_taker: Player = null
+var pen_idle := 0.0              # how long your penalty taker has stood over it
 var penalty_side := 0.0           # the corner a computer penalty taker has picked (+1 or -1 across the goal)
 var gather_keeper: Player = null   # a saved ball dropping to the keeper
 var foul_pending = null            # [offender, fouled] seen by the referee
@@ -311,6 +325,9 @@ func step(dt: float) -> void:
 		State.THROW_UP:
 			_step_throw_up(dt)
 		State.PLAY:
+			if shootout:
+				_step_shootout(dt)
+				return
 			_update_set_piece(dt)
 			if shy_taker() == null and set_piece_taker_now() == null:
 				clock += dt   # the clock stops while a shy, hit-out or corner is taken
@@ -389,6 +406,11 @@ func _start_throw_up() -> void:
 		p.shy_toss = false
 		p.stick = Body.rest_spot(p)
 	gather_keeper = null
+	# You take your side's throw-up: control goes to your centre in it.
+	for p in throw_up_pair:
+		if p.team == human_side:
+			human = p
+			throw_up_aim[p] = 0.0
 	_say("Throw-up", 1.2)
 	events.append({"type": "throw_up"})
 
@@ -409,6 +431,9 @@ func _end_half() -> void:
 		break_kind = "extra"
 		state_timer = EXTRA_TIME_PAUSE
 		_say("Full time: level\nExtra time: two halves of 15 minutes", EXTRA_TIME_PAUSE)
+	elif half == 4 and score[0] == score[1]:
+		# Still level after extra time: a penalty shootout.
+		_start_shootout()
 	else:
 		state = State.FULL_TIME
 		_say("Full time" if half == 2 else "Full time after extra time", 9999.0)
@@ -709,7 +734,8 @@ func _ai_carrier(p: Player, dt: float) -> void:
 				restart_target = _long_target(p)
 		# Aim where they're running to, as the pass will be led into it.
 		var at: Vector2 = target_goal(p.team) if restart_target == null else restart_target.pos + restart_target.vel * 0.8
-		var want: float = clamp(restart_base.angle_to(at - p.pos), -PI / 2.0, PI / 2.0)
+		var lim: float = PI if set_piece == "Free hit" else PI / 2.0   # a free hit can go back
+		var want: float = clamp(restart_base.angle_to(at - p.pos), -lim, lim)
 		restart_aim = move_toward(restart_aim, want, RESTART_AIM_RATE * 1.5 * dt)
 		p.facing = restart_base.rotated(restart_aim)
 		p.think -= dt
@@ -941,7 +967,15 @@ func _human_control(dt: float) -> void:
 		var rel: Vector2 = restart_base * -raw.y + restart_base.rotated(PI / 2.0) * raw.x
 		if hit_aim != Vector2.ZERO:
 			rel = hit_aim   # the mouse: aim at the pointer
-		if rel.length() > 0.15 and rel.normalized().dot(restart_base) > -0.9:
+		if set_piece == "Free hit" and p == set_piece_taker_now():
+			# A free hit can go any way, backwards included: left and right
+			# keep turning the aim (and the camera behind it) all the way round.
+			if hit_aim != Vector2.ZERO:
+				var turn: float = angle_difference(restart_aim, restart_base.angle_to(hit_aim))
+				restart_aim = wrapf(restart_aim + clampf(turn, -RESTART_AIM_RATE * 1.5 * dt, RESTART_AIM_RATE * 1.5 * dt), -PI, PI)
+			elif absf(raw.x) > 0.15:
+				restart_aim = wrapf(restart_aim + raw.x * RESTART_AIM_RATE * 1.5 * dt, -PI, PI)
+		elif rel.length() > 0.15 and rel.normalized().dot(restart_base) > -0.9:
 			var want: float = clamp(restart_base.angle_to(rel), -PI / 2.0, PI / 2.0)
 			restart_aim = move_toward(restart_aim, want, RESTART_AIM_RATE * dt)
 		p.facing = restart_base.rotated(restart_aim)
@@ -1288,6 +1322,7 @@ func _contact(p: Player) -> void:
 	last_team = p.team
 	events.append({"type": "hit", "team": p.team, "kind": res["kind"], "curve": res["curve"], "shy": shy})
 	if p == penalty_taker:
+		_keeper_guesses(p)
 		penalty_taker = null
 	events.append({"type": "strike", "by": p, "at": ball_pos})
 	if p == human or (p.team == human_side and shy):
@@ -1338,7 +1373,7 @@ func _step_throw_up(dt: float) -> void:
 		var fwd := Vector2(attack_dir[human.team], 0)
 		if raw.length() > 0.15 and raw.dot(fwd) > -0.3:
 			var want: float = clamp(fwd.angle_to(raw), -THROW_UP_AIM_MAX, THROW_UP_AIM_MAX)
-			throw_up_aim[human] = move_toward(throw_up_aim.get(human, 0.0), want, RESTART_AIM_RATE * dt)
+			throw_up_aim[human] = move_toward(throw_up_aim.get(human, 0.0), want, RESTART_AIM_RATE * 2.0 * dt)
 	if not throw_up_tossed:
 		state_timer -= dt
 		if state_timer <= 0.0:
@@ -1347,7 +1382,8 @@ func _step_throw_up(dt: float) -> void:
 	throw_up_t += dt
 	ball_z += ball_vz * dt
 	ball_vz -= GRAVITY * dt
-	if human in throw_up_pair and not manual_step and Input.is_action_just_pressed("shoot"):
+	if human in throw_up_pair and not manual_step and (Input.is_action_just_pressed("shoot") \
+			or Input.is_action_just_pressed("hit") or Input.is_action_just_pressed("pass")):
 		throw_up_swing[human] = throw_up_t
 	var last := 0.0
 	for p in throw_up_pair:
@@ -1367,7 +1403,7 @@ func _toss_throw_up() -> void:
 		var sigma: float = lerp(0.16, 0.05, p.r("control") / 100.0) - _skill_mod(p.team) * 0.3
 		throw_up_swing[p] = throw_up_ideal + randfn(0.0, max(sigma, 0.03))
 	if human in throw_up_pair:
-		_say("Throw-up: aim with the stick, press Hit as it drops", 1.6)
+		_say("Throw-up: aim with the stick, press Shoot as it drops", 1.6)
 
 
 func _resolve_throw_up() -> void:
@@ -2259,13 +2295,13 @@ func award_free_hit(team: int, spot: Vector2, text: String) -> void:
 
 ## A penalty hit, 20 yards straight out from the goal. Everyone but the taker
 ## and the keeper goes back behind the ball.
-func award_penalty(team: int, text: String) -> void:
+func award_penalty(team: int, text: String, taker: Player = null) -> void:
 	var goal := target_goal(team)
 	var spot := goal - Vector2(attack_dir[team] * PENALTY_SPOT, 0)
-	var taker: Player = null
-	for p in squads[team]:
-		if not p.is_keeper() and (taker == null or p.r("shooting") > taker.r("shooting")):
-			taker = p
+	if taker == null:
+		for p in squads[team]:
+			if not p.is_keeper() and (taker == null or p.r("shooting") > taker.r("shooting")):
+				taker = p
 	if taker == null:
 		return
 	var keeper := _keeper_of(1 - team)
@@ -2283,6 +2319,7 @@ func award_penalty(team: int, text: String) -> void:
 	_place_taker(taker, spot, toward)
 	penalty_taker = taker
 	penalty_side = 0.0
+	pen_idle = 0.0
 	# Taken like a hit-out: play stops, the taker stands over the ball on the
 	# spot and aims it (the camera comes round behind), then strikes it.
 	set_piece = "Penalty hit"
@@ -2316,6 +2353,19 @@ func _place_taker(taker: Player, spot: Vector2, toward: Vector2) -> void:
 	protected_timer = 2.0
 
 
+## A penalty hit is struck: the keeper has had to guess a side. Guess wrong
+## and they're diving the other way, with no chance of it.
+func _keeper_guesses(taker: Player) -> void:
+	var keeper := _keeper_of(1 - taker.team)
+	if keeper == null or ball_vel.length() < 5.0 or absf(ball_vel.y) < 0.3:
+		return
+	if randf() > PEN_GUESS + keeper.r("keeping") / 100.0 * 0.2:
+		keeper.touch_block = 1.2
+		keeper.save_point = null
+		var dive_right: bool = Vector2(0, -signf(ball_vel.y)).dot(Body.right_of(keeper)) > 0.0
+		anim(keeper, "save_right" if dive_right else "save_left")
+
+
 ## The computer strikes its penalty hits at goal once players have stood back.
 ## Like a free hit, the taker stands over the ball and lines it up first:
 ## they pick a corner early and turn the aim round to it, then hit it.
@@ -2326,7 +2376,9 @@ func _take_penalty(dt: float) -> void:
 		penalty_taker = null
 		return
 	if penalty_taker == human:
-		return
+		pen_idle += dt
+		if pen_idle < PEN_IDLE_MAX:
+			return   # yours to hit (left alone long enough, it's hit for you)
 	var p := penalty_taker
 	var goal := target_goal(p.team)
 	if penalty_side == 0.0:
@@ -2353,6 +2405,9 @@ func send_off(p: Player) -> void:
 
 
 func _goal(team: int) -> void:
+	if shootout:
+		_shootout_kick_done(true)
+		return
 	score[team] += 1
 	state = State.GOAL
 	state_timer = GOAL_PAUSE
@@ -2364,6 +2419,139 @@ func _goal(team: int) -> void:
 	charge = -1.0
 	_say("GOAL!  %s" % teams[team]["name"], GOAL_PAUSE)
 	events.append({"type": "goal", "team": team, "half": half, "clock": clock})
+
+
+# ---------------------------------------------------------------- penalty shootout
+
+## Level after extra time: five penalty hits each from the spot, taken in
+## turn at the same end, then sudden death. Your team's takers are yours to
+## hit; the computer keeps goal for both sides.
+func _start_shootout() -> void:
+	shootout = true
+	state = State.PLAY
+	shoot_kicks = [[], []]
+	shoot_turn = 0
+	for t in 2:
+		# Best hitters first; round again if it goes on long enough.
+		var order: Array = squads[t].filter(func(p): return not p.is_keeper())
+		order.sort_custom(func(a, b): return a.r("shooting") > b.r("shooting"))
+		shoot_order[t] = order
+	shoot_wait = SHOOTOUT_PAUSE
+	shoot_live = false
+	_say("Still level after extra time\nPenalty shootout: five each, then sudden death", SHOOTOUT_PAUSE)
+	events.append({"type": "shootout"})
+	_line_up_for_shootout(-1)
+
+
+func _step_shootout(dt: float) -> void:
+	if shoot_wait > 0.0:
+		shoot_wait -= dt
+		for p in players:
+			p.desired = Vector2.ZERO
+			_move(p, dt)
+		_separate()
+		if shoot_wait <= 0.0:
+			_shootout_next_kick()
+		return
+	_update_players(dt)
+	_take_penalty(dt)
+	_update_ball(dt)
+	if not shoot_live:
+		return
+	if penalty_taker == null and set_piece_taker_now() == null:
+		shoot_t += dt
+	for i in range(shoot_event_i, events.size()):
+		if events[i]["type"] == "save":
+			_shootout_kick_done(false)   # the keeper's kept it out
+			return
+	var keeper := _keeper_of(1 - shoot_turn)
+	var slow: bool = ball_vel.length() < 1.5 and ball_z < 0.3
+	if ball_pos.x < 0.0 or ball_pos.x > PITCH.x or ball_pos.y < 0.0 or ball_pos.y > PITCH.y:
+		var in_goal: bool = ball_pos.x > PITCH.x and absf(ball_pos.y - PITCH.y / 2.0) < GOAL_W / 2.0 and ball_z < CROSSBAR
+		_shootout_kick_done(in_goal)
+	elif (carrier != null and carrier == keeper) or (shoot_t > 0.8 and slow) or shoot_t > 4.0:
+		_shootout_kick_done(false)
+
+
+func _shootout_next_kick() -> void:
+	var t := shoot_turn
+	var order: Array = shoot_order[t].filter(func(p): return p in players)
+	if order.is_empty():
+		_shootout_kick_done(false)
+		return
+	var taker: Player = order[shoot_kicks[t].size() % order.size()]
+	_line_up_for_shootout(t)
+	award_penalty(t, "Penalty %d: %s, #%d %s" % [shoot_kicks[t].size() + 1, teams[t]["name"], taker.number, taker.data.get("name", "")], taker)
+	# Nobody else is involved: the rest wait in the centre circle.
+	for p in players:
+		if p != taker and not (p.is_keeper() and p.team != t):
+			p.pos = _shootout_spot(p)
+			p.vel = Vector2.ZERO
+	if human_side == t:
+		human = taker   # you hit your own team's penalties
+	shoot_live = true
+	shoot_t = 0.0
+	shoot_event_i = events.size()
+
+
+## Every kick is at the same end: point the taking side at the east goal.
+func _line_up_for_shootout(t: int) -> void:
+	if t >= 0:
+		attack_dir = [1, -1] if t == 0 else [-1, 1]
+	for p in players:
+		if p.is_keeper() and t >= 0 and p.team != t:
+			continue
+		p.pos = _shootout_spot(p)
+		p.vel = Vector2.ZERO
+		p.facing = Vector2(1, 0)
+		p.swing_t = -1.0
+
+
+func _shootout_spot(p: Player) -> Vector2:
+	if p.is_keeper():
+		return Vector2(PITCH.x / 2.0 + (4.0 if p.team == 0 else -4.0), PITCH.y / 2.0 + 9.0)
+	var i: int = p.number % 15
+	var row := Vector2(PITCH.x / 2.0 + (i - 7) * 0.9, PITCH.y / 2.0 + (-3.0 if p.team == 0 else 3.0))
+	return row
+
+
+func _shootout_kick_done(scored: bool) -> void:
+	if not shoot_live:
+		return
+	shoot_live = false
+	var t := shoot_turn
+	shoot_kicks[t].append(scored)
+	penalty_taker = null
+	carrier = null
+	_clear_set_piece()
+	ball_vel = Vector2.ZERO
+	ball_vz = 0.0
+	charge = -1.0
+	var got := [shoot_kicks[0].count(true), shoot_kicks[1].count(true)]
+	var took := [shoot_kicks[0].size(), shoot_kicks[1].size()]
+	events.append({"type": "shootout_kick", "team": t, "scored": scored, "tally": got.duplicate()})
+	var tally := "%s %d - %d %s" % [teams[0]["name"], got[0], got[1], teams[1]["name"]]
+	var winner := -1
+	if took[0] <= SHOOTOUT_KICKS and took[1] <= SHOOTOUT_KICKS:
+		# Five each: over once one side can't catch the other.
+		for a in 2:
+			if got[a] > got[1 - a] + (SHOOTOUT_KICKS - took[1 - a]):
+				winner = a
+	if winner < 0 and took[0] == took[1] and took[0] >= SHOOTOUT_KICKS and got[0] != got[1]:
+		winner = 0 if got[0] > got[1] else 1   # sudden death
+	if winner >= 0:
+		shootout = false
+		state = State.FULL_TIME
+		shoot_result = got
+		_say("%s win %d - %d on penalties\nFull time after extra time" % [teams[winner]["name"], got[winner], got[1 - winner]], 9999.0)
+		var game := get_node_or_null("/root/Game") if is_inside_tree() else null
+		if game:
+			game.last_result = {"home": teams[0]["name"], "away": teams[1]["name"], "score": score.duplicate(), "penalties": got.duplicate()}
+		events.append({"type": "half_end", "half": half, "score": score.duplicate()})
+		return
+	_say(("Scored!" if scored else "Missed!") + "\n" + tally, SHOOTOUT_PAUSE)
+	shoot_turn = 1 - t
+	shoot_wait = SHOOTOUT_PAUSE
 
 
 ## Length of the current half: extra time halves are 15 minutes to a 45.
