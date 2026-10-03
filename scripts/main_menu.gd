@@ -465,12 +465,16 @@ func _rating_badge(ovr: int) -> Control:
 
 const CONTROL_ROWS := [
 	["Move", "W A S D  /  Arrows", "Left stick"],
-	["Shoot at goal (hold for power)", "Space  /  Left click", "X  /  Square"],
-	["Long hit (hold for power)", "X", "RT  /  R2"],
+	["Aim a pass or hit", "Mouse pointer", "Left stick as you press"],
+	["Pass  /  poke tackle", "E", "A  /  Cross"],
+	["Shoot at goal (hold for power)", "Space  /  Left click", "B  /  Circle"],
+	["Long hit / cross (hold for power)", "X", "X  /  Square"],
+	["Through ball  /  block (no ball)", "F", "Y  /  Triangle"],
+	["Sprint", "Shift", "RT  /  R2"],
 	["Shield / hold up the ball (hold)", "Z", "LT  /  L2"],
-	["Pass", "E", "A  /  Cross"],
 	["Switch player", "Q", "LB  /  L1"],
-	["Sprint", "Shift", "RB  /  R1"],
+	["Cleek", "C", "RB  /  R1"],
+	["Shoulder barge", "R", "Left stick click"],
 	["Pause", "Esc  /  P", "Start"],
 	["Leave match (while paused)", "M", "Back  /  Select"],
 ]
@@ -492,16 +496,16 @@ func _build_controls() -> void:
 	var grid := GridContainer.new()
 	grid.columns = 3
 	grid.add_theme_constant_override("h_separation", 40)
-	grid.add_theme_constant_override("v_separation", 14)
+	grid.add_theme_constant_override("v_separation", 6)
 	panel.add_child(grid)
 	for h in ["ACTION", "KEYBOARD", "CONTROLLER"]:
 		var l := ShintyStyle.label(h, 17, "bold", ShintyStyle.GOLD)
 		l.custom_minimum_size = Vector2(300 if h == "ACTION" else 250, 0)
 		grid.add_child(l)
 	for r in CONTROL_ROWS:
-		grid.add_child(ShintyStyle.label(r[0], 24, "bold"))
-		grid.add_child(ShintyStyle.label(r[1], 24, "semibold", ShintyStyle.MUTED))
-		grid.add_child(ShintyStyle.label(r[2], 24, "semibold", ShintyStyle.MUTED))
+		grid.add_child(ShintyStyle.label(r[0], 18, "bold"))
+		grid.add_child(ShintyStyle.label(r[1], 18, "semibold", ShintyStyle.MUTED))
+		grid.add_child(ShintyStyle.label(r[2], 18, "semibold", ShintyStyle.MUTED))
 	var back := Button.new()
 	back.text = "BACK"
 	back.position = Vector2(56, 598)
