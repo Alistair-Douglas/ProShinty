@@ -68,8 +68,9 @@ func _process(delta: float) -> void:
 			_waited += delta
 		if m.human_side < 0 and _waited > m.HALF_TIME_PAUSE + AUTO_CONTINUE:
 			_continued = true
-		if not _continued and m.state_timer < 0.1:
-			m.state_timer = 0.1
+		# (Topped up well clear of zero: a slow frame can run several physics steps.)
+		if not _continued and m.state_timer < 0.5:
+			m.state_timer = 0.5
 	else:
 		_continued = false
 		_waited = 0.0
@@ -123,7 +124,7 @@ func _footer() -> String:
 		"half":
 			if _continued:
 				return "Teams coming back out..."
-			if m.state_timer > 0.1:
+			if m.state_timer > 0.5:
 				return "Players heading off"
 			var next := "extra time" if m.half == 2 else "second half"
 			return _hint("A start the %s    Start pause" % next, "Enter start the %s    Esc pause" % next)
@@ -151,7 +152,7 @@ func _draw() -> void:
 	var bold := ShintyStyle.font("bold")
 	var semi := ShintyStyle.font("semibold")
 
-	draw_rect(Rect2(Vector2.ZERO, Vector2(W, h)), Color(0.04, 0.06, 0.08, 0.93))
+	draw_rect(Rect2(Vector2.ZERO, Vector2(W, h)), Color(0.04, 0.06, 0.08, 0.96))
 	draw_rect(Rect2(Vector2.ZERO, Vector2(W, TITLE_H)), ShintyStyle.GOLD)
 	draw_string(black, Vector2(0, 25), _title(), HORIZONTAL_ALIGNMENT_CENTER, W, 22, ShintyStyle.GOLD_DARK)
 
@@ -179,7 +180,7 @@ func _draw() -> void:
 			fs -= 2
 		draw_string(black, Vector2(nx, y + 50), club, HORIZONTAL_ALIGNMENT_LEFT if side == 0 else HORIZONTAL_ALIGNMENT_RIGHT,
 			nw, fs, Color.WHITE)
-		draw_rect(Rect2(Vector2(nx if side == 0 else nx + nw - 70.0, y + 60), Vector2(70, 5)), col)
+		draw_rect(Rect2(Vector2(nx if side == 0 else nx + nw - 70.0, y + 60), Vector2(70, 5)), _bar(col))
 	draw_string(black, Vector2(0, y + 58), "%d - %d" % [m.score[0], m.score[1]], HORIZONTAL_ALIGNMENT_CENTER, W, 40, Color.WHITE)
 
 	# The stats, one row each: home on the left, away on the right, and a bar

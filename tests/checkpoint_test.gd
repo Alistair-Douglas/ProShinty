@@ -264,6 +264,13 @@ var _swings := 0   ## hits the bot started (checks key presses reach the match)
 ## A simple player: runs at the ball, dribbles at goal, swings when close,
 ## tries a block, cleek or barge now and then, and pauses once.
 func _bot(m: Node) -> void:
+	if m.state == m.State.HALF_TIME and not m.paused and _match_frames % 30 == 0:
+		# The stats screen holds the break until A / Enter.
+		for down in [true, false]:
+			var e := InputEventAction.new()
+			e.action = "ui_accept"
+			e.pressed = down
+			Input.parse_input_event(e)
 	var h = m.human
 	if h == null:
 		return

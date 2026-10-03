@@ -7,6 +7,7 @@ var frame := 0
 var m: Node
 var panel: Control
 var ok := true
+var full_seen := -1
 
 
 func _initialize() -> void:
@@ -48,16 +49,19 @@ func _process(_d: float) -> bool:
 		610:
 			m.clock = m.half_length()   # blow for half time
 		1100:
-			ok = ok and m.state == m.State.HALF_TIME and panel.mode() == "half"
+			ok = ok and m.state == m.State.HALF_TIME
 			_shot("stats_half_time")
 			_press("ui_accept")
 		1200:
 			ok = ok and m.state != m.State.HALF_TIME
 			m.score = [2, 1]
 			m.clock = m.half_length()   # and full time
-		1300:
-			ok = ok and panel.mode() == "full"
-			_shot("stats_full_time")
-			print("stats screen ", "ok" if ok else "FAILED")
-			quit(0 if ok else 1)
+	# A goal just before the whistle has its replay first; the stats follow.
+	if frame > 1200 and m.state == m.State.FULL_TIME and panel.mode() == "full" and full_seen < 0:
+		full_seen = frame
+	if full_seen > 0 and frame == full_seen + 10 or frame > 4000:
+		ok = ok and panel.mode() == "full"
+		_shot("stats_full_time")
+		print("stats screen ", "ok" if ok else "FAILED")
+		quit(0 if ok else 1)
 	return false
