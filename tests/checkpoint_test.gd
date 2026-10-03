@@ -86,8 +86,8 @@ func _check(m: Node, w: Dictionary, dt: float, label: String) -> void:
 	if shy_takers > 1:
 		_once(w, "two_shies", "%s: %d players taking a shy at once" % [at, shy_takers])
 	# Play should never stall: in open play the clock runs, except while a shy
-	# is taken, and that must not last long.
-	if m.state == m.State.PLAY:
+	# is taken, and that must not last long. (No clock in a penalty shootout.)
+	if m.state == m.State.PLAY and not m.shootout:
 		if m.clock == w["last_clock"]:
 			w["still"] += dt
 			if w["still"] > STUCK_SECONDS:
@@ -152,7 +152,7 @@ func _sim_matches() -> void:
 		var w := _new_watch()
 		var steps := 0
 		var dt := 1.0 / 60.0
-		while m.state != m.State.FULL_TIME and steps < 60 * (int(half) * 2 + 240):
+		while m.state != m.State.FULL_TIME and steps < 60 * (int(half) * 2 + 480):   # room for extra time and penalties
 			m.step(dt)
 			_check(m, w, dt, label)
 			steps += 1
@@ -236,8 +236,9 @@ func _drive_menu_matches() -> bool:
 		_match_frames = -1000000
 		return false
 	# Two 2-minute halves, plus extra time after a draw (two more 40-second
-	# halves), the breaks, and the clock stopped for restarts.
-	if _match_frames > 60 * 60 * 12:
+	# halves), a penalty shootout if still level, the breaks, and the clock
+	# stopped for restarts.
+	if _match_frames > 60 * 60 * 16:
 		_fail("menu match %d never reached full time (half %d, clock %.0f, state %d, score %s)" % [_venue + 1, m.half, m.clock, m.state, m.score])
 		quit(1)
 		return true
