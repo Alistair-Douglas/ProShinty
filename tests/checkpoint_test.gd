@@ -182,7 +182,7 @@ func _drive_menu_matches() -> bool:
 				_fail("no result recorded after the match at venue %d" % _venue)
 			_venue += 1
 			_menu_frames = 0
-		if _venue >= 3:
+		if _venue >= ShintyPitch.VENUE_NAMES.size():
 			print("Checkpoint: %s" % ("all passed" if failures == 0 else "%d failures" % failures))
 			quit(1 if failures else 0)
 			return true
@@ -199,13 +199,13 @@ func _drive_menu_matches() -> bool:
 				quit(1)
 				return true
 			var n: int = scene.home_pick.item_count
-			scene.home_pick.select([0, 2, 20][_venue] % n)
+			scene.home_pick.select([0, 2, 20, 30][_venue] % n)
 			scene.home_pick.item_selected.emit(scene.home_pick.selected)
-			scene.away_pick.select([1, n - 1, 5][_venue] % n)
+			scene.away_pick.select([1, n - 1, 5, 9][_venue] % n)
 			scene.away_pick.item_selected.emit(scene.away_pick.selected)
 			scene.pitch_pick.select(_venue)
 			scene.side_pick.select(_venue % 2)
-			scene.diff_pick.select(_venue)
+			scene.diff_pick.select(_venue % 3)
 			scene.length_pick.select(0)   # 2-minute halves
 			scene.call("_start")
 		return false
