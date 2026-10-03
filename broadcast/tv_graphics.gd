@@ -9,6 +9,7 @@ const TeamData := preload("res://scripts/team_data.gd")
 
 var match_node: Node
 var replay_active := false
+var hide_strap := false   ## the stats screen (scripts/stats_panel.gd) is up instead
 
 var _goal_t := -1.0
 var _goal_team := 0
@@ -83,7 +84,7 @@ func _draw() -> void:
 	_draw_channel(screen)
 	if _goal_t >= 0.0:
 		_draw_goal(m, screen)
-	elif not replay_active and (m.state == m.State.HALF_TIME or m.state == m.State.FULL_TIME):
+	elif not replay_active and not hide_strap and (m.state == m.State.HALF_TIME or m.state == m.State.FULL_TIME):
 		var strap := "FULL TIME"
 		if m.state == m.State.HALF_TIME:
 			strap = "EXTRA TIME" if m.half == 2 else "HALF TIME"
