@@ -22,12 +22,22 @@ const BASE_HEIGHT := 1.80
 const CAMAN_LENGTH := 1.14  ## a full-size caman, measured off a real one
 const GRIP_TOP := 0.05     ## distance of the top hand from the butt of the caman
 const GRIP_LOW := 0.24     ## distance of the lower hand from the butt
+## Walking carry, hips space (x mirrors for lefties): where the hand hangs,
+## and which way the caman points from butt to bas (down and back, trailing).
+const WALK_HAND := Vector3(0.24, -0.12, 0.0)
+const WALK_STICK := Vector3(0.1, -0.78, 0.62)
 const HAND_GRIP := 0.065   ## wrist to the middle of the grip
 const MEET_MAX := 0.7   ## m: furthest a swing is steered to meet the ball
 const HEAD_LOCAL := Vector3(0.0, -CAMAN_LENGTH + 0.015, -0.055)  ## caman head centre in caman space
 ## Ready stance, hips space: butt of the caman and its direction to the head.
 const READY_P := Vector3(0.16, 0.0, -0.26)
 const READY_D := Vector3(-0.08, -0.55, -0.83)
+## Gathering a ball off to the side or behind, the body turns to face it
+## instead of the stick going round behind the back: the most it turns
+## (radians), and the share of that taken by the hips (the chest does the
+## rest, ending square to the ball).
+const REACH_TURN_MAX := 2.0
+const REACH_TURN_HIPS := 0.45
 ## Stumble power from which the player goes down (a stagger of about 0.65 s).
 const FALL_AT := 0.5
 ## Seconds a fallen player takes to get back up.
@@ -476,7 +486,7 @@ func advance(delta: float) -> void:
 	# Standing, reaching for the ball or doing anything with it, both hands.
 	var carry_goal := 0.0
 	if _action == &"" and not _charging and _charge <= 0.0:
-		carry_goal = _ease((_speed - 1.2) / 1.6) * (1.0 - clampf(_reach * 5.0, 0.0, 1.0))
+		carry_goal = _ease((_speed - 0.4) / 0.8) * (1.0 - clampf(_reach * 5.0, 0.0, 1.0))
 		# Closing on the ball, the second hand comes on, ready to strike.
 		if _look_target is Vector3:
 			var to_ball: Vector3 = (_look_target as Vector3) - global_position
@@ -613,6 +623,10 @@ func _pose(_delta: float) -> void:
 		return
 	var run := clampf(_speed / 2.5, 0.0, 1.0)
 	var sprint := clampf((_speed - 4.0) / 4.0, 0.0, 1.0)
+	# Walking (off to the dugouts, lining up for a restart) is its own gait,
+	# blending into the jog from about 1.6 m/s.
+	var moving := clampf(_speed / 0.5, 0.0, 1.0)
+	var gait := _ease((_speed - 1.6) / 1.4)   # 0 = walking, 1 = jogging or faster
 	var ph := _phase
 	var rot := {}       # bone name -> Vector3 euler
 	var hips_off := Vector3.ZERO
@@ -645,16 +659,25 @@ func _pose(_delta: float) -> void:
 		var swing_fold := pow(maxf(0.0, cos(p + 0.35)), 2.0)
 		# The standing leg stays soft: it bends as it takes the weight.
 		var knee_run := -(0.25 + 0.12 * pace + 0.55 * maxf(0.0, -cos(p)) + fold * swing_fold)
+		var foot_run := -0.15 - 0.35 * maxf(0.0, -sin(p)) + 0.2 * swing_fold
+		# Walking: the standing leg nearly straight, the heel lands first and
+		# the knee only bends to swing the foot through.
+		var walk_swing := pow(maxf(0.0, cos(p + 0.5)), 3.0)
+		var thigh_walk := sin(p) * 0.32 + 0.06
+		var knee_walk := -(0.06 + 0.08 * maxf(0.0, -cos(p)) + 0.75 * walk_swing)
+		var foot_walk := -0.05 - 0.2 * maxf(0.0, -sin(p)) + 0.15 * walk_swing
 		var thigh_idle := 0.12
 		var knee_idle := -0.24
-		rot[side + "UpperLeg"] = Vector3(lerpf(thigh_idle, thigh_run, run), 0, sgn * 0.05 * idle)
-		rot[side + "LowerLeg"] = Vector3(lerpf(knee_idle, knee_run, run), 0, 0)
-		rot[side + "Foot"] = Vector3(lerpf(0.12, -0.15 - 0.35 * maxf(0.0, -sin(p)) + 0.2 * swing_fold, run), 0, 0)
-	hips_off.y = -absf(cos(ph)) * 0.045 * run
+		rot[side + "UpperLeg"] = Vector3(lerpf(thigh_idle, lerpf(thigh_walk, thigh_run, gait), moving), 0, sgn * 0.05 * idle)
+		rot[side + "LowerLeg"] = Vector3(lerpf(knee_idle, lerpf(knee_walk, knee_run, gait), moving), 0, 0)
+		rot[side + "Foot"] = Vector3(lerpf(0.12, lerpf(foot_walk, foot_run, gait), moving), 0, 0)
+	# A runner is lowest as the foot takes the weight; a walker is highest
+	# over the standing leg and lowest with both feet down.
+	hips_off.y = -lerpf(absf(sin(ph)) * 0.025, absf(cos(ph)) * 0.045, gait) * moving
 	# Leaning into a sprint, the hips go with it: pushed a little forward and
 	# tipped forward (the legs stay under), not left behind the shoulders.
 	hips_off.z -= 0.06 * pace * run
-	rot["Hips"] = Vector3(-0.1 * pace, sin(ph) * 0.12 * run, 0)
+	rot["Hips"] = Vector3(-0.1 * pace, sin(ph) * 0.12 * run, sin(ph) * 0.05 * moving * (1.0 - gait))
 	rot["LeftUpperLeg"] += Vector3(0.1 * pace, 0, 0)
 	rot["RightUpperLeg"] += Vector3(0.1 * pace, 0, 0)
 	rot["Chest"] += Vector3(0, -sin(ph) * 0.1 * run, 0)
@@ -709,6 +732,7 @@ func _pose(_delta: float) -> void:
 			hips_off += r[3]
 
 	# Reaching: bend and lunge towards the target (hockey-style reach).
+	var reach_yaw := 0.0   # extra turn of the hands' frame towards the reach
 	var reaching := _reach > 0.01 and _reach_target != null and (_action == &"" or _action in [&"poke", &"block", &"trap", &"air_kill", &"air_clear"])
 	if reaching:
 		var loc: Vector3 = global_transform.affine_inverse() * (_reach_target as Vector3)
@@ -723,7 +747,16 @@ func _pose(_delta: float) -> void:
 		var lead := "Left" if (loc.x < 0.0) != left_handed else "Right"
 		rot[lead + "UpperLeg"] += Vector3(0.55 * lean, 0, 0)
 		rot[lead + "LowerLeg"] += Vector3(-0.35 * lean, 0, 0)
-		twist += clampf(-loc.x * 0.4, -0.5, 0.5) * lean * side_sign
+		# Turn round to face it: hips first, then the chest, the feet staying
+		# planted. A ball behind is gathered in front of the turned body,
+		# never by putting the stick round behind the back.
+		var turn := clampf(atan2(-loc.x, -loc.z), -REACH_TURN_MAX, REACH_TURN_MAX) * _reach
+		var hips_turn := turn * REACH_TURN_HIPS
+		rot["Hips"] += Vector3(0, hips_turn * side_sign, 0)
+		rot["LeftUpperLeg"] += Vector3(0, -hips_turn * side_sign, 0)
+		rot["RightUpperLeg"] += Vector3(0, -hips_turn * side_sign, 0)
+		twist += (turn - hips_turn) * side_sign
+		reach_yaw = (turn - hips_turn) * 0.5
 
 	# Torso twist through the swing
 	rot["Spine"] += Vector3(0, twist * 0.35, 0)
@@ -758,7 +791,7 @@ func _pose(_delta: float) -> void:
 	var hips_g := _skel.get_bone_global_pose(_bone["Hips"])
 	# twist and rot are already mirrored for left-handers, so this turns the
 	# caman with the torso either way.
-	var yaw_b := Basis(Vector3.UP, twist * 0.5 + rot["Hips"].y)
+	var yaw_b := Basis(Vector3.UP, twist * 0.5 + rot["Hips"].y + reach_yaw)
 	var p_sk: Vector3 = hips_g.origin + yaw_b * cam_p
 	var d_sk: Vector3 = (yaw_b * cam_d).normalized()
 	# A shy is struck with the back of the bas, so the face is turned round.
@@ -832,6 +865,15 @@ func _pose(_delta: float) -> void:
 		var hand := Vector3(0.2 * mx, 0.04 + bob, -0.16 - 0.05 * pump) + lean_fwd
 		var cd := Vector3(-0.55 * mx, -0.45 + 0.05 * pump, -0.7).normalized()
 		var face_c := Vector3(0.0, 1.0, -0.3)
+		# Walking, the caman hangs loose in the hand down by the side, the bas
+		# trailing behind near the grass and the butt just ahead of the hand,
+		# swinging a little with the stride; the free arm hangs and swings the
+		# other way.
+		var walk_k := 1.0 - gait
+		var swing_w := sin(ph) * moving
+		hand = hand.lerp(Vector3(WALK_HAND.x * mx, WALK_HAND.y, WALK_HAND.z - 0.1 * swing_w), walk_k)
+		cd = cd.lerp(Vector3(WALK_STICK.x * mx, WALK_STICK.y, WALK_STICK.z + 0.08 * swing_w), walk_k).normalized()
+		face_c = face_c.lerp(Vector3(0.0, 0.4, 1.0), walk_k)
 		if shoulder_carry:
 			# Up by the shoulder: hand at the chest, the caman standing up
 			# past the shoulder and a little back, the bas curling back.
@@ -842,7 +884,9 @@ func _pose(_delta: float) -> void:
 		var grip_c: Vector3 = hips_g.origin + yaw_b * hand
 		var carry_t := Transform3D(_caman_basis(d_c, yaw_b * face_c), grip_c - d_c * GRIP_LOW)
 		ct = ct.interpolate_with(carry_t, carry)
-		carry_top = hips_g.origin + yaw_b * (Vector3(-0.17 * mx, 0.24 - 0.08 * pump + bob, -0.16 + 0.22 * pump) + lean_fwd * 1.3)
+		var top_run := Vector3(-0.17 * mx, 0.24 - 0.08 * pump + bob, -0.16 + 0.22 * pump) + lean_fwd * 1.3
+		var top_walk := Vector3(-0.23 * mx, -0.14, 0.02 + 0.14 * swing_w)
+		carry_top = hips_g.origin + yaw_b * top_run.lerp(top_walk, walk_k)
 	# Keep both grips within arm's reach: slide the caman towards the shoulders.
 	for iter in 3:
 		var grips := [[top_side, GRIP_TOP], [low_side, GRIP_LOW]]
