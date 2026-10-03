@@ -47,7 +47,14 @@ func step(dir: int) -> void:
 	if not wrap and (next < 0 or next >= items.size()):
 		return
 	selected = next
+	_tick()
 	changed.emit(selected)
+
+
+func _tick() -> void:
+	var music := get_node_or_null("/root/Music")
+	if music:
+		music.tick(1.25)
 
 
 func _gui_input(e: InputEvent) -> void:

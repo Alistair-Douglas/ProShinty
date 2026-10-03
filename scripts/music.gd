@@ -22,6 +22,8 @@ var _order: Array = []
 var _next := 0
 var _playing := false
 var _fading := false
+var _tick: AudioStreamPlayer
+var _tick_msec := 0
 
 
 ## Whether demo-only (unlicensed) tracks may play in this build.
@@ -102,6 +104,48 @@ func _ready() -> void:
 		var entry: Dictionary = t.duplicate()
 		entry["stream"] = stream
 		tracks.append(entry)
+	_tick = AudioStreamPlayer.new()
+	_tick.stream = _make_tick()
+	_tick.max_polyphony = 3
+	add_child(_tick)
+	get_viewport().gui_focus_changed.connect(func(_c): tick())
+
+
+## A soft wooden tick for the menus: moving between buttons, or a picker
+## changing value (a little higher). Follows the music volume.
+func tick(pitch := 1.0) -> void:
+	if _tick == null or volume_step == 0:
+		return
+	var now := Time.get_ticks_msec()
+	if now - _tick_msec < 25:  # one tick when a move changes focus and value at once
+		return
+	_tick_msec = now
+	_tick.volume_db = linear_to_db(volume_step / 4.0) - 14.0
+	_tick.pitch_scale = pitch
+	_tick.play()
+
+
+## 40 ms of a damped knock: a 1.8 kHz tone over a lower body thump, with a
+## breath of noise at the start, made in code so there's no file to license.
+static func _make_tick() -> AudioStreamWAV:
+	var rate := 44100
+	var n := int(rate * 0.04)
+	var data := PackedByteArray()
+	data.resize(n * 2)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	for i in n:
+		var t := float(i) / rate
+		var v := sin(TAU * 1800.0 * t) * exp(-t * 150.0) * 0.5
+		v += sin(TAU * 620.0 * t) * exp(-t * 90.0) * 0.4
+		v += rng.randf_range(-1.0, 1.0) * exp(-t * 900.0) * 0.25
+		v *= minf(1.0, t * rate / 20.0)  # no click at the very start
+		data.encode_s16(i * 2, int(clampf(v, -1.0, 1.0) * 26000.0))
+	var w := AudioStreamWAV.new()
+	w.format = AudioStreamWAV.FORMAT_16_BITS
+	w.mix_rate = rate
+	w.data = data
+	return w
 
 
 func _load(path: String) -> AudioStream:

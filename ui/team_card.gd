@@ -54,6 +54,7 @@ func team() -> Dictionary:
 
 func step(dir: int) -> void:
 	selected = selected + dir
+	_tick()
 	changed.emit(selected)
 
 
@@ -72,6 +73,12 @@ func _refresh() -> void:
 	for k in sums:
 		_lines[k] = roundi(float(sums[k][0]) / maxi(sums[k][1], 1))
 	queue_redraw()
+
+
+func _tick() -> void:
+	var music := get_node_or_null("/root/Music")
+	if music:
+		music.tick(1.25)
 
 
 func _gui_input(e: InputEvent) -> void:

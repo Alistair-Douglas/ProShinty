@@ -122,7 +122,20 @@ var noise := FastNoiseLite.new()
 
 
 func _ready() -> void:
-	_rebuild()
+	if _gen == null:  # not already built off the tree (see build_now)
+		_rebuild()
+
+
+## Builds most of the ground before the node joins the tree, and is safe to
+## call from a worker thread so a menu can get a ground ready without a
+## stall. Call finish_build() on the main thread afterwards: merging the
+## scenery reads meshes back from the renderer, which only works there.
+func build_now() -> void:
+	_rebuild(false)
+
+
+func finish_build() -> void:
+	_finish_build()
 
 
 # --- Public API -------------------------------------------------------------
@@ -195,7 +208,7 @@ func _queue_rebuild() -> void:
 	_rebuild.call_deferred()
 
 
-func _rebuild() -> void:
+func _rebuild(finish := true) -> void:
 	_pending = false
 	if _gen:
 		remove_child(_gen)
@@ -230,7 +243,14 @@ func _rebuild() -> void:
 		rng.seed = layout_seed
 		_build_water(root)
 		_layout.build(root, rng)
-		_batch_scenery(root)
+	if finish:
+		_finish_build()
+
+
+func _finish_build() -> void:
+	var s := units_per_yard / YARD_M
+	if show_scenery:
+		_batch_scenery(_gen.get_node("Site"))
 	if add_ground_collision:
 		_build_collision(s)
 	if include_environment:
