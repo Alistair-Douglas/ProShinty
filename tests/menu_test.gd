@@ -20,16 +20,27 @@ func _initialize() -> void:
 			load("res://ui/menu_backdrop.gd").lite = true
 			root.get_node("Game").camans_path = "user://camans_menu_test.json"  # leave real designs alone
 			change_scene_to_file("res://scenes/main_menu.tscn")],
-		[8, func(): _shot("menu_hub"); print("focus: ", root.gui_get_focus_owner().get_class()); _key(KEY_ENTER)],
+		# A controller's A button selects, like Enter.
+		[8, func(): _shot("menu_hub"); print("focus: ", root.gui_get_focus_owner().get_class()); _joy(JOY_BUTTON_A)],
 		[6, func(): _shot("menu_kickoff_start"); print("screen: ", m.call().current); m.call().away_pick.grab_focus()],
-		[1, func(): _key(KEY_RIGHT)],
+		[1, func(): _joy(JOY_BUTTON_RIGHT_SHOULDER)],   # RB changes the away club
 		[1, func(): m.call().home_pick.grab_focus()],
-		[1, func(): _key(KEY_LEFT)],
+		[1, func(): _key(KEY_LEFT)],                   # the arrow keys still change it
+		[1, func(): _joy(JOY_BUTTON_DPAD_RIGHT)],      # the d-pad moves on to the away card
+		[2, func():
+			var on_away: bool = root.gui_get_focus_owner() == m.call().away_pick
+			print("d-pad right from home card reaches away card: ", on_away)
+			if not on_away:
+				push_error("the d-pad didn't move off the home card")],
 		[6, func():
 			var s = m.call()
 			_shot("menu_kickoff")
 			print("home %s away %s pitch %s" % [s.home_pick.team()["name"], s.away_pick.team()["name"], s.pitch_pick.get_item_text(s.pitch_pick.selected)])
-			_key(KEY_ESCAPE)],
+			_joy(JOY_BUTTON_B)],   # and B goes back
+		[2, func():
+			print("after B: ", m.call().current)
+			if m.call().current != "hub":
+				push_error("B didn't go back to the hub")],
 		[4, func(): hub_button.call(1).grab_focus()],
 		[1, func(): _key(KEY_ENTER)],
 		[6, func(): _shot("menu_squads"); _key(KEY_ESCAPE)],
@@ -70,6 +81,12 @@ func _initialize() -> void:
 func _key(k: Key) -> void:
 	for pressed in [true, false]:
 		var e := InputEventKey.new(); e.keycode = k; e.physical_keycode = k; e.pressed = pressed
+		root.push_input(e)
+
+
+func _joy(b: JoyButton) -> void:
+	for pressed in [true, false]:
+		var e := InputEventJoypadButton.new(); e.button_index = b; e.pressed = pressed
 		root.push_input(e)
 
 
