@@ -250,7 +250,9 @@ func _physics_process(delta: float) -> bool:
 	var m = _match
 	if not _played or _match_frames < 0 or not is_instance_valid(m) or m.state == m.State.FULL_TIME:
 		return false
-	if not m.paused:
+	# Not while paused, nor while the pre-match build-up holds the match
+	# (the teams walk out from between the dugouts, off the pitch).
+	if not m.paused and not m.manual_step:
 		_check(m, _watch, delta, "menu match %d" % (_venue + 1))
 	_bot(m)
 	return false

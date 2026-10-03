@@ -28,11 +28,16 @@ func _ready() -> void:
 
 
 func _process(_delta: float) -> void:
+	# The pre-match build-up has the screen to itself (broadcast/prematch.gd).
+	var build_up: bool = view != null and view.get("prematch") != null
+	tv.visible = not build_up
 	queue_redraw()
 
 
 func _draw() -> void:
 	var m := match_node
+	if view != null and view.get("prematch") != null:
+		return
 	var teams: Array = m.teams
 	var screen := get_viewport_rect().size
 	var w := screen.x
@@ -95,6 +100,14 @@ func _draw() -> void:
 		draw_string(font, box.position + Vector2(0, 38), centre_text, HORIZONTAL_ALIGNMENT_CENTER, box.size.x, size, Color.WHITE)
 		if sub != "":
 			draw_string(font, box.position + Vector2(0, 66), sub, HORIZONTAL_ALIGNMENT_CENTER, box.size.x, 15, Color(1, 1, 1, 0.8))
+	if m.paused and view != null and view.get("director") != null:
+		# Which camera, under the pause box: Y changes it, R3 zooms (match_view.gd).
+		var cam: ShintyTVCamera = view.director.camera
+		var line := "Camera: %s     Y / Tab  change camera     R3 / V  zoom %s" % [
+			Game.CAMERA_NAMES[cam.view], "out" if cam.zoomed else "in"]
+		var cb := Rect2(Vector2(w / 2.0 - 330, screen.y / 2.0 + 48), Vector2(660, 30))
+		draw_rect(cb, Color(0, 0, 0, 0.65))
+		draw_string(font, cb.position + Vector2(0, 21), line, HORIZONTAL_ALIGNMENT_CENTER, cb.size.x, 15, Color(1, 0.85, 0.2))
 
 
 func _panel_text(pos: Vector2, text: String, font_size: int) -> void:
