@@ -22,6 +22,44 @@ func _steps(m, seconds: float) -> void:
 		m.step(DT)
 
 
+## The pose editor's tweaks change the model and the match's timing, and save.
+func _pose_tweaks(teams: Array) -> void:
+	ShintyPoseTweaks.res_path = "user://test_poses_res.json"
+	ShintyPoseTweaks.user_path = "user://test_poses_user.json"
+	ShintyPoseTweaks.data = {}
+	var swing_at := func(t: float) -> Vector3:
+		var p := ShintyPlayerModel.new()
+		p.manual_update = true
+		root.add_child(p)
+		p.setup(teams[0]["players"][10], teams[0])
+		p.play_action(&"swing", 1.0)
+		var steps := int(t * 60.0)
+		for i in steps:
+			p.advance(1.0 / 60.0)
+		var head := p.get_caman_head_position()
+		p.free()
+		return head
+	var top: float = ShintyPlayerModel.contact_delay("swing", 1.0) * 0.5   # up in the backswing
+	var before: Vector3 = swing_at.call(top)
+	var delay_before := ShintyPlayerModel.contact_delay("swing", 1.0)
+	ShintyPoseTweaks.set_value("swing", 0, "caman_up", 30.0)
+	ShintyPoseTweaks.set_value("swing", 0, "spine_bend", 20.0)
+	ShintyPoseTweaks.set_length("swing", 1.5)
+	var after: Vector3 = swing_at.call(top * 1.5)
+	print("swing head at the top: %s, tweaked %s" % [before, after])
+	assert(after.distance_to(before) > 0.1, "a tweak moves the caman")
+	assert(absf(ShintyPlayerModel.contact_delay("swing", 1.0) - delay_before * 1.5) < 0.01, "length changes the match's contact time")
+	var path := ShintyPoseTweaks.save()
+	assert(path != "", "tweaks saved")
+	ShintyPoseTweaks.data = {}
+	ShintyPoseTweaks.ensure_loaded(true)
+	assert(ShintyPoseTweaks.get_value("swing", 0, "caman_up") == 30.0, "tweaks load back")
+	ShintyPoseTweaks.reset("swing")
+	assert(ShintyPoseTweaks.length_scale("swing") == 1.0, "reset")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(ShintyPoseTweaks.res_path))
+	print("pose tweaks ok (saved to %s)" % path)
+
+
 func _run() -> void:
 	var teams := TeamData.load_teams()
 	var m = PracticeScene.instantiate()
@@ -125,5 +163,7 @@ func _run() -> void:
 	m.set_speed(2)
 	assert(Engine.time_scale == 0.25)
 	m.set_speed(0)
+
+	_pose_tweaks(teams)
 	print("practice test passed")
 	quit(0)

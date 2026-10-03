@@ -281,7 +281,7 @@ func set_meet(target) -> void:
 ## `from_charge` is how much of the backswing was already held (release_swing).
 ## Match logic without a model (headless) uses this to time its hits.
 static func contact_delay(action: String, power: float = 1.0, from_charge: float = 0.0) -> float:
-	var l: float = ACTIONS.get(action, 0.78)
+	var l: float = ACTIONS.get(action, 0.78) * ShintyPoseTweaks.length_scale(action)
 	if action == "swing" or action == "pass":
 		l *= lerpf(0.75, 1.0, clampf(power, 0.0, 1.0))
 	var times := _times_for(StringName(action), l)
@@ -299,7 +299,7 @@ func play_action(action: StringName, power: float = 1.0, contact_height: float =
 	_action_t = 0.0
 	_action_power = clampf(power, 0.0, 1.0)
 	_action_height = clampf(contact_height, 0.0, 1.6)
-	_action_len = ACTIONS[String(action)]
+	_action_len = ACTIONS[String(action)] * ShintyPoseTweaks.length_scale(String(action))
 	if action == &"swing" or action == &"pass":
 		_action_len *= lerpf(0.75, 1.0, _action_power)
 	_struck = false
@@ -326,7 +326,7 @@ func time_to_contact(action: StringName = &"swing", power: float = 1.0) -> float
 	var saved := [_action, _action_len, _action_power]
 	_action = action
 	_action_power = clampf(power, 0.0, 1.0)
-	_action_len = ACTIONS.get(String(action), 0.78)
+	_action_len = ACTIONS.get(String(action), 0.78) * ShintyPoseTweaks.length_scale(String(action))
 	if action == &"swing" or action == &"pass":
 		_action_len *= lerpf(0.75, 1.0, _action_power)
 	var t := _contact_time()
@@ -706,6 +706,14 @@ func _pose(_delta: float) -> void:
 			cam_d = r[1]
 			twist = r[2]
 			hips_off += r[3]
+		# Hand-made adjustments from the training ground's pose editor.
+		var tw := ShintyPoseTweaks.at(String(_action), _action_t,
+			ShintyPoseTweaks.moments(String(_action), _action_len, _swing_times()), _action_len)
+		if not tw.is_empty():
+			for b in tw["rot"]:
+				rot[b] = rot.get(b, Vector3.ZERO) + tw["rot"][b]
+			cam_p += tw["caman"]
+			twist += tw["twist"]
 
 	# Reaching: bend and lunge towards the target (hockey-style reach).
 	var reaching := _reach > 0.01 and _reach_target != null and (_action == &"" or _action in [&"poke", &"block", &"trap", &"air_kill", &"air_clear"])

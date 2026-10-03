@@ -38,6 +38,11 @@ func _draw() -> void:
 			draw_string(font, box.position + Vector2(40, y), text, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(1, 1, 1, 0.5))
 	var info := "Speed %s   Camera %s   Goals %d" % [_speed_text(m.SPEEDS[m.speed_index]), "close" if m.close_cam else "TV", m.goals]
 	draw_string(font, box.position + Vector2(16, 140), info, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(1, 1, 1, 0.85))
+	if m.editing:
+		var tip := "Up / down pick a row    Left / right change it    A press    B or Esc when done    Right stick or , . turns the camera"
+		draw_rect(Rect2(Vector2(0, screen.y - 44), Vector2(w, 44)), Color(0, 0, 0, 0.5))
+		draw_string(font, Vector2(0, screen.y - 17), tip, HORIZONTAL_ALIGNMENT_CENTER, w, 15, Color(1, 1, 1, 0.9))
+		return
 	var who := "Keeper %s   Defender %s" % ["in" if m.keeper_on else "out", "in" if m.defender_on else "out"]
 	draw_string(font, Vector2(w - 260, 44), who, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(1, 1, 1, 0.85))
 
@@ -55,18 +60,20 @@ func _draw() -> void:
 		draw_string(font, Vector2(0, screen.y * 0.3), m.message, HORIZONTAL_ALIGNMENT_CENTER, w, size, Color.WHITE)
 
 	var pad := "Pick move D-pad ◀ ▶   Play it R3   Ball back D-pad ▼   Slow motion D-pad ▲   Camera View   Close camera turn: right stick   Pause Start"
-	var keys := "Keys: pick [ ]   play T   ball back Backspace   slow motion Tab   camera V (turn , .)   pause Esc   plus the match controls"
+	var keys := "Keys: pick [ ]   play T   edit pose Y   ball back Backspace   slow motion Tab   camera V (turn , .)   pause Esc   plus the match controls"
 	draw_rect(Rect2(Vector2(0, screen.y - 44), Vector2(w, 44)), Color(0, 0, 0, 0.5))
 	draw_string(font, Vector2(0, screen.y - 26), pad, HORIZONTAL_ALIGNMENT_CENTER, w, 13, Color(1, 1, 1, 0.85))
 	draw_string(font, Vector2(0, screen.y - 8), keys, HORIZONTAL_ALIGNMENT_CENTER, w, 13, Color(1, 1, 1, 0.65))
 
 	if m.paused:
-		var pb := Rect2(Vector2(w / 2.0 - 300, screen.y / 2.0 - 70), Vector2(600, 140))
+		var pb := Rect2(Vector2(w / 2.0 - 300, screen.y / 2.0 - 70), Vector2(600, 170))
 		draw_rect(pb, Color(0, 0, 0, 0.7))
 		draw_string(font, pb.position + Vector2(0, 40), "Paused", HORIZONTAL_ALIGNMENT_CENTER, pb.size.x, 28, Color.WHITE)
 		draw_string(font, pb.position + Vector2(0, 76), "Y / K  %s the keeper     X / J  %s a defender" % ["take off" if m.keeper_on else "bring on", "take off" if m.defender_on else "bring on"],
 			HORIZONTAL_ALIGNMENT_CENTER, pb.size.x, 16, Color(1, 1, 1, 0.9))
-		draw_string(font, pb.position + Vector2(0, 108), "Start / Esc to carry on     Back / M for the menu",
+		draw_string(font, pb.position + Vector2(0, 106), "A / Enter  edit this move in the pose editor",
+			HORIZONTAL_ALIGNMENT_CENTER, pb.size.x, 16, Color(1, 0.85, 0.2))
+		draw_string(font, pb.position + Vector2(0, 140), "Start / Esc to carry on     Back / M for the menu",
 			HORIZONTAL_ALIGNMENT_CENTER, pb.size.x, 15, Color(1, 1, 1, 0.75))
 
 

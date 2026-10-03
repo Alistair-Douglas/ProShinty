@@ -11,15 +11,17 @@ extends "res://scripts/match.gd"
 ##   D-pad down        Backspace  ball back at your feet
 ##   D-pad up          Tab   slow motion: full, half, quarter, a tenth
 ##   View (Back)       V     close camera (right stick or , . to go round, zoom with right stick)
-##   Pause: Y / K keeper on or off, X / J defender on or off, Back / M to the menu
+##   Pause: Y / K keeper on or off, X / J defender on or off, Back / M to the menu,
+##          A / Enter to edit the picked move in the pose editor (pose_editor.gd)
 
 const PracticeView := preload("res://scripts/practice_view.gd")
 const PracticeHud := preload("res://scripts/practice_hud.gd")
+const PoseEditor := preload("res://scripts/pose_editor.gd")
 
 const SPEEDS := [1.0, 0.5, 0.25, 0.1]
 const BALL_BACK_AFTER := 1.2   # seconds the keeper or defender holds it before it comes back to you
 const LOOSE_BACK_AFTER := 2.0  # a slow ball this far from you comes back after this long
-const LOOSE_FAR := 12.0
+const LOOSE_FAR := 6.0
 const RESET_X := 35.0          # you start this many yards out from the goal you attack
 
 ## [label, kind, what, power]. Kinds: "pose" plays a one-off animation on
@@ -77,6 +79,10 @@ var practice_defender: Player = null
 var circle_pace := ""             # "walk", "jog" or "sprint" while running a circle on its own
 var circle_centre := Vector2.ZERO
 var _held_t := 0.0                # how long the keeper or defender has had it
+var editing := false              # the pose editor is open: the picked move repeats
+var editor: Control
+var _loop_t := 0.0
+var _cam_before := false
 
 
 func _ready() -> void:
@@ -97,6 +103,11 @@ func _ready() -> void:
 		hud.match_node = self
 		hud.view = view
 		layer.add_child(hud)
+		editor = PoseEditor.new()
+		editor.match_node = self
+		editor.visible = false
+		editor.closed.connect(close_editor)
+		layer.add_child(editor)
 		add_child(layer)
 
 
@@ -206,6 +217,10 @@ func reset_ball() -> void:
 func _physics_process(delta: float) -> void:
 	if manual_step:
 		return
+	if editing:
+		_loop_move(delta)
+		step(delta)
+		return
 	if Input.is_action_just_pressed("pause"):
 		paused = not paused
 	if paused:
@@ -215,6 +230,8 @@ func _physics_process(delta: float) -> void:
 			set_keeper(not keeper_on)
 		elif Input.is_action_just_pressed("practice_defender"):
 			set_defender(not defender_on)
+		elif Input.is_action_just_pressed("ui_accept"):
+			open_editor()
 		return
 	if Input.is_action_just_pressed("practice_next"):
 		move_index = (move_index + 1) % MOVES.size()
@@ -228,6 +245,8 @@ func _physics_process(delta: float) -> void:
 		set_speed((speed_index + 1) % SPEEDS.size())
 	if Input.is_action_just_pressed("practice_camera"):
 		close_cam = not close_cam
+	if Input.is_action_just_pressed("practice_edit"):
+		open_editor()
 	step(delta)
 
 
@@ -291,6 +310,9 @@ func _ai_team(t: int, dt: float) -> void:
 
 
 func _human_control(dt: float) -> void:
+	if editing:
+		human.desired = Vector2.ZERO
+		return
 	if circle_pace != "":
 		var raw := Input.get_vector("move_left", "move_right", "move_up", "move_down")
 		if raw.length() > 0.3:
@@ -427,6 +449,45 @@ func _set_piece_drill(kind: String) -> void:
 			_restart(0, Vector2(target_goal(0).x - attack_dir[0] * 1.0, 1.0), "Corner")
 
 
+# ---------------------------------------------------------------- pose editor
+
+## Opens the pose editor on the picked move (a pose from the list).
+func open_editor() -> bool:
+	var mv: Array = MOVES[move_index]
+	if mv[1] != "pose" or editor == null:
+		_say("Pick a move from the top of the list to edit it", 2.0)
+		paused = false
+		return false
+	paused = false
+	editing = true
+	_cam_before = close_cam
+	close_cam = true
+	reset_ball()
+	_loop_t = 0.3
+	editor.open(str(mv[2]), str(mv[0]))
+	return true
+
+
+func close_editor() -> void:
+	editing = false
+	close_cam = _cam_before
+	editor.visible = false
+	set_speed(0)
+
+
+## While editing, the move plays over and over with a short gap.
+func _loop_move(delta: float) -> void:
+	_loop_t -= delta
+	if _loop_t > 0.0:
+		return
+	var mv: Array = MOVES[move_index]
+	play_move(move_index)
+	var len: float = ShintyPlayerModel.ACTIONS.get(str(mv[2]), 1.0) * ShintyPoseTweaks.length_scale(str(mv[2]))
+	if str(mv[2]) == "stumble" and float(mv[3]) >= ShintyPlayerModel.FALL_AT:
+		len = float(mv[3]) * 1.3 + 0.45 + ShintyPlayerModel.GET_UP
+	_loop_t = len + 0.7
+
+
 # ---------------------------------------------------------------- input
 
 func _setup_practice_input() -> void:
@@ -438,6 +499,7 @@ func _setup_practice_input() -> void:
 	_add_input("practice_camera", [KEY_V], [JOY_BUTTON_BACK])
 	_add_input("practice_keeper", [KEY_K], [JOY_BUTTON_Y])
 	_add_input("practice_defender", [KEY_J], [JOY_BUTTON_X])
+	_add_input("practice_edit", [KEY_Y], [])
 	_add_input("practice_orbit_left", [KEY_COMMA], [])
 	_add_input("practice_orbit_right", [KEY_PERIOD], [])
 
