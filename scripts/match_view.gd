@@ -139,6 +139,7 @@ func _update_player(p, f: Dictionary, delta: float) -> void:
 	var model: ShintyPlayerModel = f["model"]
 	model.set_locomotion(Vector3(p.vel.x, 0.0, p.vel.y) * ShintyMatchAdapter.YARD)
 	model.look_at_point(w(m.ball_pos, m.ball_z))
+	model.held_pose = &"throw_up" if m.in_throw_up(p) else &""
 	# One-off actions the match asked for (hits, shies, pokes, stumbles, saves).
 	if p.anim_seq != f["anim_seq"]:
 		f["anim_seq"] = p.anim_seq

@@ -86,6 +86,7 @@ func _hero(player: Dictionary, pos: Vector3, yaw: float) -> ShintyPlayerModel:
 	# The throw-up: face to face over the ball, camans raised and crossed
 	# high over the spot, waiting for the referee to throw it up.
 	m.reach_face = Vector3(signf(pos.x), 0.0, 0.0)  # toe curls in, toward the other bas
+	m.held_pose = &"throw_up"
 	m.set_reach(THROW_UP_CROSS + Vector3(-signf(pos.x) * CROSS_PAST, 0.0, 0.0), 1.0)
 	return m
 
