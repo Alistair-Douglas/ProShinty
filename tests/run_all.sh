@@ -44,6 +44,7 @@ if command -v xvfb-run > /dev/null; then
 	mkdir -p "$OUT/menu"
 	run menu timeout 300 xvfb-run -a -s "-screen 0 1280x720x24" "$GODOT" --path . --rendering-method gl_compatibility --audio-driver Dummy -s tests/menu_test.gd -- "$OUT/menu"
 	run subs_screen timeout 900 xvfb-run -a -s "-screen 0 1280x720x24" "$GODOT" --path . --rendering-method gl_compatibility --audio-driver Dummy -s tests/render_subs.gd -- "$OUT/menu"
+	run foul_replay timeout 900 xvfb-run -a -s "-screen 0 1280x720x24" "$GODOT" --path . --rendering-method gl_compatibility --audio-driver Dummy -s tests/foul_replay_test.gd -- "$OUT/menu"
 fi
 
 if [ ${#failed[@]} -gt 0 ]; then
