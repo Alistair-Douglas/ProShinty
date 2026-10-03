@@ -33,6 +33,7 @@ const RESTITUTION := 0.2      ## how bouncy body contact is
 const REACT_RADIUS := 3.2     ## start reaching for a loose ball this close
 const STICK_CLEAR := 0.1      ## caman shaft and head keep this far off other bodies
 const SPRINT_DRIVE := 1.6     ## extra acceleration while sprinting
+const SLIP_RATE := 0.02       ## slips a second, sprinting and turning or stopping too hard on a soaking pitch
 
 
 static func setup(p) -> void:
@@ -101,6 +102,9 @@ static func move(m, p, dt: float) -> void:
 	var along := dv.dot(u)
 	var perp := dv - u * along
 	var balance := 0.4 if p.stagger > 0.0 else 1.0
+	# A wet pitch: less grip to push off, stop and turn on.
+	var wet: float = ShintyWeather.slip(m.weather)
+	balance *= 1.0 - 0.18 * wet
 	var mass_k := pow(78.0 / maxf(p.mass, 40.0), 0.25)
 	var frac := clampf(speed / maxf(top, 0.1), 0.0, 1.0)
 	# Acceleration falls away as you near top speed. Sprinting drives
@@ -113,6 +117,12 @@ static func move(m, p, dt: float) -> void:
 	var brake: float = (13.0 + p.r("pace") * 0.03) * mass_k * balance
 	# Turning: sharp at a jog, wide at full tilt.
 	var turn: float = (15.0 + p.r("control") * 0.03) * (1.0 - 0.45 * frac) * mass_k * balance
+	# Asking more of your feet than the grass gives (stopping dead, cutting
+	# sharp at speed) on a wet pitch, you can go down.
+	var over := maxf(-along / maxf(brake * dt, 0.0001), perp.length() / maxf(turn * dt, 0.0001))
+	if wet > 0.0 and p.sprinting and over > 1.5 and frac > 0.6 and p.stagger <= 0.0 \
+			and randf() < wet * SLIP_RATE * (1.3 - p.r("control") / 100.0) * dt:
+		_slip(m, p)
 	along = clampf(along, -brake * dt, accel * dt)
 	perp = perp.limit_length(turn * dt)
 	p.vel = old + u * along + perp
@@ -137,6 +147,16 @@ static func move(m, p, dt: float) -> void:
 		p.stamina = maxf(0.0, p.stamina - dt * 0.06 * (1.5 - p.r("stamina") / 100.0))
 	else:
 		p.stamina = minf(1.0, p.stamina + dt * 0.04)
+
+
+## Feet gone on the wet grass: down they go, and a carrier loses the ball.
+static func _slip(m, p) -> void:
+	p.stagger = maxf(p.stagger, 0.9)
+	p.swing_t = -1.0
+	m.anim(p, "stumble", 0.7)
+	m.events.append({"type": "slip", "team": p.team, "on": p})
+	if p == m.carrier:
+		m.spill(p, p)
 
 
 ## Shielding: the way to keep the ball, directly away from the nearest
@@ -195,6 +215,7 @@ static func _knock(m, p, dv: float, by) -> void:
 		hold *= 1.35   # braced, holding the ball up
 	if p.stagger > 0.0:
 		hold *= 0.6
+	hold *= 1.0 - 0.25 * ShintyWeather.slip(m.weather)   # nothing to brace against on wet grass
 	if dv > hold:
 		# Knocked over from behind without a barge: a push in the back.
 		# Only a clear shove counts; brushing into someone's back doesn't.

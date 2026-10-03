@@ -44,7 +44,17 @@ func _ready() -> void:
 	var q: int = get_node("/root/Game").graphics_quality if has_node("/root/Game") else ShintyPitch.Detail.MEDIUM
 	pitch.graphics_quality = q
 	pitch.scenery_detail = ShintyPitch.Detail.LOW if q == ShintyPitch.Detail.LOW else ShintyPitch.Detail.MEDIUM
+	pitch.lighting = int(m.weather.get("lighting", ShintyPitch.Lighting.SUMMER_AFTERNOON))
+	pitch.wetness = float(m.weather.get("wet", 0.0))
 	add_child(pitch)
+	if float(m.weather.get("rain", 0.0)) > 0.0:
+		var rain := ShintyRain.new()
+		rain.name = "Rain"
+		rain.intensity = float(m.weather["rain"])
+		var wind: Vector2 = m.weather.get("wind", Vector2.ZERO)
+		rain.wind = Vector3(wind.x, 0.0, wind.y)
+		rain.quality = q
+		add_child(rain)
 	_build_hails()
 	for p in m.players:
 		figures[p] = _build_player(p)

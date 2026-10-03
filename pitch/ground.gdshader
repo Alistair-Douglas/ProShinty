@@ -17,6 +17,7 @@ uniform float stripe_width = 6.0;             // yards per mowing stripe
 uniform float stripe_strength = 0.09;
 uniform bool stripe_along_length = false;  // lengthwise bands instead of across
 uniform float wear = 0.55;                    // 0 = lush, 1 = dry summer park
+uniform float wet = 0.0;                      // 0 = dry, 1 = soaking: darker, glossy grass
 
 uniform vec3 grass_color : source_color = vec3(0.33, 0.45, 0.19);
 uniform vec3 grass_dry_color : source_color = vec3(0.52, 0.52, 0.28);
@@ -184,8 +185,18 @@ void fragment() {
 	NORMAL_MAP = normalize(vec3(bx * detail * 4.0, bz * detail * 4.0, 1.0)) * 0.5 + 0.5;
 	NORMAL_MAP_DEPTH = 0.8;
 
-	ALBEDO = col;
 	float grassy = 1.0 - max(max(COLOR.r, COLOR.b), max(COLOR.a, line));
-	ROUGHNESS = mix(0.9, 0.78, grassy * on_pitch) + dry * 0.08;
-	SPECULAR = mix(0.2, 0.35, grassy);
+	float rough_v = mix(0.9, 0.78, grassy * on_pitch) + dry * 0.08;
+	float spec_v = mix(0.2, 0.35, grassy);
+	if (wet > 0.0) {
+		// Rain darkens grass and earth and makes them shine; standing water
+		// gathers in the worn goalmouths and the low spots.
+		float puddle = smoothstep(0.55, 0.75, worn * 0.8 + n_big * 0.5) * on_pitch * (1.0 - line) * wet;
+		col *= 1.0 - 0.25 * wet - 0.25 * puddle;
+		rough_v = mix(rough_v - 0.3 * wet, 0.08, puddle);
+		spec_v = mix(spec_v + 0.15 * wet, 0.5, puddle);
+	}
+	ALBEDO = col;
+	ROUGHNESS = rough_v;
+	SPECULAR = spec_v;
 }

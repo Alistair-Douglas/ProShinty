@@ -23,7 +23,7 @@ extends Node3D
 ## (like the 2D game) converts with sim_to_world() / world_to_sim().
 
 enum Venue { ABERDOUR, KINGUSSIE, TIGHNABRUAICH }
-enum Lighting { SUMMER_AFTERNOON, SUMMER_EVENING, OVERCAST }
+enum Lighting { SUMMER_AFTERNOON, SUMMER_EVENING, OVERCAST, WINTER_SUN, RAIN }
 enum Detail { LOW, MEDIUM, HIGH }
 
 ## Display names for menus, in Venue order.
@@ -99,6 +99,11 @@ const GOAL_HEIGHT_YD := 3.3333  # 10 ft to the crossbar
 @export var show_flags := true:
 	set(v):
 		show_flags = v
+		_queue_rebuild()
+## 0 = dry, 0.5 = damp, 1 = soaking: wet grass is darker and shines.
+@export_range(0.0, 1.0) var wetness := 0.0:
+	set(v):
+		wetness = v
 		_queue_rebuild()
 ## 0 = lush green, 1 = dry midsummer park. Negative uses the ground's own look.
 @export_range(-1.0, 1.0) var grass_wear := -1.0:
@@ -298,6 +303,8 @@ func _build_ground(root: Node3D) -> void:
 		mat.set_shader_parameter(k, look[k])
 	if grass_wear >= 0.0:
 		mat.set_shader_parameter("wear", grass_wear)
+	# Damp is the usual Scottish pitch; only past that does the grass look wet.
+	mat.set_shader_parameter("wet", clampf((wetness - 0.4) / 0.6, 0.0, 1.0))
 	mi.material_override = mat
 	root.add_child(mi)
 
@@ -473,7 +480,7 @@ func _build_environment() -> void:
 	# blue rather than washing out white.
 	env.fog_light_color = p.sky_horizon.lerp(p.sky_top, 0.35) * 0.8
 	env.fog_sun_scatter = 0.08
-	env.fog_density = _layout.fog_density() / units_per_yard * YARD_M
+	env.fog_density = _layout.fog_density() * p.get("fog", 1.0) / units_per_yard * YARD_M
 	env.fog_aerial_perspective = 0.4
 	env.fog_sky_affect = 0.0
 	env.glow_enabled = true
@@ -515,6 +522,23 @@ func _lighting_preset() -> Dictionary:
 				"shadow_blur": 4.0, "sky_top": Color(0.55, 0.58, 0.62), "sky_horizon": Color(0.74, 0.76, 0.78),
 				"clouds": 0.95, "cloud_color": Color(0.8, 0.81, 0.83), "cloud_shadow": Color(0.56, 0.58, 0.62),
 				"ambient": 1.3, "exposure": 1.1,
+			}
+		Lighting.WINTER_SUN:
+			# A clear winter afternoon: the sun barely clears the hills, long
+			# shadows across the pitch and a pale, golden sky.
+			return {
+				"elevation": 9.0, "yaw": -70.0, "sun_color": Color(1.0, 0.8, 0.58), "sun_energy": 1.45,
+				"shadow_blur": 1.5, "sky_top": Color(0.26, 0.42, 0.68), "sky_horizon": Color(0.9, 0.8, 0.68),
+				"clouds": 0.22, "cloud_color": Color(1.0, 0.9, 0.8), "cloud_shadow": Color(0.6, 0.58, 0.64),
+				"ambient": 0.6, "exposure": 1.05,
+			}
+		Lighting.RAIN:
+			# Low, dark cloud and murk: the far hills fade into the rain.
+			return {
+				"elevation": 40.0, "yaw": -30.0, "sun_color": Color(0.82, 0.86, 0.92), "sun_energy": 0.22,
+				"shadow_blur": 5.0, "sky_top": Color(0.36, 0.38, 0.42), "sky_horizon": Color(0.55, 0.57, 0.6),
+				"clouds": 1.0, "cloud_color": Color(0.58, 0.6, 0.63), "cloud_shadow": Color(0.34, 0.36, 0.4),
+				"ambient": 1.15, "exposure": 1.0, "fog": 4.0,
 			}
 		_:
 			return {

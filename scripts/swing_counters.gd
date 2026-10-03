@@ -107,16 +107,17 @@ static func barge_contact(m, barger, victim) -> float:
 		"on": victim, "at": victim.pos, "severity": 0.4 if in_the_back else 0.0})
 	if in_the_back and not ("referee" in m) and randf() < REF_SEES:
 		m.foul_pending = [barger, victim]
-	if floors(barger, victim):
+	if floors(barger, victim, ShintyWeather.slip(m.weather)):
 		_floor(m, barger, victim, push)
 	return BARGE_BRACE
 
 
 ## A barger at full pace into a slower player who isn't holding the ball up
 ## or barging back puts them on the ground.
-static func floors(barger, victim) -> bool:
+static func floors(barger, victim, wet := 0.0) -> bool:
 	var pace: float = barger.vel.length()
-	return barger.sprinting and pace >= barger.top_speed() * FLOOR_PACE \
+	# On a soaking pitch it takes less to put someone down.
+	return barger.sprinting and pace >= barger.top_speed() * (FLOOR_PACE - 0.15 * wet) \
 		and victim.vel.length() < pace * FLOOR_SLOWER \
 		and not victim.shielding and victim.barge_t <= 0.0
 

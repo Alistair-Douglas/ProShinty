@@ -148,6 +148,8 @@ var players: Array = []
 var squads := [[], []]
 var colors := [[Color.RED, Color.WHITE], [Color.BLUE, Color.YELLOW]]   # [shirt, trim] of the kit each side wears
 var kits := [{}, {}]   # the kit each side wears (TeamData.match_kits)
+var weather := {}      # wetness, wind, rain and light (ShintyWeather.make)
+var weather_t := 0.0   # seconds of match so far, for the gusts
 var score := [0, 0]
 var shots := [0, 0]
 var state := State.THROW_UP
@@ -239,6 +241,8 @@ func _setup() -> void:
 	extra_time = bool(config.get("extra_time", true))
 	if config.has("seed"):
 		seed(int(config["seed"]))
+	weather = ShintyWeather.make(config.get("weather"))
+	ball_sim.physics.wetness = float(weather["wet"])
 	kits = TeamData.match_kits(teams[0], teams[1])
 	for t in 2:
 		var c: Dictionary = kits[t]
@@ -299,6 +303,9 @@ func _physics_process(delta: float) -> void:
 
 func step(dt: float) -> void:
 	message_timer = max(0.0, message_timer - dt)
+	weather_t += dt
+	var wind := ShintyWeather.wind_at(weather, weather_t) * ShintyMatchAdapter.YARD
+	ball_sim.physics.wind = Vector3(wind.x, 0.0, wind.y)
 	subs.step(dt)
 	if state != State.PLAY and state != State.FULL_TIME:
 		referee.step(dt)

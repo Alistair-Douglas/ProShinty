@@ -59,6 +59,7 @@ func _draw() -> void:
 			if m.charge > 1.0:
 				# Overswing: no extra power, just more chance of a miss-hit.
 				draw_rect(Rect2(c + Vector2(40, 0), Vector2(40 * (m.charge - 1.0), 6)), Color(0.9, 0.1, 0.1))
+	_draw_weather(Vector2(w - 250, 104))
 	var help := "Move WASD/Arrows   Sprint Shift   Shoot Space/Click   Long hit X   Shield Z   Pass/Poke E   Block F   Cleek C   Barge R   Switch Q   Pause Esc"
 	draw_rect(Rect2(Vector2(0, screen.y - 24), Vector2(w, 24)), Color(0, 0, 0, 0.45))
 	draw_string(font, Vector2(0, screen.y - 7), help, HORIZONTAL_ALIGNMENT_CENTER, w, 13, Color(1, 1, 1, 0.8))
@@ -95,6 +96,28 @@ func _draw() -> void:
 		draw_string(font, box.position + Vector2(0, 38), centre_text, HORIZONTAL_ALIGNMENT_CENTER, box.size.x, size, Color.WHITE)
 		if sub != "":
 			draw_string(font, box.position + Vector2(0, 66), sub, HORIZONTAL_ALIGNMENT_CENTER, box.size.x, 15, Color(1, 1, 1, 0.8))
+
+
+## The pitch and the wind, with an arrow showing which way it blows on screen.
+func _draw_weather(at: Vector2) -> void:
+	var m := match_node
+	if m.weather.is_empty() or m.weather.get("kind", -1) < 0:
+		return
+	draw_string(font, at + Vector2(0, 0), ShintyWeather.describe(m.weather), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1, 1, 1, 0.85))
+	var wind: Vector2 = ShintyWeather.wind_at(m.weather, m.weather_t)
+	if wind.length() < 1.0 or view == null:
+		return
+	var mid: Vector2 = m.PITCH / 2.0
+	var dir: Vector2 = view.screen_pos(mid + wind.normalized() * 10.0, 0.0) - view.screen_pos(mid, 0.0)
+	if dir.length() < 0.5:
+		return
+	dir = dir.normalized()
+	var c := at + Vector2(-16, -4)
+	var tip := c + dir * 9.0
+	var col := Color(1, 1, 1, 0.85)
+	draw_line(c - dir * 9.0, tip, col, 2.0)
+	draw_line(tip, tip - dir.rotated(0.5) * 6.0, col, 2.0)
+	draw_line(tip, tip - dir.rotated(-0.5) * 6.0, col, 2.0)
 
 
 func _panel_text(pos: Vector2, text: String, font_size: int) -> void:

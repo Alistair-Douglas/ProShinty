@@ -10,6 +10,7 @@ var human_side := 0  # 0 = you play the home team, 1 = the away team
 var difficulty := 1  # 0 easy, 1 normal, 2 hard
 var half_minutes := 3  # real minutes per half
 var venue := -1  # ShintyPitch.Venue; -1 until picked = the home team's ground
+var weather := 0  # ShintyWeather.Kind; 0 = random
 var last_result := {}
 ## 0 Low, 1 Medium, 2 High (ShintyPitch.Detail). Saved between runs.
 var graphics_quality := 1
@@ -177,6 +178,7 @@ func match_config() -> Dictionary:
 		"difficulty": difficulty,
 		"half_seconds": half_minutes * 60.0,
 		"venue": max(venue, 0),
+		"weather": weather,
 	}
 
 

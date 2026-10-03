@@ -59,7 +59,7 @@ func _unhandled_input(e: InputEvent) -> void:
 			set_view(e.keycode - KEY_0)
 		elif e.keycode == KEY_L:
 			var p := get_node(pitch_path)
-			p.lighting = (p.lighting + 1) % 3
+			p.lighting = (p.lighting + 1) % ShintyPitch.Lighting.size()
 		elif e.keycode == KEY_V:
 			var p := get_node(pitch_path)
 			p.venue = (p.venue + 1) % ShintyPitch.VENUE_NAMES.size()
