@@ -64,6 +64,8 @@ func live_camera(delta: float) -> Array:
 
 ## Called by the view after each live frame.
 func after_frame(delta: float) -> void:
+	if m.paused:
+		return  # nothing to record, and no replay starts under the pause menu
 	replay.record(delta)
 	for t in 2:
 		if m.score[t] > _last_score[t]:

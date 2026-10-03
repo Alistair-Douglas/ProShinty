@@ -229,6 +229,7 @@ func _drive_menu_matches() -> bool:
 		if _swings == 0:
 			_fail("menu match %d: the bot's key presses never started a swing" % (_venue + 1))
 		_swings = 0
+		_pause_at = -1
 		_shields = 0
 		# What pressing a button at full time does.
 		change_scene_to_file("res://scenes/main_menu.tscn")
@@ -256,6 +257,7 @@ func _physics_process(delta: float) -> bool:
 
 
 var _swing_hold := 0
+var _pause_at := -1
 var _counted := false
 var _shields := 0   ## frames the bot held the ball up
 var _swings := 0   ## hits the bot started (checks key presses reach the match)
@@ -267,13 +269,16 @@ func _bot(m: Node) -> void:
 	var h = m.human
 	if h == null:
 		return
-	if _match_frames == 600:
-		Input.action_press("pause")
-	elif _match_frames == 602:
-		Input.action_release("pause")
-	elif _match_frames == 640:
-		Input.action_press("pause")
-	elif _match_frames == 642:
+	# Pause once and resume, at a moment the match is live (a replay holds
+	# the match, so it wouldn't see the key).
+	if _pause_at < 0 and _match_frames >= 600 and m.process_mode != Node.PROCESS_MODE_DISABLED:
+		_pause_at = _match_frames
+	if _pause_at >= 0 and _match_frames - _pause_at in [0, 40]:
+		if m.process_mode == Node.PROCESS_MODE_DISABLED:
+			_pause_at += 1   # try again next frame
+		else:
+			Input.action_press("pause")
+	elif _pause_at >= 0 and _match_frames - _pause_at in [2, 42]:
 		Input.action_release("pause")
 	if m.paused:
 		return
