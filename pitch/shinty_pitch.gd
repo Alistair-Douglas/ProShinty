@@ -30,6 +30,9 @@ enum Venue { ABERDOUR, KINGUSSIE, TIGHNABRUAICH, PORTREE }
 enum Lighting { SUMMER_AFTERNOON, SUMMER_EVENING, OVERCAST }
 enum Detail { LOW, MEDIUM, HIGH }
 
+## Tree and car models dropped into pitch/models/ (see scenery_models.gd).
+const SceneryModels := preload("res://pitch/scenery_models.gd")
+
 ## Display names for menus, in Venue order.
 const VENUE_NAMES := ["Aberdour", "Kingussie (The Dell)", "Tighnabruaich (Kyles Athletic)", "Portree (Skye)"]
 ## The club that plays at each venue, for matching a home team to its ground.
@@ -118,6 +121,7 @@ var _gen: Node3D
 var _pending := false
 var _mats := {}
 var _layout: RefCounted  # the venue script instance (venues/*.gd)
+var _cars := {}  # car model -> [[holder, local transform, paint]], see add_car
 ## Half length and half width of the pitch in metres. Scenery is laid out in
 ## metres around these and scaled to world units at the end.
 var hl := 0.0
@@ -233,7 +237,9 @@ func _rebuild() -> void:
 		var rng := RandomNumberGenerator.new()
 		rng.seed = layout_seed
 		_build_water(root)
+		_cars.clear()
 		_layout.build(root, rng)
+		_emit_car_models(root)
 		_batch_scenery(root)
 	if add_ground_collision:
 		_build_collision(s)
@@ -536,6 +542,7 @@ class TreeBatch:
 	var trunk_colors: Array[Color] = []
 	var canopies: Array[Transform3D] = []
 	var colors: Array[Color] = []
+	var models := {}  # model -> [[transform, colour], ...]
 
 	func add_trunk(xf: Transform3D, color := Color(0.3, 0.26, 0.21)) -> void:
 		trunks.append(xf)
@@ -557,8 +564,27 @@ func leaf_color(rng: RandomNumberGenerator, dark := false) -> Color:
 	return c.srgb_to_linear()
 
 
+## Puts a tree model of the first kind in `kinds` that has one at `base`,
+## `height` metres tall (a Callable, so the rng is only used when there is a
+## model). False if there are no models of those kinds.
+func _place_tree_model(b: TreeBatch, kinds: Array, rng: RandomNumberGenerator, base: Vector3, height: Callable) -> bool:
+	var m = SceneryModels.pick(SceneryModels.TREE_DIR, kinds, rng)
+	if m == null:
+		return false
+	var k: float = height.call() / maxf(m.size.y, 0.01)
+	var xf := Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3.ONE * k), base + Vector3(0, -0.1, 0))
+	if not b.models.has(m):
+		b.models[m] = []
+	b.models[m].append([xf, (m.leaf_color * rng.randf_range(0.9, 1.08)).srgb_to_linear()])
+	return true
+
+
 ## Mature park tree (sycamore, beech, lime): short trunk, big lumpy crown.
+## Smaller ones (size under 0.85) are rowans when there are rowan models.
 func add_broadleaf(b: TreeBatch, rng: RandomNumberGenerator, base: Vector3, size := 1.0) -> void:
+	var kinds := ["beech", "broadleaf", "rowan"] if size >= 0.85 else ["rowan", "broadleaf", "beech"]
+	if _place_tree_model(b, kinds, rng, base, func(): return rng.randf_range(11.0, 16.0) * size):
+		return
 	var trunk_h := rng.randf_range(3.5, 6.0) * size
 	var trunk_r := rng.randf_range(0.3, 0.55) * size
 	b.add_trunk(Transform3D(Basis.from_scale(Vector3(trunk_r, trunk_h + 2.0, trunk_r)), base + Vector3(0, (trunk_h + 2.0) * 0.5, 0)))
@@ -580,6 +606,8 @@ func add_broadleaf(b: TreeBatch, rng: RandomNumberGenerator, base: Vector3, size
 
 ## Dense dark evergreen crown down to the ground (holm oak, yew).
 func add_dark_round(b: TreeBatch, rng: RandomNumberGenerator, base: Vector3) -> void:
+	if _place_tree_model(b, ["yew"], rng, base, func(): return rng.randf_range(9.0, 12.0)):
+		return
 	var r := rng.randf_range(5.5, 7.5)
 	b.add_trunk(Transform3D(Basis.from_scale(Vector3(0.6, 3.0, 0.6)), base + Vector3(0, 1.5, 0)))
 	var col := leaf_color(rng, true)
@@ -606,6 +634,8 @@ func add_woodland(b: TreeBatch, rng: RandomNumberGenerator, base: Vector3, dark_
 
 ## Birch or alder by the river: thin pale trunk, narrow light crown.
 func add_birch(b: TreeBatch, rng: RandomNumberGenerator, base: Vector3) -> void:
+	if _place_tree_model(b, ["birch"], rng, base, func(): return rng.randf_range(8.0, 13.0)):
+		return
 	var h := rng.randf_range(7.0, 12.0)
 	b.add_trunk(Transform3D(Basis.from_scale(Vector3(0.18, h, 0.18)), base + Vector3(0, h * 0.5, 0)), Color(0.85, 0.84, 0.8))
 	var col := Color(0.4, 0.5, 0.2).lerp(Color(0.5, 0.56, 0.26), rng.randf()).srgb_to_linear()
@@ -618,6 +648,8 @@ func add_birch(b: TreeBatch, rng: RandomNumberGenerator, base: Vector3) -> void:
 
 ## Scots pine: tall bare trunk with a flat dark crown on top.
 func add_pine(b: TreeBatch, rng: RandomNumberGenerator, base: Vector3) -> void:
+	if _place_tree_model(b, ["pine"], rng, base, func(): return rng.randf_range(12.0, 19.0)):
+		return
 	var h := rng.randf_range(10.0, 17.0)
 	b.add_trunk(Transform3D(Basis.from_scale(Vector3(0.3, h, 0.3)), base + Vector3(0, h * 0.5, 0)), Color(0.5, 0.33, 0.24))
 	var col := Color(0.12, 0.2, 0.12).lerp(Color(0.16, 0.25, 0.14), rng.randf()).srgb_to_linear()
@@ -629,6 +661,8 @@ func add_pine(b: TreeBatch, rng: RandomNumberGenerator, base: Vector3) -> void:
 
 
 func add_bush(b: TreeBatch, rng: RandomNumberGenerator, base: Vector3) -> void:
+	if _place_tree_model(b, ["bush"], rng, base, func(): return rng.randf_range(1.2, 2.6)):
+		return
 	var r := rng.randf_range(1.0, 2.2)
 	b.canopies.append(Transform3D(Basis.from_scale(Vector3(r * 1.3, r, r * 1.3)), base + Vector3(0, r * 0.6, 0)))
 	b.colors.append(leaf_color(rng, rng.randf() < 0.5))
@@ -638,6 +672,7 @@ func add_bush(b: TreeBatch, rng: RandomNumberGenerator, base: Vector3) -> void:
 ## canopy blob is a lumpy core wrapped in `cards` leaf cards, which give the
 ## ragged outline, the dappled shadows and the gaps you see through real trees.
 func emit_trees(root: Node3D, b: TreeBatch, segs: int, rings: int, cards: int, label: String) -> void:
+	_emit_tree_models(root, b, label)
 	if not b.trunks.is_empty():
 		var cyl := CylinderMesh.new()
 		cyl.top_radius = 0.65
@@ -690,6 +725,53 @@ func emit_trees(root: Node3D, b: TreeBatch, segs: int, rings: int, cards: int, l
 	mmi2.set_meta("far_mesh", _canopy_mesh(maxi(segs - 4, 6), maxi(rings - 2, 4), 0, 0.95))
 	mmi2.set_meta("far_material", far)
 	root.add_child(mmi2)
+
+
+## One MultiMesh per tree model. Each carries the parts of its far version
+## (see _add_far_trees): the model's own _far file, or else a plain blob
+## crown and trunk fitted to the model.
+func _emit_tree_models(root: Node3D, b: TreeBatch, label: String) -> void:
+	var n := 0
+	for m in b.models:
+		var list: Array = b.models[m]
+		var mm := MultiMesh.new()
+		mm.transform_format = MultiMesh.TRANSFORM_3D
+		mm.use_colors = true
+		mm.mesh = m.mesh
+		mm.instance_count = list.size()
+		for i in list.size():
+			mm.set_instance_transform(i, list[i][0])
+			mm.set_instance_color(i, list[i][1])
+		var mmi := MultiMeshInstance3D.new()
+		mmi.name = "%sModel%d" % [label, n]
+		mmi.multimesh = mm
+		mmi.set_meta("far_parts", _tree_far_parts(m))
+		root.add_child(mmi)
+		n += 1
+
+
+func _tree_far_parts(m) -> Array:
+	if m.far:
+		return [[m.far, null, Transform3D.IDENTITY]]
+	var far := ShaderMaterial.new()
+	far.shader = _load_local("canopy_far.gdshader")
+	far.set_shader_parameter("noise_tex", _load_local("ground_noise.png"))
+	far.set_shader_parameter("leaf_tile", _load_local("leaves_tile.png"))
+	var crown: AABB = m.canopy
+	var blob := Transform3D(Basis.from_scale(crown.size * 0.5), crown.get_center())
+	var cyl := CylinderMesh.new()
+	cyl.top_radius = 0.65
+	cyl.bottom_radius = 1.0
+	cyl.height = 1.0
+	cyl.radial_segments = 6
+	cyl.rings = 1
+	cyl.cap_top = false
+	cyl.cap_bottom = false
+	var top: float = crown.position.y + crown.size.y * 0.3
+	var r := maxf(m.size.y * 0.018, 0.1)
+	var trunk := Transform3D(Basis.from_scale(Vector3(r, top, r)), Vector3(0, top * 0.5, 0))
+	var bark := mat("far_bark%s" % m.bark_color.to_html(), m.bark_color, 0.95)
+	return [[_canopy_mesh(10, 6, 0, 0.95), far, blob], [cyl, bark, trunk]]
 
 
 ## Unit-radius canopy blob: a sphere core (UV2.x = 0) of radius `core` and
@@ -844,6 +926,10 @@ func add_roof(parent: Node3D, size: Vector3, pos: Vector3, m: Material) -> MeshI
 func add_car(holder: Node3D, rng: RandomNumberGenerator, pos: Vector3, yaw: float) -> void:
 	var paints := [Color(0.93, 0.93, 0.93), Color(0.08, 0.08, 0.09), Color(0.62, 0.64, 0.66),
 			Color(0.1, 0.15, 0.32), Color(0.62, 0.08, 0.08), Color(0.3, 0.31, 0.33)]
+	var model = SceneryModels.pick_car(rng)
+	if model:
+		_place_car_model(holder, model, pos, yaw + rng.randf_range(-0.05, 0.05), paints[rng.randi() % paints.size()])
+		return
 	var idx := rng.randi() % paints.size()
 	var paint := mat("paint%d" % idx, paints[idx], 0.35)
 	var car := Node3D.new()
@@ -862,6 +948,10 @@ func add_car(holder: Node3D, rng: RandomNumberGenerator, pos: Vector3, yaw: floa
 
 
 func add_van(holder: Node3D, pos: Vector3, yaw: float) -> void:
+	var model = SceneryModels.pick(SceneryModels.CAR_DIR, ["van", "minibus"], RandomNumberGenerator.new())
+	if model:
+		_place_car_model(holder, model, pos, yaw, Color(0.93, 0.93, 0.93))
+		return
 	var van := Node3D.new()
 	van.position = pos
 	van.rotation.y = yaw
@@ -875,6 +965,36 @@ func add_van(holder: Node3D, pos: Vector3, yaw: float) -> void:
 		for sz in [-1.0, 1.0]:
 			var w := add_cyl(van, Vector3(sx, 0.36, sz * 0.9), 0.36, 0.26, tyre)
 			w.rotation.x = PI * 0.5
+
+
+## Cars from models are gathered here and drawn by _emit_car_models, one
+## MultiMesh per model, with `paint` on the materials named as paint.
+func _place_car_model(holder: Node3D, model, pos: Vector3, yaw: float, paint: Color) -> void:
+	var k: float = SceneryModels.car_length(model) / maxf(model.size.x, 0.01)
+	if not _cars.has(model):
+		_cars[model] = []
+	_cars[model].append([holder, Transform3D(Basis(Vector3.UP, yaw).scaled(Vector3.ONE * k), pos), paint])
+
+
+func _emit_car_models(root: Node3D) -> void:
+	var n := 0
+	for m in _cars:
+		var list: Array = _cars[m]
+		var mm := MultiMesh.new()
+		mm.transform_format = MultiMesh.TRANSFORM_3D
+		mm.use_colors = true
+		mm.mesh = m.mesh
+		mm.instance_count = list.size()
+		for i in list.size():
+			mm.set_instance_transform(i, _relative_xform(root, list[i][0]) * list[i][1])
+			mm.set_instance_color(i, list[i][2])
+		var mmi := MultiMeshInstance3D.new()
+		mmi.name = "CarModel%d" % n
+		mmi.multimesh = mm
+		if m.far:
+			mmi.set_meta("far_parts", [[m.far, null, Transform3D.IDENTITY]])
+		root.add_child(mmi)
+		n += 1
 
 
 ## Cars parked side by side along a line from `a` to `b`, noses pointing `yaw`.
@@ -1049,7 +1169,8 @@ func _cell_distance(cell: Vector2i) -> float:
 
 func _split_multimesh(root: Node3D, mmi: MultiMeshInstance3D, reach: float) -> void:
 	var mm := mmi.multimesh
-	if mm == null or mm.instance_count < 64 or mm.transform_format != MultiMesh.TRANSFORM_3D:
+	var lod := mmi.has_meta("far_mesh") or mmi.has_meta("far_parts")
+	if mm == null or mm.transform_format != MultiMesh.TRANSFORM_3D or (mm.instance_count < 64 and not lod):
 		return
 	var cells := {}
 	var base := _relative_xform(root, mmi)
@@ -1058,7 +1179,7 @@ func _split_multimesh(root: Node3D, mmi: MultiMeshInstance3D, reach: float) -> v
 		if not cells.has(cell):
 			cells[cell] = []
 		cells[cell].append(i)
-	if cells.size() < 2:
+	if cells.size() < 2 and not lod:
 		return
 	for cell in cells:
 		var list: Array = cells[cell]
@@ -1082,7 +1203,7 @@ func _split_multimesh(root: Node3D, mmi: MultiMeshInstance3D, reach: float) -> v
 		if not shadows:
 			chunk.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		mmi.get_parent().add_child(chunk)
-		if mmi.has_meta("far_mesh"):
+		if lod:
 			_add_far_trees(root, mmi, chunk, shadows)
 	mmi.get_parent().remove_child(mmi)
 	mmi.queue_free()
@@ -1098,24 +1219,37 @@ func _add_far_trees(root: Node3D, mmi: MultiMeshInstance3D, chunk: MultiMeshInst
 	# No margins: with fading off they act as hysteresis, and a cell starting
 	# inside the margin could show neither version.
 	chunk.visibility_range_end = near
-	var blobs := chunk.multimesh.duplicate() as MultiMesh
-	blobs.mesh = mmi.get_meta("far_mesh")
-	var far := MultiMeshInstance3D.new()
-	far.name = chunk.name + "Far"
-	far.multimesh = blobs
-	far.transform = chunk.transform
-	far.material_override = mmi.get_meta("far_material")
-	far.visibility_range_begin = near
-	far.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if shadows and graphics_quality == Detail.HIGH \
-		else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	chunk.get_parent().add_child(far)
-	if shadows and graphics_quality != Detail.HIGH:
+	var parts: Array = mmi.get_meta("far_parts") if mmi.has_meta("far_parts") \
+		else [[mmi.get_meta("far_mesh"), mmi.get_meta("far_material"), Transform3D.IDENTITY]]
+	var high := graphics_quality == Detail.HIGH
+	if shadows and not high:
 		chunk.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		var caster := far.duplicate(0) as MultiMeshInstance3D
-		caster.name = chunk.name + "Shadow"
-		caster.visibility_range_begin = 0.0
-		caster.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_SHADOWS_ONLY
-		chunk.get_parent().add_child(caster)
+	var k := 0
+	for part in parts:
+		# Each part (a model's far version, or a fitted blob crown and trunk)
+		# sits at `offset` within every tree.
+		var copies := chunk.multimesh.duplicate() as MultiMesh
+		copies.mesh = part[0]
+		var offset: Transform3D = part[2]
+		if offset != Transform3D.IDENTITY:
+			for i in copies.instance_count:
+				copies.set_instance_transform(i, copies.get_instance_transform(i) * offset)
+		var far := MultiMeshInstance3D.new()
+		far.name = "%sFar%d" % [chunk.name, k]
+		far.multimesh = copies
+		far.transform = chunk.transform
+		far.material_override = part[1]
+		far.visibility_range_begin = near
+		far.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if shadows and high \
+			else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		chunk.get_parent().add_child(far)
+		if shadows and not high:
+			var caster := far.duplicate(0) as MultiMeshInstance3D
+			caster.name = "%sShadow%d" % [chunk.name, k]
+			caster.visibility_range_begin = 0.0
+			caster.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_SHADOWS_ONLY
+			chunk.get_parent().add_child(caster)
+		k += 1
 
 
 func _load_local(file: String) -> Resource:
