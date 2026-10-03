@@ -249,7 +249,14 @@ func _rebuild(finish := true) -> void:
 		_cars.clear()
 		_layout.build(root, rng)
 		_emit_car_models(root)
-		_batch_scenery(root)
+	if finish:
+		_finish_build()
+
+
+func _finish_build() -> void:
+	var s := units_per_yard / YARD_M
+	if show_scenery:
+		_batch_scenery(_gen.get_node("Site"))
 	if add_ground_collision:
 		_build_collision(s)
 	if include_environment:
