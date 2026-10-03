@@ -26,6 +26,22 @@ var aim_arrow: Node3D     # where the player is aiming a shy, hit-out or corner
 var crowd: ShintyCrowd
 var goal_judges: ShintyGoalJudges
 var benches: Node3D       # substitutes sat in the dugouts (subs_bench.gd)
+var feel: ShintyMatchFeel # hit-stop, camera kick, rumble, grass puffs, ball trail
+
+# Smooth motion. The match moves in steps, 60 a second; the screen draws as
+# often as it can, which is rarely in step with that. So the view keeps the
+# state from the last two steps and draws everything part way between them
+# (Godot's own physics interpolation only covers nodes moved in
+# _physics_process, and everything here is posed in _process from the match).
+const TELEPORT := 2.5     # yd: a jump bigger than this in one step is a restart; don't slide it
+const GAP_KEEP := 0.35    # share of a ball-to-caman gap still drawn after each step (gone in 3 or 4)
+var ball_draw := Vector3.ZERO   # where the ball is drawn: sim x, y and height, between steps
+var _ball_was := Vector3.ZERO
+var _ball_now := Vector3.ZERO
+var _ball_gap := Vector3.ZERO   # a jump onto a caman or chest, being blended out
+var _shift_seen := Vector3.ZERO
+var _ref_was := Vector2.ZERO
+var _ref_now := Vector2.ZERO
 
 const SKIN := Color(0.93, 0.76, 0.62)
 const WOOD := Color(0.55, 0.36, 0.18)
@@ -78,6 +94,15 @@ func _ready() -> void:
 	audio.name = "Audio"
 	audio.m = m
 	add_child(audio)
+	feel = ShintyMatchFeel.new()
+	feel.name = "Feel"
+	add_child(feel)
+	feel.setup(self)
+	process_physics_priority = 100   # after the match has stepped
+	_shift_seen = m.ball_shift
+	_snapshot()
+	_snapshot()
+	ball_draw = _ball_now
 	cam_x = m.ball_pos.x - m.PITCH.x / 2.0
 	_update_camera(1.0)
 
@@ -100,6 +125,38 @@ func pitch_at_screen(pos: Vector2):
 
 # ---------------------------------------------------------------- per frame
 
+func _physics_process(_delta: float) -> void:
+	if not director.playing:
+		_snapshot()
+
+
+## Keep this step's state and the one before, to draw between them.
+func _snapshot() -> void:
+	_ball_was = _ball_now
+	_ball_now = Vector3(m.ball_pos.x, m.ball_pos.y, m.ball_z)
+	# The ball put onto a caman, chest or glove: drawn from where it was, and
+	# the gap closed over the next few steps instead of in one jump.
+	var shift: Vector3 = m.ball_shift - _shift_seen
+	_shift_seen = m.ball_shift
+	_ball_gap *= GAP_KEEP
+	if shift.length() < TELEPORT:
+		_ball_gap -= shift
+	if _ball_was.distance_to(_ball_now) > TELEPORT * 4.0:
+		_ball_was = _ball_now   # placed for a restart
+		_ball_gap = Vector3.ZERO
+	_ref_was = _ref_now
+	_ref_now = m.referee.pos
+	for p in figures:
+		var f: Dictionary = figures[p]
+		f["pos_was"] = f.get("pos_now", p.pos)
+		f["pos_now"] = p.pos
+		f["stick_was"] = f.get("stick_now", p.stick)
+		f["stick_now"] = p.stick
+		if f["pos_was"].distance_to(p.pos) > TELEPORT:
+			f["pos_was"] = p.pos
+			f["stick_was"] = p.stick
+
+
 func _process(delta: float) -> void:
 	goal_judges.step(delta)
 	if director.playing:
@@ -116,7 +173,11 @@ func _process(delta: float) -> void:
 	benches.step()
 	_update_referee(delta)
 	_update_aim_arrow()
-	ball.position = w(m.ball_pos, m.ball_z + ShintyBallPhysics.RADIUS * ShintyMatchAdapter.TO_YARDS)
+	var t := Engine.get_physics_interpolation_fraction()
+	ball_draw = _ball_was.lerp(_ball_now, t) + _ball_gap * lerpf(1.0, GAP_KEEP, t)
+	ball_draw.z = maxf(ball_draw.z, 0.0)
+	ball.position = w(Vector2(ball_draw.x, ball_draw.y), ball_draw.z + ShintyBallPhysics.RADIUS * ShintyMatchAdapter.TO_YARDS)
+	feel.step(delta)
 	_update_camera(delta)
 	director.after_frame(delta)
 
@@ -131,14 +192,17 @@ func _update_player(p, f: Dictionary, delta: float) -> void:
 	var root: Node3D = f["root"]
 	var speed: float = p.vel.length()
 	f["phase"] += delta * speed * 1.6
-	root.position = w(p.pos)
+	var frac := Engine.get_physics_interpolation_fraction()
+	var pos: Vector2 = f["pos_was"].lerp(f["pos_now"], frac) if f.has("pos_now") else p.pos
+	var stick: Vector3 = f["stick_was"].lerp(f["stick_now"], frac) if f.has("stick_now") else p.stick
+	root.position = w(pos)
 	var dir := Vector3(p.facing.x, 0, p.facing.y)
 	if dir.length() > 0.01:
 		var target := atan2(-dir.x, -dir.z)
 		root.rotation.y = lerp_angle(root.rotation.y, target, min(1.0, delta * 14.0))
 	var model: ShintyPlayerModel = f["model"]
 	model.set_locomotion(Vector3(p.vel.x, 0.0, p.vel.y) * ShintyMatchAdapter.YARD)
-	model.look_at_point(w(m.ball_pos, m.ball_z))
+	model.look_at_point(w(Vector2(ball_draw.x, ball_draw.y), ball_draw.z))
 	# One-off actions the match asked for (hits, shies, pokes, stumbles, saves).
 	if p.anim_seq != f["anim_seq"]:
 		f["anim_seq"] = p.anim_seq
@@ -157,13 +221,13 @@ func _update_player(p, f: Dictionary, delta: float) -> void:
 	elif model.is_charging() and (p != m.human or m.charge < 0.0):
 		model.cancel_charge()
 	# The caman head goes where the match's stick physics put it.
-	model.set_reach(w(Vector2(p.stick.x, p.stick.y), p.stick.z) if p.reach > 0.05 else null, p.reach, p.one_hand)
+	model.set_reach(w(Vector2(stick.x, stick.y), stick.z) if p.reach > 0.05 else null, p.reach, p.one_hand)
 	# A hit on its way: the bas is steered to where the ball will be when the
 	# caman arrives, so the stick is seen to meet it.
 	if p.swing_t >= 0.0 and not p.shy_toss:
 		var t: float = p.swing_t
-		var at: Vector2 = m.ball_pos + m.ball_vel * t
-		var z: float = maxf(0.0, m.ball_z + m.ball_vz * t - 0.5 * m.GRAVITY * t * t)
+		var at: Vector2 = Vector2(ball_draw.x, ball_draw.y) + m.ball_vel * t
+		var z: float = maxf(0.0, ball_draw.z + m.ball_vz * t - 0.5 * m.GRAVITY * t * t)
 		model.set_meet(w(at, z + ShintyBallPhysics.RADIUS * ShintyMatchAdapter.TO_YARDS))
 	else:
 		model.set_meet(null)
@@ -175,10 +239,11 @@ func _update_player(p, f: Dictionary, delta: float) -> void:
 func _update_referee(delta: float) -> void:
 	var ref = m.referee
 	var root: Node3D = referee_figure["root"]
-	root.position = w(ref.pos)
+	var at: Vector2 = _ref_now if _ref_was.distance_to(_ref_now) > TELEPORT else _ref_was.lerp(_ref_now, Engine.get_physics_interpolation_fraction())
+	root.position = w(at)
 	var target := atan2(-ref.facing.x, -ref.facing.y)
 	root.rotation.y = lerp_angle(root.rotation.y, target, min(1.0, delta * 8.0))
-	ShintyMatchAdapter.update_player(referee_figure, ref.vel, 0.0, false, w(m.ball_pos, m.ball_z))
+	ShintyMatchAdapter.update_player(referee_figure, ref.vel, 0.0, false, w(Vector2(ball_draw.x, ball_draw.y), ball_draw.z))
 
 
 func _update_camera(delta: float) -> void:
@@ -224,6 +289,7 @@ func _update_camera(delta: float) -> void:
 	camera.position = eye.lerp(shy_eye, k)
 	camera.look_at(look.lerp(shy_look, k), Vector3.UP)
 	camera.fov = lerpf(tv[2], 45.0, k)
+	feel.kick_camera(camera)
 
 
 ## A flat arrow on the grass from the player's taker along their aim, while
