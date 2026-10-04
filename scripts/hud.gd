@@ -12,6 +12,7 @@ var font: Font
 var tv: ShintyTVGraphics
 var subs_menu: Control
 var stats_panel: Control
+var commentary: ShintyCommentary
 
 
 func _ready() -> void:
@@ -32,6 +33,11 @@ func _ready() -> void:
 	stats_panel.subs_menu = subs_menu
 	stats_panel.tv = tv
 	add_child(stats_panel)
+	# Commentary captions (and voice, where recorded): broadcast/commentary.gd.
+	commentary = ShintyCommentary.new()
+	commentary.m = match_node
+	commentary.view = view
+	add_child(commentary)
 
 
 func _process(_delta: float) -> void:

@@ -24,6 +24,10 @@ var prematch_next := false
 ## Which buttons the on-screen hints show: 0 controller, 1 keyboard. Saved.
 var hint_device := 0
 const HINT_DEVICES := ["Controller", "Keyboard"]
+## Match commentary (broadcast/commentary.gd): 0 captions and voice, 1
+## captions only, 2 voice only, 3 off. Voice plays only for recorded lines. Saved.
+var commentary := 0
+const COMMENTARY_NAMES := ["Captions + voice", "Captions", "Voice", "Off"]
 
 ## Camans from the caman designer, saved between runs, by club id:
 ## {"team": design, "players": {shirt number: design}}. A player with their
@@ -52,6 +56,8 @@ func _ready() -> void:
 		camera_view = clampi(int(cfg.get_value("camera", "view")), 0, CAMERA_NAMES.size() - 1)
 	if cfg.has_section_key("controls", "show"):
 		hint_device = clampi(int(cfg.get_value("controls", "show")), 0, 1)
+	if cfg.has_section_key("commentary", "mode"):
+		commentary = clampi(int(cfg.get_value("commentary", "mode")), 0, COMMENTARY_NAMES.size() - 1)
 	_apply_graphics()
 
 
@@ -65,6 +71,14 @@ func set_hint_device(i: int) -> void:
 	var cfg := ConfigFile.new()
 	cfg.load(SETTINGS_PATH)
 	cfg.set_value("controls", "show", hint_device)
+	cfg.save(SETTINGS_PATH)
+
+
+func set_commentary(mode: int) -> void:
+	commentary = clampi(mode, 0, COMMENTARY_NAMES.size() - 1)
+	var cfg := ConfigFile.new()
+	cfg.load(SETTINGS_PATH)
+	cfg.set_value("commentary", "mode", commentary)
 	cfg.save(SETTINGS_PATH)
 
 
