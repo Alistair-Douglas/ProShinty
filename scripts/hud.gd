@@ -35,11 +35,16 @@ func _ready() -> void:
 
 
 func _process(_delta: float) -> void:
+	# The pre-match build-up has the screen to itself (broadcast/prematch.gd).
+	var build_up: bool = view != null and view.get("prematch") != null
+	tv.visible = not build_up
 	queue_redraw()
 
 
 func _draw() -> void:
 	var m := match_node
+	if view != null and view.get("prematch") != null:
+		return
 	var teams: Array = m.teams
 	var screen := get_viewport_rect().size
 	var w := screen.x
@@ -66,18 +71,23 @@ func _draw() -> void:
 			if m.charge > 1.0:
 				# Overswing: no extra power, just more chance of a miss-hit.
 				draw_rect(Rect2(c + Vector2(40, 0), Vector2(40 * (m.charge - 1.0), 6)), Color(0.9, 0.1, 0.1))
-	var help := "Move WASD/Arrows   Sprint Shift   Shoot Space/Click   Long hit X   Shield Z   Pass/Poke E   Block F   Cleek C   Barge R   Switch Q   Pause Esc"
+	var help := _hint(
+		"Move L Stick   Pass/Poke A   Shoot B   Long hit X   Through/Block Y   Sprint RT   Shield LT   Switch LB   Cleek RB   Barge L3   Pause Start",
+		"Move WASD/Arrows   Sprint Shift   Shoot Space/Click   Long hit X   Shield Z   Pass/Poke E   Through/Block F   Cleek C   Barge R   Switch Q   Pause Esc")
 	draw_rect(Rect2(Vector2(0, screen.y - 24), Vector2(w, 24)), Color(0, 0, 0, 0.45))
 	draw_string(font, Vector2(0, screen.y - 7), help, HORIZONTAL_ALIGNMENT_CENTER, w, 13, Color(1, 1, 1, 0.8))
 	var centre_text := ""
 	var sub := ""
 	if m.paused:
 		centre_text = "Paused"
-		sub = "Esc / Start to resume    Enter / A for team and subs    M / Back to quit to menu" if m.human_side >= 0 \
-			else "Esc to resume, M to quit to menu"
+		if m.human_side >= 0:
+			sub = _hint("Start to resume    A for team and subs    Back to quit to menu",
+				"Esc to resume    Enter for team and subs    M to quit to menu")
+		else:
+			sub = _hint("Start to resume    Back to quit to menu", "Esc to resume    M to quit to menu")
 	elif m.state == m.State.FULL_TIME:
 		centre_text = "Full time: %s %d - %d %s" % [teams[0]["name"], m.score[0], m.score[1], teams[1]["name"]]
-		sub = "Press Space or Enter for the menu"
+		sub = _hint("Press A for the menu", "Press Space or Enter for the menu")
 	elif m.message_timer > 0.0 and not m.message.begins_with("GOAL"):  # the TV graphics show goals
 		# Calls in play (a shy, a foul, a save) sit small in the bottom left,
 		# above the player panel, out of the way of the play.
@@ -102,9 +112,25 @@ func _draw() -> void:
 		draw_string(font, box.position + Vector2(0, 38), centre_text, HORIZONTAL_ALIGNMENT_CENTER, box.size.x, size, Color.WHITE)
 		if sub != "":
 			draw_string(font, box.position + Vector2(0, 66), sub, HORIZONTAL_ALIGNMENT_CENTER, box.size.x, 15, Color(1, 1, 1, 0.8))
+	if m.paused and view != null and view.get("director") != null:
+		# Which camera, under the pause box: Y changes it, R3 zooms (match_view.gd).
+		var cam: ShintyTVCamera = view.director.camera
+		var line := "Camera: %s     Y / Tab  change camera     R3 / V  zoom %s" % [
+			Game.CAMERA_NAMES[cam.view], "out" if cam.zoomed else "in"]
+		var cb := Rect2(Vector2(w / 2.0 - 330, screen.y / 2.0 + 48), Vector2(660, 30))
+		draw_rect(cb, Color(0, 0, 0, 0.65))
+		draw_string(font, cb.position + Vector2(0, 21), line, HORIZONTAL_ALIGNMENT_CENTER, cb.size.x, 15, Color(1, 0.85, 0.2))
 
 
 func _panel_text(pos: Vector2, text: String, font_size: int) -> void:
 	var sz := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size)
 	draw_rect(Rect2(pos - Vector2(8, font_size + 4), sz + Vector2(16, 10)), Color(0, 0, 0, 0.5))
 	draw_string(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Color.WHITE)
+
+
+## The on-screen hint for the device picked in Settings. Looks the Game
+## autoload up at run time: this script is also compiled by headless tests
+## before the autoloads exist, where `Game.hint` would not resolve.
+func _hint(pad: String, keys: String) -> String:
+	var game := get_node_or_null("/root/Game")
+	return game.hint(pad, keys) if game else pad

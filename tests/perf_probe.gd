@@ -53,14 +53,14 @@ func _run() -> void:
 				game.set_graphics_quality(["low", "medium", "high"].find(q), false)
 	print("renderer ", RenderingServer.get_current_rendering_method(), " on ", RenderingServer.get_video_adapter_name(),
 		", quality ", game.get("graphics_quality") if "graphics_quality" in game else "n/a")
-	for venue in 3:
+	for venue in ShintyPitch.VENUE_NAMES.size():
 		var m = MatchScene.instantiate()
 		m.config = {"home": game.teams[0], "away": game.teams[1], "human_side": 0, "difficulty": 1,
 			"half_seconds": 180.0, "venue": venue, "seed": 11}
 		root.add_child(m)
 		for i in 30:
 			await process_frame
-		var name: String = ["Aberdour", "Kingussie", "Tighnabruaich"][venue]
+		var name: String = ["Aberdour", "Kingussie", "Tighnabruaich", "Portree"][venue]
 		print(_fmt(name, await _sample(40)))
 		if "split" in args:
 			var view = m.get_node("View")

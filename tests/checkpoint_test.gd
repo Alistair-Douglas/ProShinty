@@ -182,7 +182,7 @@ func _drive_menu_matches() -> bool:
 				_fail("no result recorded after the match at venue %d" % _venue)
 			_venue += 1
 			_menu_frames = 0
-		if _venue >= 3:
+		if _venue >= ShintyPitch.VENUE_NAMES.size():
 			print("Checkpoint: %s" % ("all passed" if failures == 0 else "%d failures" % failures))
 			quit(1 if failures else 0)
 			return true
@@ -199,13 +199,13 @@ func _drive_menu_matches() -> bool:
 				quit(1)
 				return true
 			var n: int = scene.home_pick.item_count
-			scene.home_pick.select([0, 2, 20][_venue] % n)
+			scene.home_pick.select([0, 2, 20, 30][_venue] % n)
 			scene.home_pick.item_selected.emit(scene.home_pick.selected)
-			scene.away_pick.select([1, n - 1, 5][_venue] % n)
+			scene.away_pick.select([1, n - 1, 5, 9][_venue] % n)
 			scene.away_pick.item_selected.emit(scene.away_pick.selected)
 			scene.pitch_pick.select(_venue)
 			scene.side_pick.select(_venue % 2)
-			scene.diff_pick.select(_venue)
+			scene.diff_pick.select(_venue % 3)
 			scene.length_pick.select(0)   # 2-minute halves
 			scene.call("_start")
 		return false
@@ -229,6 +229,7 @@ func _drive_menu_matches() -> bool:
 		if _swings == 0:
 			_fail("menu match %d: the bot's key presses never started a swing" % (_venue + 1))
 		_swings = 0
+		_pause_at = -1
 		_shields = 0
 		# What pressing a button at full time does.
 		change_scene_to_file("res://scenes/main_menu.tscn")
@@ -250,13 +251,16 @@ func _physics_process(delta: float) -> bool:
 	var m = _match
 	if not _played or _match_frames < 0 or not is_instance_valid(m) or m.state == m.State.FULL_TIME:
 		return false
-	if not m.paused:
+	# Not while paused, nor while the pre-match build-up holds the match
+	# (the teams walk out from between the dugouts, off the pitch).
+	if not m.paused and not m.manual_step:
 		_check(m, _watch, delta, "menu match %d" % (_venue + 1))
 	_bot(m)
 	return false
 
 
 var _swing_hold := 0
+var _pause_at := -1
 var _counted := false
 var _shields := 0   ## frames the bot held the ball up
 var _swings := 0   ## hits the bot started (checks key presses reach the match)
@@ -275,13 +279,16 @@ func _bot(m: Node) -> void:
 	var h = m.human
 	if h == null:
 		return
-	if _match_frames == 600:
-		Input.action_press("pause")
-	elif _match_frames == 602:
-		Input.action_release("pause")
-	elif _match_frames == 640:
-		Input.action_press("pause")
-	elif _match_frames == 642:
+	# Pause once and resume, at a moment the match is live (a replay holds
+	# the match, so it wouldn't see the key).
+	if _pause_at < 0 and _match_frames >= 600 and m.process_mode != Node.PROCESS_MODE_DISABLED:
+		_pause_at = _match_frames
+	if _pause_at >= 0 and _match_frames - _pause_at in [0, 40]:
+		if m.process_mode == Node.PROCESS_MODE_DISABLED:
+			_pause_at += 1   # try again next frame
+		else:
+			Input.action_press("pause")
+	elif _pause_at >= 0 and _match_frames - _pause_at in [2, 42]:
 		Input.action_release("pause")
 	if m.paused:
 		return

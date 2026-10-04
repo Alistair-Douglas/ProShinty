@@ -41,7 +41,7 @@ func _check(cond: bool, what: String) -> void:
 
 func _check_grounds() -> void:
 	var colors := [[Color.RED, Color.WHITE], [Color.BLUE, Color.YELLOW]]
-	for v in 3:
+	for v in ShintyPitch.VENUE_NAMES.size():
 		var pitch := ShintyPitch.new()
 		pitch.venue = v
 		pitch.include_environment = false
