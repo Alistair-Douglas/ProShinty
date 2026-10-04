@@ -44,6 +44,7 @@ run music    timeout 120  "$GODOT" --headless --path . -s tests/music_test.gd
 run feel     timeout 600  "$GODOT" --headless --fixed-fps 60 --path . -s tests/feel_test.gd
 run subs     timeout 1200 "$GODOT" --headless --path . -s tests/subs_test.gd
 run weather  timeout 900  "$GODOT" --headless --path . -s tests/weather_test.gd
+run skills   timeout 300  "$GODOT" --headless --path . -s tests/skills_test.gd
 run sim      timeout 1200 "$GODOT" --headless --path . -s tests/sim_test.gd
 run ratings  timeout 1200 "$GODOT" --headless --path . -s tests/rating_gap_test.gd
 run checkpoint timeout 3000 "$GODOT" --headless --fixed-fps 60 --path . -s tests/checkpoint_test.gd -- $QUICK

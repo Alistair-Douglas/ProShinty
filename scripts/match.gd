@@ -34,6 +34,8 @@ const HALF_TIME_PAUSE := 7.0     # long enough to see everyone walk off towards 
 const EXTRA_TIME_PAUSE := 4.0    # the break before extra time: players stay out on the pitch
 const THROW_UP_AIM_MAX := 1.1   # rad: how far off straight up the park a throw-up can be aimed
 const THROUGH_LEAD := 8.0       # yd: a through ball is played this far ahead of the runner
+const CHIP_ANGLE := 36.0        # degrees: a chipped through ball is launched this steeply
+const CHIP_PACE := 1.12         # a lofted strike comes off a little slower than asked: make it up
 const WALK_SPEED := 1.6
 const SHOOTOUT_KICKS := 5       # penalties each before sudden death
 const SHOOTOUT_PAUSE := 2.5
@@ -79,6 +81,10 @@ const JOG := 0.6             # jogging (no sprint): this share of top speed
 const SHIELD_SPEED := 0.45   # shielding the ball: walking pace, body between ball and man
 const BATTLE_TIME := 0.8     # a stick battle for the ball lasts this long
 const SWEEP_ZONE := 0.35    # yards: the caman head sweeps this far either side of the strike spot, low over the grass
+const DUMMY_SHOW := 0.3     # hit meter shown before pulling out: a full backswing sells the dummy
+const DUMMY_RANGE := 3.5     # yards: markers this close can bite on it
+const DUMMY_SOLD := 0.7      # s: a marker who bites is planted this long
+const DUMMY_FRESH := 3.0     # s: a second dummy sooner than this sells less
 const BATTLE_SLOW := 0.35    # both players are near enough stood still while they fight for it
 
 enum State { THROW_UP, PLAY, GOAL, HALF_TIME, FULL_TIME }
@@ -138,6 +144,7 @@ class Player:
 	var judge_flight := -1     # the flight that read was made for
 	var use_body := false      # going to take this ball on the body, stick out of the way
 	var hold_t := 0.0        # AI: how long to keep holding it up
+	var sold := 0.0          # bit on a dummy: committed and planted for this long
 
 	## A rating as play uses it: stretched away from the middle so the gap
 	## between a top Premiership player and a lower-league one shows.
@@ -234,6 +241,7 @@ var restart_long := false          # and whether it's a long hit to them rather 
 var restart_base := Vector2.RIGHT  # straight in from the line (a shy) or the default aim
 var dribble_vel := Vector2.ZERO    # a dribbled ball rolling ahead of its carrier
 var dribble_taps := 0
+var since_dummy := 99.0            # seconds since the last dummy (one straight after sells less)
 var flight := 0                    # bumped each time the ball is sent somewhere new (players re-read it)
 var ball_shift := Vector3.ZERO     # running total of the ball being moved onto a caman, body or glove (see _place_ball)
 
@@ -550,12 +558,14 @@ func _reaction(team: int) -> float:
 
 func _update_players(dt: float) -> void:
 	protected_timer = max(0.0, protected_timer - dt)
+	since_dummy += dt
 	for p in players:
 		p.cooldown = max(0.0, p.cooldown - dt)
 		p.touch_block = max(0.0, p.touch_block - dt)
 		p.swing = max(0.0, p.swing - dt)
 		p.stagger = max(0.0, p.stagger - dt)
 		p.lunge = max(0.0, p.lunge - dt)
+		p.sold = max(0.0, p.sold - dt)
 		if p.hop_t > 0.0:
 			var step: float = min(dt, p.hop_t)
 			p.pos += p.hop * step / HOP_TIME
@@ -710,6 +720,8 @@ func _ai_team(t: int, dt: float) -> void:
 			continue
 		if p.is_keeper():
 			_ai_keeper(p, dt)
+		elif p.sold > 0.0:
+			p.desired = Vector2.ZERO   # bought a dummy: planted, going nowhere
 		elif p == carrier:
 			_ai_carrier(p, dt)
 		elif p in chasers:
@@ -1008,13 +1020,19 @@ func _human_control(dt: float) -> void:
 		# Y / F: with the ball it's a through ball (as in FIFA); without it,
 		# a block on an opponent's swing.
 		if carrier == p and p.swing_t < 0.0 and p != set_piece_taker_now() and not p.shy_ready:
-			_human_through(p, aim)
+			# Holding LB (switch, which does nothing on the ball) chips it.
+			_human_through(p, aim, Input.is_action_pressed("switch"))
 		else:
 			Counters.start_block(self, p)
 	if Input.is_action_just_pressed("cleek"):
 		Counters.start_cleek(self, p)
 	if Input.is_action_just_pressed("barge"):
 		Counters.start_barge(self, p)
+	if charge >= 0.0 and Input.is_action_just_pressed("pass") and carrier == p \
+			and p != set_piece_taker_now() and not p.shy_ready:
+		# A or E mid-backswing: pull out of the hit, a dummy.
+		_dummy(p)
+		return
 	if charge >= 0.0:
 		# Golf-style meter: it fills to full power, then keeps going into an
 		# overswing that adds power error (miss-hits and curve) but no power.
@@ -1166,7 +1184,7 @@ func _human_pass(p: Player, aim: Vector2) -> void:
 
 ## A through ball: played into the space ahead of a team-mate making a run
 ## (the one most in line with the stick), for them to run onto.
-func _human_through(p: Player, aim: Vector2) -> void:
+func _human_through(p: Player, aim: Vector2, chip: bool = false) -> void:
 	var best: Player = null
 	var best_score := -INF
 	for m in squads[p.team]:
@@ -1185,7 +1203,10 @@ func _human_through(p: Player, aim: Vector2) -> void:
 			best_score = s
 			best = m
 	if best == null:
-		_strike_speed(p, aim, 20.0, 0.4, "passing")
+		if chip:
+			_strike_speed(p, aim, 16.0, 7.0, "passing")
+		else:
+			_strike_speed(p, aim, 20.0, 0.4, "passing")
 		return
 	# Into space ahead of them: where they're running, or up the park.
 	var run: Vector2 = best.vel.normalized() if best.vel.length() > 2.0 else Vector2(attack_dir[p.team], 0)
@@ -1194,10 +1215,50 @@ func _human_through(p: Player, aim: Vector2) -> void:
 	var spot: Vector2 = best.pos + run * THROUGH_LEAD
 	spot = Vector2(clampf(spot.x, 2.0, PITCH.x - 2.0), clampf(spot.y, 2.0, PITCH.y - 2.0))
 	var d := p.pos.distance_to(spot)
-	var speed: float = clampf(d * 0.75 + 10.0, 14.0, 34.0)
-	_strike_speed(p, (spot - p.pos).normalized(), speed, 0.4, "passing")
+	if chip:
+		# Lifted over the defence: launched steeply enough to clear a caman
+		# held up a few yards off, slower than along the grass, and paced to
+		# drop onto the spot for the runner.
+		var up: float = tan(deg_to_rad(CHIP_ANGLE))
+		var cs: float = sqrt(0.5 * GRAVITY * d * (1.0 + d * SHOT_DRAG) / up) * CHIP_PACE
+		_strike_speed(p, (spot - p.pos).normalized(), cs, cs * up, "passing")
+	else:
+		var speed: float = clampf(d * 0.75 + 10.0, 14.0, 34.0)
+		_strike_speed(p, (spot - p.pos).normalized(), speed, 0.4, "passing")
 	if p.team == human_side:
 		human = best
+
+
+## A dummy: shape to hit, then pull out of it. A computer marker close
+## enough to block, cleek or swing with it may bite: they commit to the
+## counter and are planted for a moment while the carrier goes by. Better
+## control against worse tackling sells it more, as does a longer backswing
+## shown; one straight after another sells less.
+func _dummy(p: Player) -> void:
+	var shown: float = clampf(charge / DUMMY_SHOW, 0.0, 1.0)
+	var fresh: float = clampf(since_dummy / DUMMY_FRESH, 0.3, 1.0)
+	since_dummy = 0.0
+	charge = -1.0
+	p.overswing = 0.0
+	var bit := 0
+	for q in squads[1 - p.team]:
+		if q == human or q.is_keeper() or q.stagger > 0.0 or q.sold > 0.0 \
+				or q.pos.distance_to(p.pos) > DUMMY_RANGE:
+			continue
+		var edge: float = (p.r("control") - q.r("tackling")) / 100.0
+		if randf() >= clampf(0.45 + edge, 0.15, 0.9) * shown * fresh:
+			continue
+		bit += 1
+		q.sold = DUMMY_SOLD
+		q.cooldown = maxf(q.cooldown, DUMMY_SOLD)
+		q.think = DUMMY_SOLD
+		if q.pos.distance_to(p.pos) < Counters.CLEEK_RANGE - 0.3 and randf() < 0.4:
+			Counters.start_cleek(self, q)
+		else:
+			Counters.start_block(self, q)
+	events.append({"type": "dummy", "team": p.team, "by": p, "sold": bit})
+	if p == human:
+		_say("Dummy sold!" if bit > 0 else "Dummy", 1.0)
 
 
 # ---------------------------------------------------------------- ball
