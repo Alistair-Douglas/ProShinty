@@ -236,16 +236,34 @@ const SKIN_SHADER := """
 shader_type spatial;
 uniform vec4 skin : source_color = vec4(0.9, 0.75, 0.62, 1.0);
 uniform vec4 flush : source_color = vec4(0.85, 0.45, 0.4, 1.0);
+// Facial hair painted on the beard zone (vertex alpha = 1 - zone, 0.5 jaw,
+// 1 chin and upper lip): zones from beard_lo up get beard_color at
+// beard_amount; moustache > 0.5 paints the upper lip (green = 1 - lip) only.
+uniform vec4 beard_color : source_color = vec4(0.1, 0.08, 0.07, 1.0);
+uniform float beard_lo = 2.0;
+uniform float moustache = 0.0;
+uniform float beard_amount = 0.0;
 varying vec3 obj;
-void vertex() { obj = VERTEX; }
+varying vec4 shade;
+void vertex() { obj = VERTEX; shade = COLOR; }
 void fragment() {
 	// Slight warmth where skin is thin (fake subsurface) and pore-level variation.
 	float n = sin(obj.x * 310.0) * sin(obj.y * 290.0) * sin(obj.z * 330.0);
 	vec3 c = skin.rgb * (1.0 + n * 0.025);
+	// Vertex colour, white where plain: red = 1 - flush (cheeks, nose, ears),
+	// blue = 1 - lips.
+	c = mix(c, c * vec3(1.04, 0.86, 0.84), (1.0 - shade.r) * 0.45);
+	float lips = 1.0 - shade.b;
+	c = mix(c, c * vec3(0.88, 0.66, 0.66), lips * 0.6);
+	float zone = 1.0 - shade.a;
+	float beard = moustache > 0.5 ? smoothstep(0.4, 0.8, 1.0 - shade.g) : smoothstep(beard_lo - 0.08, beard_lo, zone);
+	// Stubble and beards: short hairs as fine speckle, thicker for a beard.
+	float hairs = 0.6 + 0.4 * sin(UV.x * 2600.0) * sin(UV.y * 2300.0);
+	c = mix(c, beard_color.rgb, clamp(beard * beard_amount * mix(hairs, 1.0, 0.45), 0.0, 1.0));
 	float facing = clamp(dot(NORMAL, VIEW), 0.0, 1.0);
 	c = mix(mix(c, flush.rgb, 0.18), c, facing);
 	ALBEDO = c;
-	ROUGHNESS = 0.55;
+	ROUGHNESS = 0.55 - lips * 0.15 + beard * beard_amount * 0.35;
 	SPECULAR = 0.35;
 	RIM = 0.2;
 	RIM_TINT = 1.0;
@@ -350,14 +368,23 @@ static func fabric(base: Color, trim: Color, band_a := Vector2(-9, -9), band_b :
 	return m
 
 
-static func skin(color: Color) -> ShaderMaterial:
+## Skin. The beard arguments paint facial hair on an imported face's beard
+## zones (see SKIN_SHADER); a built face has none.
+static func skin(color: Color, beard_color := Color.BLACK, beard_lo := 2.0, moustache := false,
+		beard_amount := 0.0) -> ShaderMaterial:
 	var key := "skin/" + color.to_html()
+	if beard_amount > 0.0:
+		key += "/%s/%.2f/%s/%.2f" % [beard_color.to_html(), beard_lo, moustache, beard_amount]
 	if _cache.has(key):
 		return _cache[key]
 	var m := ShaderMaterial.new()
 	m.shader = _shader("skin_shader", SKIN_SHADER)
 	m.set_shader_parameter("skin", color)
 	m.set_shader_parameter("flush", color.lerp(Color(0.85, 0.35, 0.3), 0.5))
+	m.set_shader_parameter("beard_color", beard_color)
+	m.set_shader_parameter("beard_lo", beard_lo)
+	m.set_shader_parameter("moustache", 1.0 if moustache else 0.0)
+	m.set_shader_parameter("beard_amount", beard_amount)
 	_cache[key] = m
 	return m
 

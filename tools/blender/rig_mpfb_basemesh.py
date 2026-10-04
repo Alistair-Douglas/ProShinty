@@ -6,7 +6,9 @@ weighted automatically.
 
     python3 tools/blender/rig_mpfb_basemesh.py Character.blend out.glb
 
-Only the body is kept: MPFB's helper geometry (tights, skirt, hair, eye and
+MPFB's lips, scalp and ears groups go into a vertex colour, and its mouth and
+jaw joints become marker bones, for the converter's face shading. Only the
+body is kept: MPFB's helper geometry (tights, skirt, hair, eye and
 teeth helpers) is cut away, and the body's shape keys (the MPFB sliders) are
 baked in as they were saved.
 """
@@ -46,7 +48,8 @@ if old.users == 0:
     bpy.data.meshes.remove(old)
 
 J = {}
-for n in ["pelvis", "spine-1", "spine-2", "spine-3", "spine-4", "neck", "head", "head-2", "ground", "l-eye", "r-eye"]:
+for n in ["pelvis", "spine-1", "spine-2", "spine-3", "spine-4", "neck", "head", "head-2", "ground", "l-eye", "r-eye",
+          "mouth", "jaw"]:
     J[n] = joint(n)
 for s in ("l", "r"):
     for n in ["clavicle", "shoulder", "elbow", "hand", "hand-2", "upper-leg", "knee", "ankle", "foot-1", "foot-2"]:
@@ -60,6 +63,14 @@ body = groups["body"]
 bmesh.ops.delete(bm, geom=[v for v in bm.verts if v[deform].get(body, 0.0) < 0.5], context="VERTS")
 bm.to_mesh(mesh)
 bm.free()
+# MPFB's face groups, kept as a vertex colour for the converter: red the
+# lips, green the scalp (where hair grows), blue the ears.
+zones = mesh.color_attributes.new("zones", "FLOAT_COLOR", "POINT")
+zi = [groups.get(n) for n in ("lips", "scalp", "ears")]
+for v in mesh.vertices:
+    w = {g.group: g.weight for g in v.groups}
+    zones.data[v.index].color = [w.get(i, 0.0) if i is not None else 0.0 for i in zi] + [1.0]
+mesh.color_attributes.active_color = zones
 human.vertex_groups.clear()
 
 # Skeleton with Game engine bone names, on MPFB's joints. The spine joints
@@ -102,6 +113,9 @@ for s in ("l", "r"):
 for s in ("l", "r"):
     e = bone("eye_" + s, J[s + "-eye"], J[s + "-eye"] + Vector((0, -0.03, 0)), "head")
     e.use_deform = False
+for n in ("mouth", "jaw"):  # likewise, for the beard and stubble zones
+    e = bone(n, J[n], J[n] + Vector((0, -0.03, 0)), "head")
+    e.use_deform = False
 bpy.ops.object.mode_set(mode="OBJECT")
 
 bpy.ops.object.select_all(action="DESELECT")
@@ -114,4 +128,5 @@ print("rigged %s: %d vertices (%d weighted), %d triangles, height %.2f m" % (
     human.name, len(human.data.vertices), weighted, sum(len(p.vertices) - 2 for p in human.data.polygons),
     max((human.matrix_world @ v.co).z for v in human.data.vertices) - J["ground"].z))
 bpy.ops.export_scene.gltf(filepath=out, export_format="GLB", export_skins=True, export_animations=False,
-                          export_morph=False, export_apply=True)
+                          export_morph=False, export_apply=True,
+                          export_vertex_color="ACTIVE", export_active_vertex_color_when_no_material=True)

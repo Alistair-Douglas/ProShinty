@@ -96,7 +96,7 @@ static func _bake(skeleton: Skeleton3D, cam: Node3D) -> void:
 		var key: Variant = r[0]
 		if not surfaces.has(key):
 			surfaces[key] = _Part.new()
-		surfaces[key].add_raw(r[1], r[2], r[3], r[4], r[5], r[6])
+		surfaces[key].add_raw(r[1], r[2], r[3], r[4], r[5], r[6], r[7])
 		shadow.add_raw(r[1], r[2], r[3], r[4], r[5], r[6])
 	if skeleton.has_meta("raw_parts"):
 		skeleton.remove_meta("raw_parts")
@@ -218,14 +218,14 @@ class _Part:
 				idx.append(first + i)
 
 	func add_raw(v: PackedVector3Array, n: PackedVector3Array, uv: PackedVector2Array, b: PackedInt32Array,
-			wt: PackedFloat32Array, src: PackedInt32Array) -> void:
+			wt: PackedFloat32Array, src: PackedInt32Array, col := PackedColorArray()) -> void:
 		var first := verts.size()
 		verts.append_array(v)
 		norms.append_array(n)
 		uvs.append_array(uv)
 		for i in v.size():
 			uv2s.append(Vector2(1, 0))
-			colors.append(Color.WHITE)
+			colors.append(col[i] if i < col.size() else Color.WHITE)
 		bones.append_array(b)
 		weights.append_array(wt)
 		for i in src:
@@ -268,7 +268,16 @@ func _body() -> void:
 	if not body_file.is_empty():
 		var look := _face_look()
 		var hair_col: Color = look.hair.lerp(m.skin_color, 0.45) if look.style == "buzz" else look.hair
-		_imported_body({"skin": skin, "hair": ShintyMesh.solid(hair_col, 0.85), "torso": chest_band, "shirt": shirt, "cuff": ShintyMesh.fabric(m.trim_color, m.trim_color),
+		# Facial hair is painted on the imported face's beard zones (from the
+		# converter: 0.5 jaw and cheeks, 1 chin and upper lip).
+		var fh_col: Color = look.hair.lerp(m.skin_color, 0.15)
+		var face_skin: Material = skin
+		match look.facial:
+			"stubble": face_skin = ShintyMesh.skin(m.skin_color, fh_col, 0.4, false, 0.45)
+			"beard": face_skin = ShintyMesh.skin(m.skin_color, fh_col, 0.4, false, 0.85)
+			"goatee": face_skin = ShintyMesh.skin(m.skin_color, fh_col, 0.8, false, 0.85)
+			"moustache": face_skin = ShintyMesh.skin(m.skin_color, fh_col, 2.0, true, 0.85)
+		_imported_body({"skin": face_skin, "hair": ShintyMesh.solid(hair_col, 0.85), "torso": chest_band, "shirt": shirt, "cuff": ShintyMesh.fabric(m.trim_color, m.trim_color),
 			"shorts": shorts, "socks": socks})
 		return
 
@@ -406,7 +415,12 @@ func _imported_body(mats: Dictionary) -> void:
 			uvs[i] = Vector2(uv[i * 2], uv[i * 2 + 1])
 			if key == "torso":
 				torso_pts.append(p)
-		parts.append([mats[key], verts, norms, uvs, bones, weights, PackedInt32Array(sd["i"])])
+		# Skin shading baked by the converter (flush, lips, beard zones).
+		var cols := PackedColorArray()
+		var c: Array = sd.get("c", [])
+		for i in c.size() / 4:
+			cols.append(Color(c[i * 4], c[i * 4 + 1], c[i * 4 + 2], c[i * 4 + 3]))
+		parts.append([mats[key], verts, norms, uvs, bones, weights, PackedInt32Array(sd["i"]), cols])
 	skel.set_meta("raw_parts", parts)
 	_torso_pts = torso_pts
 

@@ -125,8 +125,12 @@ helmet; the helmet is sized to the body's skull.
    shorts' waistband, the sleeves widen towards the hem, and the socks have a
    shin pad under them (a raised front panel with a lip at each end), ribbed
    and folded over at the top. Hair colour and skin tone still come from each
-   player. `--no-head` cuts the head off too and the game builds its own
-   head and face.
+   player. MPFB's lips, scalp and ears groups (carried in the .glb as a
+   vertex colour by `rig_mpfb_basemesh.py`) give the lips, the hairline and
+   flushed ears; cheeks and nose are flushed too, and each player's facial
+   hair (stubble, beard, goatee, moustache) is painted on the jaw, chin and
+   upper lip by the skin shader. `--no-head` cuts the head off too and the
+   game builds its own head and face.
 3. Files named `lean`, `average` and `stocky` are picked by each player's
    build (below 0.36, between, above 0.64); shoulder and hip width and girth
    are then fitted per player. With no files in `models/bodies/` the built

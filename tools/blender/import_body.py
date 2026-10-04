@@ -246,6 +246,7 @@ def main():
     print("triangles: %d after cutting, %d after decimating" % (before, len(me.polygons)))
 
     eyes = []
+    marks = {}
     skull = None
     # --- Bend into the game's rest pose ----------------------------------------
     wmat = body.matrix_world
@@ -259,6 +260,19 @@ def main():
             if g in DROPPED:  # the last ring before a cut follows its parent
                 g = {"Head": "Neck"}.get(g, g.replace("Hand", "LowerArm").replace("Foot", "LowerLeg"))
             W[v.index, KEPT.index(g)] += x
+    # Face zones from rig_mpfb_basemesh.py's vertex colour: lips, scalp, ears.
+    zone = np.zeros((n, 3))
+    if me.color_attributes:
+        ca = me.color_attributes[0]
+        if ca.domain == "CORNER":
+            cnt = np.zeros(n)
+            for lp in me.loops:
+                zone[lp.vertex_index] += ca.data[lp.index].color[:3]
+                cnt[lp.vertex_index] += 1
+            zone /= np.maximum(cnt, 1)[:, None]
+        else:
+            zone = np.array([d.color[:3] for d in ca.data])
+    has_zones = bool(me.color_attributes)
     empty = W.sum(1) == 0
     if empty.any():  # unweighted: nearest joint
         for i in np.where(empty)[0]:
@@ -298,6 +312,11 @@ def main():
                 e = to_godot(mw @ b.head_local) * scale
                 m, a, d = xf["Head"]
                 eyes.append(list(np.round((e - a) @ m.T + d, 4)))
+        for mk in ("mouth", "jaw"):
+            b = rig.data.bones.get(mk)
+            if b:
+                m, a, d = xf["Head"]
+                marks[mk] = (to_godot(mw @ b.head_local) * scale - a) @ m.T + d
     # Keep the four strongest, normalised.
     order = np.argsort(-W, axis=1)
     keep = order[:, :4]
@@ -355,7 +374,9 @@ def main():
             (WAIST_SHORTS, lambda d: not any("Arm" in x for x in d)),
             (NECKLINE, lambda d: all(x in ("Chest", "UpperChest", "Neck") for x in d))]
     for level, applies in cuts:
-        pos, vn, dense, tri = split(pos, vn, dense, tri, level, lambda t: applies(names[np.argmax(dense[t], 1)]))
+        pos, vn, dz, tri = split(pos, vn, np.hstack([dense, zone]), tri, level,
+                                 lambda t: applies(names[np.argmax(dense[t], 1)]))
+        dense, zone = dz[:, :len(KEPT)], dz[:, len(KEPT):]
     order = np.argsort(-dense, axis=1)
     keep = order[:, :4]
     W4 = np.take_along_axis(dense, keep, 1)
@@ -381,7 +402,10 @@ def main():
             # Hair: above a hairline on the forehead, over the crown and
             # down the back to the nape, and above the ears at the sides.
             r = c - np.mean(np.array(eyes), 0)
-            hair = r[1] > 0.045 or r[2] > 0.065 and r[1] > -0.07 or abs(r[0]) > 0.06 and r[2] > 0.02 and r[1] > 0.025
+            if has_zones:  # MPFB's scalp
+                hair = zone[tri_now][:, 1].mean() > 0.5
+            else:
+                hair = r[1] > 0.045 or r[2] > 0.065 and r[1] > -0.07 or abs(r[0]) > 0.06 and r[2] > 0.02 and r[1] > 0.025
             out.append("hair" if hair else "skin")
         elif g.endswith("LowerArm") or g == "Head":
             out.append("skin")
@@ -412,6 +436,7 @@ def main():
     LIFT = {"hair": 0.002, "skin": 0.0, "torso": 0.009, "shirt": 0.01, "cuff": 0.011, "shorts": 0.013, "socks": 0.003}
     surf = {k: {"tri": []} for k in LIFT}
     for fi, t in enumerate(tri):
+        tri_now = t
         i = int(t[np.argmax(W4[t, 0])])
         c = pos[t].mean(0)
         for r in regions(c, dom[i], i):
@@ -488,6 +513,42 @@ def main():
                 uv[k] = (math.atan2(q[0], -q[2]) * 0.15, q[1] - REF["Chest"][1] + 0.02)
             else:
                 uv[k] = (math.atan2(q[0], -q[2]) * 0.15, q[1])
+        # Skin shading as a vertex colour, white where plain: red = 1 - flush
+        # (cheeks, nose, ears), green = 1 - upper lip, blue = 1 - lips, alpha
+        # = 1 - beard zone (0.5 jaw and cheeks, 1 chin and upper lip), which
+        # the skin shader fills with stubble, a beard, a goatee or a
+        # moustache per player.
+        col = None
+        if name == "skin" and eyes and "mouth" in marks:
+            col = np.ones((len(used), 4))
+            # MPFB's mouth joint sits back inside the mouth and its jaw joint
+            # at the point of the chin; the lips group gives the mouth itself.
+            em = np.mean(np.array(eyes), 0)
+            lp = pos[used][zone[used, 0] > 0.5]
+            mo = lp.mean(0) if len(lp) else marks["mouth"]
+            chin = marks["jaw"][1] if "jaw" in marks else mo[1] - 0.04
+            for k, vi in enumerate(used):
+                if dom[vi] not in ("Head", "Neck"):
+                    continue
+                q = pos[vi]
+                x = abs(q[0])
+                lips = zone[vi, 0]
+                flush = zone[vi, 2] * 0.5  # ears
+                if x < 0.016 and mo[1] + 0.03 < q[1] < em[1] - 0.005 and q[2] < em[2] - 0.01:
+                    flush = max(flush, 0.35)  # nose
+                ch = np.linalg.norm([x - 0.045, q[1] - em[1] + 0.03]) / 0.028
+                if ch < 1 and q[2] < em[2] + 0.03:
+                    flush = max(flush, 0.5 * (1 - ch * ch))  # cheeks
+                beard = tash = 0.0
+                top = mo[1] + 0.025 + 0.017 * min(1.0, max(0.0, (x - 0.03) / 0.025))
+                back = em[2] + (0.075 if q[1] > chin else 0.035)  # in front of the ears; under the chin
+                if lips < 0.4 and chin - 0.035 < q[1] < top and q[2] < back:
+                    beard = 0.5
+                    if x < 0.022 and chin - 0.01 < q[1] < mo[1] - 0.012:
+                        beard = 1.0
+                    elif x < 0.03 and mo[1] + 0.006 < q[1] < mo[1] + 0.026:
+                        beard = tash = 1.0
+                col[k] = (1 - flush, 1 - tash, 1 - lips, 1 - beard)
         # u goes round the body; where it wraps (behind the back, inside a
         # limb) a face would smear the whole pattern across itself, so those
         # faces get their own copies of the low-u vertices, one turn on.
@@ -509,6 +570,8 @@ def main():
             p, nrm = np.vstack([p, p[src_i]]), np.vstack([nrm, nrm[src_i]])
             uv = np.vstack([uv, uv[src_i] + np.array([turn, 0.0])])
             bones_v, w_v = np.vstack([bones_v, bones_v[src_i]]), np.vstack([w_v, w_v[src_i]])
+            if col is not None:
+                col = np.vstack([col, col[src_i]])
         total += len(t)
         result["surfaces"][name] = {
             "v": np.round(p, 4).ravel().tolist(),
@@ -518,6 +581,8 @@ def main():
             "w": np.round(w_v, 3).ravel().tolist(),
             "i": idx.astype(int).ravel().tolist(),
         }
+        if col is not None:
+            result["surfaces"][name]["c"] = np.round(col, 3).ravel().tolist()
     with open(out, "w") as f:
         json.dump(result, f, separators=(",", ":"))
     print("wrote %s: %d triangles in %s" % (out, total, ", ".join(result["surfaces"])))
