@@ -17,7 +17,8 @@ const VOICE_EXTS := ["ogg", "mp3", "wav"]
 ## Which lines win: a line only cuts in on one with a lower priority.
 const PRIORITY := {
 	"goal": 10, "goal_equaliser": 10, "goal_late": 10, "red_card": 9,
-	"match_start": 8, "second_half": 8, "half_time": 8, "extra_time": 8, "full_time": 8,
+	"half_time": 9, "extra_time": 9, "full_time": 9,   # the last kick of a shootout can't drown them out
+	"match_start": 8, "second_half": 8,
 	"penalty": 8, "shootout_start": 8, "shootout_score": 8, "shootout_miss": 8,
 	"save": 7, "post": 7, "yellow_card": 7, "no_goal": 7,
 	"wide": 6, "foul": 5, "offside": 5, "foul_missed": 5, "injury": 5,

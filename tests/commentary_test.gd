@@ -84,6 +84,12 @@ func _check_voice() -> bool:
 	if c.say("filler"):
 		push_error("a filler line cut in on a goal")
 		ok = false
+	# the final whistle is called even straight after a shootout kick
+	c._t += 30.0
+	c.say("shootout_miss")
+	if not c.say("full_time"):
+		push_error("full time should cut in on a shootout kick")
+		ok = false
 	for id in ids:
 		DirAccess.remove_absolute("user://commentary/%s.wav" % id)
 	c.free()
