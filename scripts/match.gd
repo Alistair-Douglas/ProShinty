@@ -1664,8 +1664,9 @@ func _try_tackle(t: Player, o: Player) -> void:
 		events.append({"type": "battle", "team": t.team, "at": ball_pos})
 		t.cooldown = 0.2
 		return
-	if not won and shielded and randf() < 0.06:
-		# Reaching through the carrier's body for the ball: caman on the man.
+	if not won and shielded and d > Body.TWO_HAND_REACH and randf() < 0.06:
+		# Reaching one-handed through the carrier's body for the ball: caman
+		# on the man.
 		events.append({"type": "foul", "kind": "hack", "by": t, "on": o, "at": o.pos, "severity": 0.3})
 		trip(o)
 		spill(o, t)

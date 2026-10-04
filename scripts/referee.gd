@@ -23,8 +23,9 @@ const PENALTY_YARDS := 20.0       ## penalty hit, from the goal line
 const ADVANTAGE_SECONDS := 3.0
 ## A poke that misses the ball can catch the carrier's caman or body instead.
 const TACKLE_FOUL := 0.07
+const HACK_FOUL := 0.06     ## a one-handed lunge onto the man that misses the ball
 ## A stick battle can turn into hacking at the other player's caman.
-const BATTLE_FOUL := 0.12
+const BATTLE_FOUL := 0.01
 ## Chance of a yellow card for a foul of severity 1 (scaled down for milder
 ## ones); a push in the back is booked more readily.
 const YELLOW_CHANCE := 0.3
@@ -198,7 +199,15 @@ func _on_tackle(e: Dictionary) -> void:
 	var behind := 0.0
 	if off.length() > 0.01 and o.facing.length() > 0.01:
 		behind = max(0.0, -o.facing.normalized().dot(off.normalized()))
+	# Hacking is the rarest foul in shinty: only a player coming in one-handed,
+	# at full stretch, onto the man. A two-handed poke from the front that
+	# misses the ball is no foul at all.
+	var one_handed: bool = t.pos.distance_to(e.get("at", o.pos)) > m.Body.TWO_HAND_REACH
+	if behind <= 0.6 and not one_handed:
+		return
 	var chance: float = TACKLE_FOUL * (1.6 - t.r("tackling") / 100.0) + behind * 0.12 + (1.0 - t.stamina) * 0.05
+	if behind <= 0.6:
+		chance = HACK_FOUL * (1.6 - t.r("tackling") / 100.0)
 	if randf() >= chance:
 		return
 	var kind := "push" if behind > 0.6 else "hack"
@@ -206,8 +215,8 @@ func _on_tackle(e: Dictionary) -> void:
 	_on_foul({"kind": kind, "by": t, "on": o, "at": e.get("at", o.pos), "severity": severity})
 
 
-## Two players fighting for the ball with their sticks: now and then one
-## comes down on the other's caman.
+## Two players fighting for the ball with their sticks: both have two hands
+## on the caman and it's part of play, so it is very rarely a foul.
 func _on_battle() -> void:
 	var b: Dictionary = m.battle
 	if b.is_empty() or randf() >= BATTLE_FOUL:
