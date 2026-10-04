@@ -342,6 +342,40 @@ func _run() -> void:
 	check(fig["model"].is_busy(), "adapter starts the swing when the match swings")
 	check(absf(_highest_point(fig["model"]) - fig["model"].height_cm / 100.0 / 0.9144) < 0.15, "adapter figure is in yards")
 
+	print("Imported body (Blender)")
+	ShintyPlayerLook.body_dir = "res://tests/fixtures/bodies"
+	for bb in [0.2, 0.9]:
+		var im := ShintyPlayerModel.new()
+		root3d.add_child(im)
+		im.setup(teams[0]["players"][5], teams[0])
+		im.build = bb
+		im.advance(0.016)
+		var body_mi := im.find_child("Body", true, false) as MeshInstance3D
+		var aabb := body_mi.mesh.get_aabb()
+		check(absf(aabb.get_center().x) < 0.1, "imported body is centred (x %.3f)" % aabb.get_center().x)
+		# The fixture is a 1,400-triangle body: far fewer than the built one.
+		var tris := 0
+		for si in body_mi.mesh.get_surface_count():
+			tris += body_mi.mesh.surface_get_array_index_len(si) / 3
+		ShintyPlayerLook.use_imported_bodies = false
+		var built := ShintyPlayerModel.new()
+		root3d.add_child(built)
+		built.setup(teams[0]["players"][5], teams[0])
+		built.build = bb
+		var built_mi := built.find_child("Body", true, false) as MeshInstance3D
+		var built_tris := 0
+		for si in built_mi.mesh.get_surface_count():
+			built_tris += built_mi.mesh.surface_get_array_index_len(si) / 3
+		built.queue_free()
+		ShintyPlayerLook.use_imported_bodies = true
+		check(built_tris - tris > 2000, "the imported body replaces the built one (%d vs %d triangles)" % [tris, built_tris])
+		check(im.find_child("SpineAttach", true, false).has_meta("mesh_aabb"), "imported shirt front is measured for the sponsor")
+		im.play_action(&"swing", 1.0)
+		_step(im, 0.3)
+		check(im.get_caman_head_position().is_finite(), "a player with an imported body swings")
+		im.queue_free()
+	ShintyPlayerLook.body_dir = "res://models/bodies"
+
 	print("")
 	print("FAILURES: %d" % failures if failures else "ALL PASSED")
 	quit(1 if failures else 0)

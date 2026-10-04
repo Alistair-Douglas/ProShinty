@@ -102,6 +102,33 @@ animation or physics.
 - **Ball**: leather with a stitched seam drawn by a shader, and a raised ridge
   so spin reads from a distance.
 
+### Bodies from Blender (MPFB)
+
+Bodies made in Blender with the MPFB add-on can replace the built torso, arms
+and legs. The game keeps its own gripping hands, boots, head, face and helmet.
+
+1. In Blender (4.2 or newer) with MPFB: New Human, set the body (male, about
+   25, muscle fairly high), add the **Game engine** rig, no clothes or hair,
+   then File > Export > glTF 2.0 (.glb) with Armature and Skinning ticked.
+2. Convert it (needs `pip install bpy`, Blender as a Python module):
+
+       python3 tools/blender/import_body.py lean.glb models/bodies/lean.json
+
+   It maps the rig onto the game skeleton, bends the A-pose into the game's
+   rest pose and stretches the limbs to its bone lengths (so poses, the arm
+   solver and the caman grip are unchanged), cuts off the head, hands and
+   feet, cuts the body down to about 4,400 triangles (`--tris`), and splits it
+   into skin, shirt, cuff, shorts and socks with straight hems, the kit lifted
+   a little off the skin.
+3. Files named `lean`, `average` and `stocky` are picked by each player's
+   build (below 0.36, between, above 0.64); shoulder and hip width and girth
+   are then fitted per player. With no files in `models/bodies/` the built
+   body is used. `ShintyPlayerLook.use_imported_bodies = false` turns them off.
+
+`tools/blender/make_standin_body.py` makes a rough stand-in body with the same
+rig, for testing the converter without MPFB. Bodies made with MakeHuman/MPFB
+are CC0.
+
 ### Ball and hitting
 
 - `ShintyStrike.compute({...})` returns the ball's velocity and spin after a
