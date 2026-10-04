@@ -23,9 +23,14 @@ const REACH := 1.7           # how far a caman reaches
 const REACH_HEIGHT := 2.3
 const KEEPER_REACH_HEIGHT := 3.2
 const THIGH_HEIGHT := 1.0       # a body stop below this is on the thigh, above it the chest
-const KEEPER_BEAT := 0.3        # chance a shot on target beats the keeper outright...
-const KEEPER_BEAT_HARD := 0.2    # ...more for a hard one...
-const KEEPER_BEAT_CORNER := 0.35 # ...and more again high into a corner
+const SAVE_AT_50 := 0.5          # a 50-rated keeper keeps out about half the shots on target
+const SAVE_TOP_AIR := 0.93       # the best keep out this many in the air...
+const SAVE_TOP_GROUND := 0.42    # ...and this many along the ground
+const SAVE_AIR_Z := 0.5          # a shot crossing higher than this is in the air
+const SAVE_HARD := 0.06          # a hard shot is saved less often...
+const SAVE_CORNER := 0.1         # ...and one high into a corner less again
+const SAVE_LINE_GAP := 0.4       # a saved ball is stopped at least this far out from the line
+const SURE_REACH := 0.8          # extra reach for a keeper who has read the shot
 const KEEPER_HIGH := 1.8         # a shot this high is a high one
 const CORNER_IN := 1.0           # within this of a post is in the corner
 const KEEPER_STICK_HEIGHT := 1.2   # above this a keeper turns the ball away with the caman
@@ -149,6 +154,7 @@ class Player:
 	var judge := Vector3.ZERO  # how far off this player's read of the ball in the air is
 	var judge_flight := -1     # the flight that read was made for
 	var beat_flight := -1      # keeper: the shot already judged for beating them
+	var sure_flight := -1      # keeper: the shot they've read and will keep out
 	var use_body := false      # going to take this ball on the body, stick out of the way
 	var hold_t := 0.0        # AI: how long to keep holding it up
 	var sold := 0.0          # bit on a dummy: committed and planted for this long
@@ -1952,8 +1958,10 @@ func _ball_touches(before: Vector3) -> void:
 			var hands: float = 0.75 + p.r("keeping") / 100.0 * 0.45 + (0.8 if p.lunge > 0.0 else 0.0)
 			if body_d < hands and min(before.z, now.z) < KEEPER_REACH_HEIGHT:
 				d = min(d, body_d * Body.CONTACT_R / hands)
-		if keeping and d < reach and _keeper_beaten(p, sp):
+		if keeping and d < reach + SURE_REACH and _keeper_beaten(p, sp):
 			continue
+		if keeping and p.sure_flight == flight:
+			reach += SURE_REACH   # read it early: a full-stretch dive gets there
 		if d < reach and d < best_d:
 			best = p
 			best_d = d
@@ -1973,6 +1981,7 @@ func _ball_touches(before: Vector3) -> void:
 			_body_touch(body, sp)
 		return
 	var p := best
+	var read_it: bool = best_keeper and p.sure_flight == flight
 	p.touch_block = 0.25
 	events.append({"type": "touch", "by": p, "at": ball_pos, "hands": best_keeper and p.pos.distance_to(ball_pos) > Body.CONTACT_R})
 	# One-handed at full stretch you can stop or tap a ball, rarely control it.
@@ -1991,6 +2000,8 @@ func _ball_touches(before: Vector3) -> void:
 	var chance: float
 	if best_keeper:
 		chance = clamp(0.36 + p.r("keeping") / 100.0 * 0.5 - (sp - 20.0) * 0.012 - stretch * 0.3 + _skill_mod(p.team), 0.2, 0.95)
+		if read_it:
+			chance = 1.0   # read it: it's kept out
 	# Straight at the keeper: it hits the body. Low, the feet are together
 	# and the stick is down in front of them, so it never goes through the
 	# legs; higher, it comes off the body or the stick and back out.
@@ -2023,10 +2034,12 @@ func _ball_touches(before: Vector3) -> void:
 		_stick_rebound(p, p.r("keeping") / 100.0, ball_z > FEET_HEIGHT)
 
 
-## A shot on target reaching the keeper: are they beaten by it before they
-## can get a touch? Judged once a shot. Most shots are kept out, the hard
-## ones less often, and one hit high into a corner beats the keeper more
-## often than not. A beaten keeper is left grasping as it goes by.
+## A shot on target reaching the keeper: saved or not is judged once a
+## shot, from the keeper's rating. A 50-rated keeper keeps out about half;
+## the best keep out about four in five in the air and half along the
+## ground. A hard shot, and one high into a corner, beat them more often.
+## A beaten keeper is left grasping as it goes by; one who reads it gets
+## there (sure_flight), and it comes off the stick or the body.
 func _keeper_beaten(k: Player, sp: float) -> bool:
 	if k.beat_flight == flight:
 		return false
@@ -2042,16 +2055,24 @@ func _keeper_beaten(k: Player, sp: float) -> bool:
 	if absf(y - g.y) > GOAL_W / 2.0 or z > CROSSBAR or z < -0.5:
 		return false   # going wide or over: nothing to beat
 	k.beat_flight = flight
-	if absf(y - k.pos.y) < Body.BODY_R + 0.3 and z < Body.BODY_HEIGHT:
-		return false   # straight at them: it hits the keeper
-	var hard: float = clampf((sp - 20.0) / 15.0, 0.0, 1.0)
-	var corner: bool = z > KEEPER_HIGH and absf(y - g.y) > GOAL_W / 2.0 - CORNER_IN
-	var beat: float = KEEPER_BEAT + KEEPER_BEAT_HARD * hard + (KEEPER_BEAT_CORNER if corner else 0.0) \
-		- (k.r("keeping") - 60.0) / 100.0 * 0.4 - _skill_mod(k.team)
-	if randf() >= clampf(beat, 0.05, 0.9):
+	if randf() < keeper_save_chance(k, sp, y - g.y, maxf(z, ball_z)):
+		k.sure_flight = flight
 		return false
 	k.touch_block = maxf(k.touch_block, t + 0.2)
 	return true
+
+
+## Chance that keeper `k` keeps out a shot on target at `speed`, crossing
+## `off` yards from the middle of the goal at height `z`.
+func keeper_save_chance(k: Player, speed: float, off: float, z: float) -> float:
+	var skill: float = (float(k.data.get("keeping", 50)) - 50.0) / 49.0
+	var air: bool = z > SAVE_AIR_Z
+	var save: float = lerpf(SAVE_AT_50, SAVE_TOP_AIR if air else SAVE_TOP_GROUND, skill) if skill >= 0.0 \
+		else SAVE_AT_50 + skill * 0.5
+	save -= SAVE_HARD * clampf((speed - 20.0) / 15.0, 0.0, 1.0)
+	if z > KEEPER_HIGH and absf(off) > GOAL_W / 2.0 - CORNER_IN:
+		save -= SAVE_CORNER
+	return clampf(save + _skill_mod(k.team), 0.1, 0.97)
 
 
 ## An outfield player's caman has got to the ball. Nothing goes through a
@@ -2181,6 +2202,11 @@ func _running(p: Player) -> float:
 ## and it drops dead in front of them to gather with the caman. Otherwise it
 ## comes off them, losing most of its pace.
 func _body_touch(p: Player, sp: float) -> void:
+	if p.is_keeper() and p.sure_flight == flight:
+		# A keeper who has read the shot takes it on the body: kept out.
+		events.append({"type": "touch", "by": p, "at": ball_pos, "hands": false, "body": true})
+		_keeper_save(p, "feet" if ball_z < FEET_HEIGHT + 0.25 else "stick")
+		return
 	var feet: bool = ball_z < FEET_HEIGHT
 	var at_them: bool = ball_vel.dot(p.pos - ball_pos) > 0.0
 	var limit: float = BODY_STOP_SPEED + p.r("control") * 0.12
@@ -2274,6 +2300,11 @@ func _keeper_save(k: Player, how: String = "smother") -> void:
 	var flat := ball_pos - k.pos
 	var reach: float = Body.max_reach(k)
 	var at := k.pos + flat.limit_length(reach)
+	# Stopped in front of the line, never just behind it: a save that
+	# trickles over would be a goal.
+	var line_x: float = own_goal(k.team).x
+	if (at.x - line_x) * attack_dir[k.team] < SAVE_LINE_GAP:
+		at.x = line_x + attack_dir[k.team] * SAVE_LINE_GAP
 	_place_ball(at, ball_z)
 	k.stick = Vector3(at.x, at.y, min(ball_z, KEEPER_REACH_HEIGHT))
 	if how == "stick":
