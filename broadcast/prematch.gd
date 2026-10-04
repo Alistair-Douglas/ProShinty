@@ -36,6 +36,7 @@ var _fade_at := -1.0         ## when the dip to black began (t)
 var _ground := ""
 var _crests: Array = []
 var _lineups: Array = [[], []]   ## per team: [[number, name, position], ...]
+var _flight := {}            ## the ground's own way round, if it has one (ShintyPitch.intro_flight)
 
 
 func setup(p_view: Node3D) -> void:
@@ -49,6 +50,7 @@ func setup(p_view: Node3D) -> void:
 	_ref_snap = [ref.pos, ref.facing]
 	_ground = ShintyPitch.VENUE_NAMES[clampi(int(m.config.get("venue", 0)), 0, ShintyPitch.VENUE_NAMES.size() - 1)]
 	_crests = [TeamData.logo(m.teams[0]), TeamData.logo(m.teams[1])]
+	_flight = view.pitch.intro_flight()
 	for t2 in 2:
 		for p in m.squads[t2]:
 			_lineups[t2].append([p.number, str(p.data.get("name", "")), p.position_code])
@@ -160,15 +162,16 @@ func place_camera(cam: Camera3D, delta: float) -> void:
 
 
 ## High over the ground, sweeping round from behind one goal and coming down
-## towards the stand.
+## towards the stand (or the ground's own way round).
 func _flight_shot(k: float) -> Array:
 	var e := k * k * (3.0 - 2.0 * k)
-	var a := lerpf(-0.55, 1.2, e)
-	var r := lerpf(115.0, 85.0, e)
-	var h := lerpf(55.0, 32.0, e)   # stays over the trees round the ground
+	var a := lerpf(_flight.get("from", -0.55), _flight.get("to", 1.2), e)
+	var r := lerpf(115.0, _flight.get("radius", 85.0), e)
+	var h := lerpf(55.0, _flight.get("height", 32.0), e)   # stays over the trees round the ground
 	var centre: Vector3 = view.w(m.PITCH / 2.0)
 	var eye: Vector3 = centre + Vector3(cos(a) * r, h, sin(a) * r)
-	return [eye, centre + Vector3(0, 0, lerpf(-10.0, 0.0, e)), lerpf(42.0, 36.0, e)]
+	var look: Vector3 = _flight.get("look", Vector3.ZERO)
+	return [eye, centre + Vector3(0, 0, -10.0).lerp(look, e), lerpf(42.0, 36.0, e)]
 
 
 ## In front of the referee, low, backing away as the teams come on.
