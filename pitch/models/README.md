@@ -18,3 +18,10 @@ Budgets, since each is drawn many times: trees 300 to 1,500 triangles (far
 version 100 to 200), bushes under 200, cars 500 to 3,000. One or two
 materials each; leaves as cut-out (alpha scissor) cards on a small texture.
 Car materials named with `paint`, `body` or `main` get a random colour per car.
+
+## Where these came from (all CC0, public domain)
+
+- `trees/`: Quaternius, Ultimate Nature Pack (https://quaternius.com/packs/ultimatenature.html):
+  BirchTree, PineTree and CommonTree 1 to 3 as `birch_`, `pine_` and `broadleaf_`; Bush 1 and 2.
+- `cars/`: Kenney, Car Kit (https://kenney.nl/assets/car-kit): hatchback-sports, sedan,
+  suv, suv-luxury, van and truck, with `Textures/colormap.png`.
