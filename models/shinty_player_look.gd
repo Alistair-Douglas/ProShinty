@@ -448,14 +448,14 @@ func _imported_body(mats: Dictionary) -> void:
 		var bins := {}
 		for p in torso_pts:
 			var q := p - at
-			if q.z < 0.0 and absf(q.y - y) < 0.05:
+			if q.z < 0.0 and absf(q.y - y) < 0.07:
 				var bin := roundi(q.x / 0.02)
 				bins[bin] = minf(bins.get(bin, 0.0), q.z)
 		var keys := bins.keys()
 		keys.sort()
 		var curve := PackedVector2Array()
-		for bin in keys:
-			curve.append(Vector2(bin * 0.02, bins[bin]))
+		for bin in keys:  # the front-most of each bin and its neighbours, so folds stay behind
+			curve.append(Vector2(bin * 0.02, minf(bins[bin], minf(bins.get(bin - 1, 0.0), bins.get(bin + 1, 0.0)))))
 		holder.set_meta("front_curve", curve)
 	var upper := _find_attach("UpperChest")
 	_mesh(upper, _loft([[0.13, 0.066, 0.056, 0.003], [0.165, 0.058, 0.05, 0.0]], seg, 2.0, true), trim)
@@ -677,7 +677,7 @@ func _kit_details() -> void:
 	# Club crest on the left breast: a shield in the trim colour.
 	var crest := _loft([[0.0, 0.004, 0.022], [0.02, 0.018, 0.024], [0.045, 0.02, 0.022], [0.052, 0.02, 0.02]], 10, 3.0)
 	var ci := _mesh(chest, crest, ShintyMesh.solid(m.trim_color, 0.6),
-		Vector3(-0.075 * w, hi + 0.01, _shirt_z(chest, Vector3(-0.075 * w, hi + 0.01, -0.114 * w), 0.004)))
+		Vector3(-0.075 * w, hi + 0.01, _shirt_z(chest, Vector3(-0.075 * w, hi + 0.01, -0.114 * w), 0.007, 0.04)))
 	ci.rotation = Vector3(PI / 2 - 0.1, 0, 0)
 	ci.scale = Vector3(1, 1, 0.12)
 

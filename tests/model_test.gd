@@ -369,7 +369,9 @@ func _run() -> void:
 		built.queue_free()
 		ShintyPlayerLook.use_imported_bodies = true
 		check(built_tris - tris > 2000, "the imported body replaces the built one (%d vs %d triangles)" % [tris, built_tris])
-		check(im.find_child("SpineAttach", true, false).has_meta("mesh_aabb"), "imported shirt front is measured for the sponsor")
+		var im_skel := im.find_child("Skeleton3D", true, false) as Skeleton3D
+		var holder := im_skel.get_node_or_null(str(im_skel.get_meta("sponsor_holder", "SpineAttach")))
+		check(holder != null and holder.has_meta("mesh_aabb") and holder.has_meta("front_curve"), "imported shirt front is measured for the sponsor")
 		im.play_action(&"swing", 1.0)
 		_step(im, 0.3)
 		check(im.get_caman_head_position().is_finite(), "a player with an imported body swings")

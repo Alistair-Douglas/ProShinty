@@ -261,17 +261,19 @@ def main():
                 g = {"Head": "Neck"}.get(g, g.replace("Hand", "LowerArm").replace("Foot", "LowerLeg"))
             W[v.index, KEPT.index(g)] += x
     # Face zones from rig_mpfb_basemesh.py's vertex colour: lips, scalp, ears.
-    zone = np.zeros((n, 3))
+    # Alpha: the shirt fit from shirt_fit.py (metres / 0.05), 0 without one.
+    zone = np.zeros((n, 4))
     if me.color_attributes:
         ca = me.color_attributes[0]
         if ca.domain == "CORNER":
             cnt = np.zeros(n)
             for lp in me.loops:
-                zone[lp.vertex_index] += ca.data[lp.index].color[:3]
+                zone[lp.vertex_index] += ca.data[lp.index].color[:4]
                 cnt[lp.vertex_index] += 1
             zone /= np.maximum(cnt, 1)[:, None]
         else:
-            zone = np.array([d.color[:3] for d in ca.data])
+            zone = np.array([d.color[:4] for d in ca.data])
+    has_fit = bool(zone[:, 3].max() > 0.01)
     has_zones = bool(me.color_attributes)
     empty = W.sum(1) == 0
     if empty.any():  # unweighted: nearest joint
@@ -348,6 +350,16 @@ def main():
     tri = tri[:, ::-1]
 
     # --- Kit -----------------------------------------------------------------
+    if has_fit:  # smooth the measured fit: the shirt drapes, it doesn't follow every bump
+        f = zone[:, 3].copy()
+        for _ in range(4):
+            acc, cnt = np.zeros(len(pos)), np.zeros(len(pos))
+            for c3 in range(3):
+                for d3 in range(3):
+                    np.add.at(acc, tri[:, c3], f[tri[:, d3]])
+                    np.add.at(cnt, tri[:, c3], 1)
+            f = acc / np.maximum(cnt, 1)
+        zone[:, 3] = f
     SLEEVE, CUFF = 0.155, 0.185
     WAIST_SHIRT, WAIST_SHORTS = 1.0, 1.06
     SHORTS_LEG = 0.2
@@ -474,13 +486,17 @@ def main():
             nn = -nn if np.mean(np.einsum("ij,ij->i", nn, vn[used])) < 0 else nn
             near = (p[:, 1] > PAD_BOTTOM - PAD_EDGE) & (p[:, 1] < SOCK_TOP - TURN + 0.01)
             nrm = np.where(near[:, None], nn, nrm)
+        elif name == "shirt" and has_fit:  # sleeves as the measured shirt hangs
+            for k, vi in enumerate(used):
+                p[k] += nrm[k] * (lift + min(0.03, zone[vi, 3] * 0.05))
         elif name == "shirt":  # sleeves loosen towards the hem
             for k, vi in enumerate(used):
                 g = dom[vi]
                 d = along(vi, g) if g.endswith("UpperArm") else 0.0
                 p[k] += nrm[k] * (lift + 0.008 * min(1.0, max(0.0, d) / CUFF))
         elif name == "cuff":
-            p += nrm * (lift + 0.008)
+            for k, vi in enumerate(used):
+                p[k] += nrm[k] * (lift + (min(0.03, zone[vi, 3] * 0.05) + 0.001 if has_fit else 0.008))
         elif name == "shorts":  # looser towards the hem of each leg
             for k, vi in enumerate(used):
                 g = dom[vi]
@@ -491,12 +507,14 @@ def main():
         elif name == "torso":
             # The shirt hangs loose from the chest down (it doesn't follow
             # the waist in), and its hem sits over the shorts' waistband.
-            for k in range(len(used)):
+            for k, vi in enumerate(used):
                 y = p[k][1]
                 loose = 0.014 * min(1.0, max(0.0, (REF["UpperChest"][1] - y) / (REF["UpperChest"][1] - WAIST_SHIRT)))
+                fitv = min(0.035, zone[vi, 3] * 0.05) if has_fit else 0.0  # as the measured shirt sits
+                loose = max(0.0, loose - fitv)
                 out_dir = np.array([p[k][0], 0.0, p[k][2]])
                 out_dir /= max(np.linalg.norm(out_dir), 1e-9)
-                p[k] += nrm[k] * lift + out_dir * (loose + (0.006 if y < WAIST_SHORTS + 0.02 else 0.0))
+                p[k] += nrm[k] * (lift + fitv) + out_dir * (loose + (0.006 if y < WAIST_SHORTS + 0.02 else 0.0))
         else:
             p += nrm * lift
         uv = np.zeros((len(used), 2))

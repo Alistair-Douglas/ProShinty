@@ -143,6 +143,15 @@ joints from MPFB's joint vertex groups, builds the rig, weights the body and
 exports the .glb for step 2. `models/bodies/average.json` comes from
 Alistair's "Character medium" MPFB body (male, muscle 1.0, weight 0.5).
 
+The shirt's fit comes from a real MPFB shirt: `python3
+tools/blender/shirt_fit.py Clothed.blend tools/blender/shirt_fit.json`
+measures how far the shirt in a clothed MPFB file sits off the skin at each
+base-mesh vertex (tools/blender/shirt_fit.json is from Alistair's "Medium
+male with clothes", a long-sleeved shirt). `rig_mpfb_basemesh.py ... --fit
+tools/blender/shirt_fit.json` carries it in the zones colour, and the
+converter lifts the shirt by it (capped, so the sleeves stay short and the
+chest stays flat enough to print on). No triangles are added.
+
 `tools/blender/make_standin_body.py` makes a rough stand-in body with the same
 rig, for testing the converter without MPFB. Bodies made with MakeHuman/MPFB
 are CC0.

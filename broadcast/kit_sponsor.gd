@@ -58,7 +58,7 @@ static func apply(model: ShintyPlayerModel, texture: Texture2D, color = null) ->
 	var ink: Color = color if color is Color else model.trim_color
 	if ink.is_equal_approx(panel_col):
 		ink = Color.WHITE if panel_col.get_luminance() < 0.5 else Color(0.08, 0.08, 0.1)
-	root.mesh = _strip(width * 1.08, height * 1.25, centre, curve, 0.009)
+	root.mesh = _strip(width * 1.08, height * 1.25, centre, curve, 0.011)
 	var pm := StandardMaterial3D.new()
 	pm.albedo_color = panel_col
 	pm.roughness = 0.8
@@ -66,7 +66,7 @@ static func apply(model: ShintyPlayerModel, texture: Texture2D, color = null) ->
 	root.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	var mi := MeshInstance3D.new()
 	mi.name = "Print"
-	mi.mesh = _strip(width, height, centre, curve, 0.0105)
+	mi.mesh = _strip(width, height, centre, curve, 0.0145)
 	var mat := StandardMaterial3D.new()
 	mat.albedo_texture = texture
 	mat.albedo_color = ink
@@ -84,7 +84,7 @@ static func apply(model: ShintyPlayerModel, texture: Texture2D, color = null) ->
 ## (x, z of the shirt front; flat at c.z without one), `lift` in front of it.
 ## UVs read the right way round from the front.
 static func _strip(width: float, height: float, c: Vector3, curve: PackedVector2Array, lift: float) -> ArrayMesh:
-	var cols := 10
+	var cols := 24
 	var verts := PackedVector3Array()
 	var uvs := PackedVector2Array()
 	var norms := PackedVector3Array()

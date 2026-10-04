@@ -4,10 +4,12 @@ joint (that is how MPFB places its own rigs), so the joints are found from
 those, a Game engine-style skeleton is built on them, and the body is
 weighted automatically.
 
-    python3 tools/blender/rig_mpfb_basemesh.py Character.blend out.glb
+    python3 tools/blender/rig_mpfb_basemesh.py Character.blend out.glb [--fit tools/blender/shirt_fit.json]
 
 MPFB's lips, scalp and ears groups go into a vertex colour, and its mouth and
-jaw joints become marker bones, for the converter's face shading. Only the
+jaw joints become marker bones, for the converter's face shading. With --fit
+(from shirt_fit.py) the shirt's looseness rides along too, in the colour's
+alpha (metres / 0.05). Only the
 body is kept: MPFB's helper geometry (tights, skirt, hair, eye and
 teeth helpers) is cut away, and the body's shape keys (the MPFB sliders) are
 baked in as they were saved.
@@ -19,6 +21,10 @@ import bmesh
 from mathutils import Vector
 
 src, out = sys.argv[1], sys.argv[2]
+fit = None
+if "--fit" in sys.argv:
+    import json
+    fit = json.load(open(sys.argv[sys.argv.index("--fit") + 1]))["fit"]
 bpy.ops.wm.open_mainfile(filepath=src)
 human = next(o for o in bpy.data.objects if o.type == "MESH" and
              (o.get("MPFB_GEN_object_type") == "Basemesh" or "joint-pelvis" in o.vertex_groups))
@@ -55,7 +61,10 @@ for s in ("l", "r"):
     for n in ["clavicle", "shoulder", "elbow", "hand", "hand-2", "upper-leg", "knee", "ankle", "foot-1", "foot-2"]:
         J[s + "-" + n] = joint(s + "-" + n)
 
-# Keep the body only.
+# Keep the body only (remembering each vertex's base-mesh index for --fit).
+orig = mesh.attributes.new("orig", "INT", "POINT")
+for v in mesh.vertices:
+    orig.data[v.index].value = v.index
 bm = bmesh.new()
 bm.from_mesh(mesh)
 deform = bm.verts.layers.deform.verify()
@@ -64,12 +73,14 @@ bmesh.ops.delete(bm, geom=[v for v in bm.verts if v[deform].get(body, 0.0) < 0.5
 bm.to_mesh(mesh)
 bm.free()
 # MPFB's face groups, kept as a vertex colour for the converter: red the
-# lips, green the scalp (where hair grows), blue the ears.
+# lips, green the scalp (where hair grows), blue the ears; alpha the shirt fit.
 zones = mesh.color_attributes.new("zones", "FLOAT_COLOR", "POINT")
 zi = [groups.get(n) for n in ("lips", "scalp", "ears")]
+orig = mesh.attributes["orig"]
 for v in mesh.vertices:
     w = {g.group: g.weight for g in v.groups}
-    zones.data[v.index].color = [w.get(i, 0.0) if i is not None else 0.0 for i in zi] + [1.0]
+    a = min(1.0, fit[orig.data[v.index].value] / 0.05) if fit else 0.0
+    zones.data[v.index].color = [w.get(i, 0.0) if i is not None else 0.0 for i in zi] + [a]
 mesh.color_attributes.active_color = zones
 human.vertex_groups.clear()
 
