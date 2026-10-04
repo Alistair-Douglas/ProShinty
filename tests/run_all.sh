@@ -33,6 +33,7 @@ run() {
 run models   timeout 300  "$GODOT" --headless --path . -s tests/model_test.gd
 run stats    timeout 900  "$GODOT" --headless --path . -s tests/stats_test.gd
 run kits     timeout 120  "$GODOT" --headless --path . -s tests/kit_test.gd
+run ground   timeout 120  "$GODOT" --headless --path . -s tests/ground_test.gd
 run camans   timeout 300  "$GODOT" --headless --path . -s tests/caman_test.gd
 run practice timeout 600  "$GODOT" --headless --path . -s tests/practice_test.gd
 run referee  timeout 300  "$GODOT" --headless --path . -s tests/referee_test.gd

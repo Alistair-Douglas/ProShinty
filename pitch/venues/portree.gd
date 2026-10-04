@@ -98,6 +98,7 @@ func height_m(x: float, z: float) -> float:
 	var ridge := 1.0 - absf(p.noise.get_noise_2d(x * 0.05, z * 0.05))
 	var moor := 200.0 * smoothstep(40.0, 1200.0, west) * (0.75 + 0.25 * ridge)
 	moor += 6.0 * smoothstep(hw + 20.0, hw + 120.0, -z) * (1.0 + n)
+	moor *= p.wildness(x, z, 6.0, 6.0)   # the park round the pitch stays flat
 	var rough := p.noise.get_noise_2d(x * 0.25, z * 0.25) * 5.0 + n * 1.5
 	var land := maxf(bank, moor) + rough * p.wildness(x, z, 14.0, 22.0)
 	# The hillside past the north-west end, where the pods are.

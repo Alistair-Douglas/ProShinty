@@ -91,7 +91,9 @@ func height_m(x: float, z: float) -> float:
 	h *= wild
 	# The Spey: a channel with shingle banks.
 	var d: float = p.dist_to_path(pos, river)
-	return lerpf(h, -2.8, 1.0 - smoothstep(9.0, 17.0, d))
+	# Its bank stops short of the lines so the corner by it stays flat.
+	var out := maxf(absf(x) - hl, absf(z) - hw)
+	return lerpf(h, -2.8, (1.0 - smoothstep(9.0, 17.0, d)) * smoothstep(3.0, 8.0, out))
 
 
 func ground_mask(x: float, z: float, h: float) -> Color:
