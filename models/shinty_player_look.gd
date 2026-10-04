@@ -264,6 +264,7 @@ func _body() -> void:
 		Vector2(-9, -9), shirt_pattern[0], shirt_pattern[1])
 	var shorts := ShintyMesh.fabric(m.shorts_color, m.shirt_color, Vector2(-9, -9), Vector2(-9, -9), 0, 0.1, 0.75)
 	var socks := ShintyMesh.fabric(m.socks_color, m.trim_color, Vector2(0.0, 0.03), Vector2(0.055, 0.075), 0, 0.1, 0.9)
+	socks.set_shader_parameter("ribs", 0.0004)
 	if not body_file.is_empty():
 		var look := _face_look()
 		var hair_col: Color = look.hair.lerp(m.skin_color, 0.45) if look.style == "buzz" else look.hair

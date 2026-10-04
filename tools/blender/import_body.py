@@ -1,7 +1,7 @@
 """Turn a body exported from Blender (MPFB "Game engine" rig, or any rig with
 similar bone names) into a body file the game loads: models/bodies/<name>.json.
 
-    python3 tools/blender/import_body.py body.glb models/bodies/average.json [--tris 3900] [--no-head]
+    python3 tools/blender/import_body.py body.glb models/bodies/average.json [--tris 3400] [--no-head]
 
 Needs the `bpy` module (pip install bpy, Blender as a Python module), so it
 runs anywhere Python 3.11 does; no Blender window or MPFB needed here.
@@ -139,7 +139,7 @@ def split(pos, vn, dense, tri, level, applies):
 def main():
     args = sys.argv[1:]
     src, out = args[0], args[1]
-    tris = int(args[args.index("--tris") + 1]) if "--tris" in args else 3900
+    tris = int(args[args.index("--tris") + 1]) if "--tris" in args else 3400
     name = out.rsplit("/", 1)[-1].rsplit(".", 1)[0]
     build = float(args[args.index("--build") + 1]) if "--build" in args else \
         (0.2 if "lean" in name else 0.8 if "stocky" in name else 0.5)
@@ -337,6 +337,7 @@ def main():
     # shin with a small lip at each end (PAD_EDGE wide).
     PAD_TOP, PAD_BOTTOM, PAD_EDGE, PAD = REF["LeftLowerLeg"][1] - 0.09, REF["LeftFoot"][1] + 0.11, 0.008, 0.011
     SOCK_TOP = REF["LeftLowerLeg"][1] - 0.07
+    TURN = 0.04  # the sock top folded over, standing a little proud
     # Cut the mesh along each kit edge (limbs hang straight down at rest, so
     # every edge is a height) so hems and sock tops are straight, not jagged.
     dense = np.zeros((len(pos), len(KEPT)))
@@ -345,7 +346,7 @@ def main():
     arm_y = REF["LeftUpperArm"][1]
     leg_y = REF["LeftUpperLeg"][1]
     shin = lambda d: np.char.endswith(d, "LowerLeg").any()
-    cuts = [(SOCK_TOP, shin), (PAD_TOP, shin), (PAD_TOP - PAD_EDGE, shin),
+    cuts = [(SOCK_TOP, shin), (SOCK_TOP - TURN, shin), (PAD_TOP, shin), (PAD_TOP - PAD_EDGE, shin),
             (PAD_BOTTOM, shin), (PAD_BOTTOM + PAD_EDGE, shin),
             (leg_y - SHORTS_LEG, lambda d: all(x.endswith("UpperLeg") or x == "Hips" for x in d)),
             (arm_y - SLEEVE, lambda d: np.char.endswith(d, "UpperArm").any()),
@@ -436,7 +437,7 @@ def main():
                 y = p[k][1]
                 band = min(1.0, max(0.0, (PAD_TOP - y) / PAD_EDGE), max(0.0, (y - PAD_BOTTOM) / PAD_EDGE))
                 front = min(1.0, max(0.0, (-nrm[k][2] - 0.25) / 0.35))
-                p[k] += nrm[k] * lift
+                p[k] += nrm[k] * (lift + (0.004 if y > SOCK_TOP - TURN + 0.001 else 0.0))
                 p[k][2] -= PAD * band * front
             # Shade the pad's edges: normals from the padded shape.
             fn = np.cross(p[inv.reshape(-1, 3)[:, 1]] - p[inv.reshape(-1, 3)[:, 0]],
@@ -446,7 +447,7 @@ def main():
                 np.add.at(nn, inv.reshape(-1, 3)[:, c3], fn)
             nn /= np.maximum(np.linalg.norm(nn, axis=1, keepdims=True), 1e-9)
             nn = -nn if np.mean(np.einsum("ij,ij->i", nn, vn[used])) < 0 else nn
-            near = (p[:, 1] > PAD_BOTTOM - PAD_EDGE) & (p[:, 1] < PAD_TOP + PAD_EDGE)
+            near = (p[:, 1] > PAD_BOTTOM - PAD_EDGE) & (p[:, 1] < SOCK_TOP - TURN + 0.01)
             nrm = np.where(near[:, None], nn, nrm)
         elif name == "shirt":  # sleeves loosen towards the hem
             for k, vi in enumerate(used):

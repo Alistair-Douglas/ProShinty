@@ -119,11 +119,12 @@ helmet; the helmet is sized to the body's skull.
    rest pose and stretches the limbs to its bone lengths (so poses, the arm
    solver and the caman grip are unchanged), cuts off the hands and feet,
    stands the head upright on a slightly longer neck, cuts the body down to
-   about 3,900 triangles (`--tris`), and splits it into skin, hair, shirt,
+   about 3,400 triangles (`--tris`), and splits it into skin, hair, shirt,
    cuff, shorts and socks with straight hems and neckline, the kit lifted a
    little off the skin. The shirt hangs loose from the chest down over the
    shorts' waistband, the sleeves widen towards the hem, and the socks have a
-   shin pad under them (a raised front panel with a lip at each end). Hair colour and skin tone still come from each
+   shin pad under them (a raised front panel with a lip at each end), ribbed
+   and folded over at the top. Hair colour and skin tone still come from each
    player. `--no-head` cuts the head off too and the game builds its own
    head and face.
 3. Files named `lean`, `average` and `stocky` are picked by each player's

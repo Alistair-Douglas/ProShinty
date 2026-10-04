@@ -192,6 +192,8 @@ uniform float pattern = 0.0;
 uniform float pattern_scale = 0.12;
 uniform float roughness = 0.82;
 uniform float weave = 1.0;
+// Knitted ribs running down the cloth (socks), as a height in metres.
+uniform float ribs = 0.0;
 
 float in_band(float v, vec4 b) { return step(b.x, v) * step(v, b.y); }
 
@@ -214,7 +216,8 @@ void fragment() {
 	float drape = sin(UV.x * 20.0 + sin(UV.y * 11.0) * 2.0);
 	float crease = sin(UV.x * 40.0 + UV.y * 38.0 + cos(UV.x * 20.0) * 1.5);
 	crease *= smoothstep(0.2, 0.9, sin(UV.x * 20.0 + UV.y * 7.0 + 1.3));
-	float h = weave * (drape * 0.0055 + crease * 0.002);
+	float h = weave * (drape * 0.0055 + crease * 0.002)
+		+ ribs * sin(UV.x * 600.0) * clamp(2.0 - fwidth(UV.x * 600.0), 0.0, 1.0);  // fade before they shimmer
 	vec3 dpx = dFdx(VERTEX), dpy = dFdy(VERTEX);
 	vec3 r1 = cross(dpy, NORMAL), r2 = cross(NORMAL, dpx);
 	float det = dot(dpx, r1);
