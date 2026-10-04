@@ -24,6 +24,14 @@ var sw := 1.0    # shoulder/hip width
 var seed_val := 0
 var detail := true
 var seg := 16
+var body_file := {}   # an imported body (models/bodies/*.json), or empty for the built one
+
+## Use bodies made in Blender (models/bodies/*.json, from
+## tools/blender/import_body.py) when there are any. Set false for the
+## built-in body.
+static var use_imported_bodies := true
+static var body_dir := "res://models/bodies"
+static var _body_cache := {}
 
 
 static func dress(model: ShintyPlayerModel, skeleton: Skeleton3D) -> Node3D:
@@ -36,6 +44,7 @@ static func dress(model: ShintyPlayerModel, skeleton: Skeleton3D) -> Node3D:
 		else absi(hash(model.shirt_number * 7919 + int(model.height_cm)))
 	d.detail = not model.low_detail
 	d.seg = 16 if d.detail else 10
+	d.body_file = _pick_body(model.build) if use_imported_bodies and d.detail else {}
 	d._body()
 	d._kit_details()
 	d._head()
@@ -82,6 +91,15 @@ static func _bake(skeleton: Skeleton3D, cam: Node3D) -> void:
 				shadow.add(c.mesh, xf, bone, null, joints)
 			holder.remove_child(c)
 			c.free()
+	# An imported body comes with its own bones and weights.
+	for r in skeleton.get_meta("raw_parts", []):
+		var key: Variant = r[0]
+		if not surfaces.has(key):
+			surfaces[key] = _Part.new()
+		surfaces[key].add_raw(r[1], r[2], r[3], r[4], r[5], r[6], r[7])
+		shadow.add_raw(r[1], r[2], r[3], r[4], r[5], r[6])
+	if skeleton.has_meta("raw_parts"):
+		skeleton.remove_meta("raw_parts")
 	var mesh := ArrayMesh.new()
 	for key in surfaces:
 		surfaces[key].commit(mesh, true)
@@ -199,6 +217,20 @@ class _Part:
 			for i in src:
 				idx.append(first + i)
 
+	func add_raw(v: PackedVector3Array, n: PackedVector3Array, uv: PackedVector2Array, b: PackedInt32Array,
+			wt: PackedFloat32Array, src: PackedInt32Array, col := PackedColorArray()) -> void:
+		var first := verts.size()
+		verts.append_array(v)
+		norms.append_array(n)
+		uvs.append_array(uv)
+		for i in v.size():
+			uv2s.append(Vector2(1, 0))
+			colors.append(col[i] if i < col.size() else Color.WHITE)
+		bones.append_array(b)
+		weights.append_array(wt)
+		for i in src:
+			idx.append(first + i)
+
 	func commit(mesh: ArrayMesh, shaded: bool) -> void:
 		var arrays := []
 		arrays.resize(Mesh.ARRAY_MAX)
@@ -232,6 +264,22 @@ func _body() -> void:
 		Vector2(-9, -9), shirt_pattern[0], shirt_pattern[1])
 	var shorts := ShintyMesh.fabric(m.shorts_color, m.shirt_color, Vector2(-9, -9), Vector2(-9, -9), 0, 0.1, 0.75)
 	var socks := ShintyMesh.fabric(m.socks_color, m.trim_color, Vector2(0.0, 0.03), Vector2(0.055, 0.075), 0, 0.1, 0.9)
+	socks.set_shader_parameter("ribs", 0.0004)
+	if not body_file.is_empty():
+		var look := _face_look()
+		var hair_col: Color = look.hair.lerp(m.skin_color, 0.45) if look.style == "buzz" else look.hair
+		# Facial hair is painted on the imported face's beard zones (from the
+		# converter: 0.5 jaw and cheeks, 1 chin and upper lip).
+		var fh_col: Color = look.hair.lerp(m.skin_color, 0.15)
+		var face_skin: Material = skin
+		match look.facial:
+			"stubble": face_skin = ShintyMesh.skin(m.skin_color, fh_col, 0.4, false, 0.45)
+			"beard": face_skin = ShintyMesh.skin(m.skin_color, fh_col, 0.4, false, 0.85)
+			"goatee": face_skin = ShintyMesh.skin(m.skin_color, fh_col, 0.8, false, 0.85)
+			"moustache": face_skin = ShintyMesh.skin(m.skin_color, fh_col, 2.0, true, 0.85)
+		_imported_body({"skin": face_skin, "hair": ShintyMesh.solid(hair_col, 0.85), "torso": chest_band, "shirt": shirt, "cuff": ShintyMesh.fabric(m.trim_color, m.trim_color),
+			"shorts": shorts, "socks": socks})
+		return
 
 	# Pelvis in shorts, with the shirt hem hanging over the waistband.
 	var hips := _attach("Hips")
@@ -295,6 +343,187 @@ func _body() -> void:
 		# Boot: shaped upper, contrasting sole, a few studs.
 		var foot := _attach(side + "Foot")
 		_boot(foot, 1.0 if side == "Left" else -1.0)
+
+
+## A body made in Blender, in place of the built one. The file holds one
+## mesh per kit part, already bent into the skeleton's rest pose at 1.80 m
+## and weighted to its bones; here it is fitted to this player (shoulder and
+## hip width, girth) and handed to _bake with its own weights. Hands, boots,
+## head and helmet, collar and the kit's numbers stay as built.
+func _imported_body(mats: Dictionary) -> void:
+	var names: Array = body_file["bones"]
+	var bone_of := PackedInt32Array()
+	var shift := []      # this skeleton's joints minus the file's
+	var axis_a := []
+	var axis_b := []
+	var refs: Dictionary = body_file["ref"]
+	for n in names:
+		var b := skel.find_bone(n)
+		bone_of.append(b)
+		var at := skel.get_bone_global_rest(b).origin
+		var r: Array = refs[n]
+		shift.append(at - Vector3(r[0], r[1], r[2]))
+		axis_a.append(at)
+		var child := -1
+		for c in skel.get_bone_children(b):
+			if skel.get_bone_name(c) != "Caman":
+				child = c
+				break
+		axis_b.append(skel.get_bone_global_rest(child).origin if child >= 0 else at + Vector3.UP * 0.1)
+	# Girth relative to the build the body was made at.
+	var k := w / lerpf(0.86, 1.22, float(body_file.get("build", 0.5)))
+	k = clampf(lerpf(1.0, k, 0.6), 0.9, 1.12)
+	var parts := []
+	var torso_pts := PackedVector3Array()
+	var torso_bones := PackedInt32Array()
+	var torso_weights := PackedFloat32Array()
+	for key in body_file["surfaces"]:
+		if not mats.has(key):
+			continue
+		var sd: Dictionary = body_file["surfaces"][key]
+		var v: Array = sd["v"]
+		var nr: Array = sd["n"]
+		var uv: Array = sd["uv"]
+		var bi: Array = sd["b"]
+		var wt: Array = sd["w"]
+		var count := v.size() / 3
+		var verts := PackedVector3Array()
+		var norms := PackedVector3Array()
+		var uvs := PackedVector2Array()
+		var bones := PackedInt32Array()
+		var weights := PackedFloat32Array()
+		verts.resize(count)
+		norms.resize(count)
+		uvs.resize(count)
+		bones.resize(count * 4)
+		weights.resize(count * 4)
+		for i in count:
+			var p := Vector3(v[i * 3], v[i * 3 + 1], v[i * 3 + 2])
+			var main: int = bi[i * 4]
+			# Girth: out from the main bone's axis.
+			var a: Vector3 = axis_a[main]
+			var ab: Vector3 = axis_b[main] - a
+			var t := clampf((p - a).dot(ab) / ab.length_squared(), 0.0, 1.0)
+			var on := a + ab * t
+			p = on + (p - on) * k
+			var off := Vector3.ZERO
+			for j in 4:
+				off += shift[bi[i * 4 + j]] * float(wt[i * 4 + j])
+				bones[i * 4 + j] = bone_of[bi[i * 4 + j]]
+				weights[i * 4 + j] = wt[i * 4 + j]
+			p += off
+			verts[i] = p
+			norms[i] = Vector3(nr[i * 3], nr[i * 3 + 1], nr[i * 3 + 2])
+			uvs[i] = Vector2(uv[i * 2], uv[i * 2 + 1])
+			if key == "torso":
+				torso_pts.append(p)
+				for j in 4:
+					torso_bones.append(bones[i * 4 + j])
+					torso_weights.append(weights[i * 4 + j])
+		# Skin shading baked by the converter (flush, lips, beard zones).
+		var cols := PackedColorArray()
+		var c: Array = sd.get("c", [])
+		for i in c.size() / 4:
+			cols.append(Color(c[i * 4], c[i * 4 + 1], c[i * 4 + 2], c[i * 4 + 3]))
+		parts.append([mats[key], verts, norms, uvs, bones, weights, PackedInt32Array(sd["i"]), cols])
+	skel.set_meta("raw_parts", parts)
+	_torso_pts = torso_pts
+
+	var trim := mats["cuff"] as Material
+	for b in ["Hips", "Spine", "Chest", "UpperChest"]:
+		_attach(b)
+	# Shirt front for the sponsor print, across the chest as on real shirts
+	# (ShintyKitSponsor reads sponsor_holder, then mesh_aabb and front_curve).
+	var holder := _find_attach("Chest")
+	var at := skel.get_bone_global_rest(skel.find_bone("Chest")).origin
+	var box := AABB()
+	var first := true
+	for p in torso_pts:
+		if p.y > at.y - 0.04 and p.y < at.y + 0.12:
+			if first:
+				box = AABB(p - at, Vector3.ZERO)
+				first = false
+			else:
+				box = box.expand(p - at)
+	if not first:
+		skel.set_meta("sponsor_holder", String(holder.name))
+		# The shirt's skinning, so the print bends with it instead of riding
+		# one bone (in skeleton rest space).
+		skel.set_meta("torso_skin", [torso_pts, torso_bones, torso_weights])
+		holder.set_meta("mesh_aabb", box)
+		# The shirt front across the sponsor's height, for the print to follow.
+		var y := box.position.y + box.size.y * 0.5
+		var bins := {}
+		for p in torso_pts:
+			var q := p - at
+			if q.z < 0.0 and absf(q.y - y) < 0.07:
+				var bin := roundi(q.x / 0.02)
+				bins[bin] = minf(bins.get(bin, 0.0), q.z)
+		var keys := bins.keys()
+		keys.sort()
+		var curve := PackedVector2Array()
+		for bin in keys:  # the front-most of each bin and its neighbours, so folds stay behind
+			curve.append(Vector2(bin * 0.02, minf(bins[bin], minf(bins.get(bin - 1, 0.0), bins.get(bin + 1, 0.0)))))
+		holder.set_meta("front_curve", curve)
+	var upper := _find_attach("UpperChest")
+	_mesh(upper, _loft([[0.13, 0.066, 0.056, 0.003], [0.165, 0.058, 0.05, 0.0]], seg, 2.0, true), trim)
+	for side in ["Left", "Right"]:
+		_attach(side + "UpperArm")
+		_attach(side + "LowerArm")
+		_grip_hand(_attach(side + "Hand"), side, mats["skin"])
+		_attach(side + "UpperLeg")
+		_attach(side + "LowerLeg")
+		_boot(_attach(side + "Foot"), 1.0 if side == "Left" else -1.0)
+
+
+var _torso_pts := PackedVector3Array()
+
+
+## Depth of the shirt surface at a spot on a torso bone, for things printed
+## on it: the built body's guess, or the imported body's actual surface
+## (the outermost point within span either side, so a wide print clears
+## the shoulder blades).
+func _shirt_z(holder: Node3D, guess: Vector3, lift := 0.002, span := 0.03) -> float:
+	if _torso_pts.is_empty():
+		return guess.z
+	var at := skel.get_bone_global_rest(skel.find_bone((holder as BoneAttachment3D).bone_name)).origin
+	var q := at + guess
+	var best := 0.0
+	var found := false
+	for p in _torso_pts:
+		if absf(p.x - q.x) < span and absf(p.y - q.y) < 0.03 and signf(p.z) == signf(guess.z):
+			if not found or absf(p.z) > absf(best):
+				best = p.z
+				found = true
+	return (best - at.z + signf(guess.z) * lift) if found else guess.z
+
+
+## The imported body for this build: lean, average or stocky, by the file's
+## name; any body if those aren't all there. Empty when there are none.
+static func _pick_body(build: float) -> Dictionary:
+	var dir := body_dir
+	if _body_cache.get("_dir", "") != dir:
+		_body_cache = {"_dir": dir}
+	if not _body_cache.has("_list"):
+		var files := []
+		if DirAccess.dir_exists_absolute(dir):
+			for f in DirAccess.get_files_at(dir):
+				if f.ends_with(".json"):
+					files.append(f)
+		files.sort()
+		_body_cache["_list"] = files
+	var files: Array = _body_cache["_list"]
+	if files.is_empty():
+		return {}
+	var want := "lean" if build < 0.36 else ("stocky" if build > 0.64 else "average")
+	var name: String = files[0]
+	for f in files:
+		if want in f:
+			name = f
+	if not _body_cache.has(name):
+		var data = JSON.parse_string(FileAccess.get_file_as_string(dir + "/" + name))
+		_body_cache[name] = data if data is Dictionary and data.has("surfaces") else {}
+	return _body_cache[name]
 
 
 ## A hand closed round the shaft, in the hand bone's grip frame: the shaft
@@ -440,24 +669,23 @@ func _kit_details() -> void:
 		return
 	var upper := _find_attach("UpperChest")
 	var chest := _find_attach("Chest")
-	# Number on the back, surname above it, small number on the front.
+	# Small number and crest: up near the collarbones when the sponsor goes
+	# across the chest (imported bodies), else on the chest.
+	var hi := 0.15 if skel.has_meta("sponsor_holder") else 0.02
+	# Number on the back and a small one on the front (shinty shirts carry no
+	# names).
 	if m.shirt_number > 0:
 		var back := _label(str(m.shirt_number), 110, 0.0021)
-		back.position = Vector3(0, 0.0, 0.112 * w)
+		back.position = Vector3(0, 0.0, _shirt_z(upper, Vector3(0, 0.0, 0.112 * w), 0.002, 0.075))
 		upper.add_child(back)
 		var front := _label(str(m.shirt_number), 64, 0.0012)
-		front.position = Vector3(0.075 * w, 0.02, -0.118 * w)
+		front.position = Vector3(0.075 * w, hi, _shirt_z(chest, Vector3(0.075 * w, hi, -0.118 * w)))
 		front.rotation.y = PI
 		chest.add_child(front)
-	var surname := _surname()
-	if surname != "":
-		var name_label := _label(surname, 48, 0.00115)
-		name_label.position = Vector3(0, 0.1, 0.103 * w)
-		name_label.rotation.x = -0.12
-		upper.add_child(name_label)
 	# Club crest on the left breast: a shield in the trim colour.
 	var crest := _loft([[0.0, 0.004, 0.022], [0.02, 0.018, 0.024], [0.045, 0.02, 0.022], [0.052, 0.02, 0.02]], 10, 3.0)
-	var ci := _mesh(chest, crest, ShintyMesh.solid(m.trim_color, 0.6), Vector3(-0.075 * w, 0.03, -0.114 * w))
+	var ci := _mesh(chest, crest, ShintyMesh.solid(m.trim_color, 0.6),
+		Vector3(-0.075 * w, hi + 0.01, _shirt_z(chest, Vector3(-0.075 * w, hi + 0.01, -0.114 * w), 0.007, 0.04)))
 	ci.rotation = Vector3(PI / 2 - 0.1, 0, 0)
 	ci.scale = Vector3(1, 1, 0.12)
 
@@ -484,17 +712,6 @@ func _label(text: String, size: int, px: float) -> Label3D:
 	return l
 
 
-func _surname() -> String:
-	var n := str(m.player_data.get("name", "")).strip_edges()
-	if n == "":
-		return ""
-	var parts := n.split(" ", false)
-	var last: String = parts[parts.size() - 1]
-	if last.is_valid_int() or last.to_lower() == "player":
-		return ""
-	return last.to_upper()
-
-
 # --- Head, face, hair ----------------------------------------------------------------
 
 func _head() -> void:
@@ -505,10 +722,19 @@ func _head() -> void:
 	var facial: String = look.facial
 	var hair := ShintyMesh.solid(hair_col, 0.85)
 	var neck := _attach("Neck")
-	_mesh(neck, _loft([[-0.02, 0.058, 0.056], [0.06, 0.052, 0.05, 0.004], [0.13, 0.05, 0.048, 0.008]], seg), skin)
+	if body_file.is_empty():  # an imported body brings its own neck
+		_mesh(neck, _loft([[-0.02, 0.058, 0.056], [0.06, 0.052, 0.05, 0.004], [0.13, 0.05, 0.048, 0.008]], seg), skin)
 
 	var head := _attach("Head")
 	var c := Vector3(0, 0.11, 0)
+	# An imported body may bring its own head and face (MPFB's): then only
+	# the eyes, eyebrows, hair and helmet are added here.
+	var own_head: bool = body_file.get("bones", []).has("Head")
+	var fit := 1.0  # helmet and hair size for the imported head
+	if own_head and body_file.has("skull"):
+		var sk: Array = body_file["skull"]
+		c = Vector3(sk[0], sk[1], sk[2])
+		fit = sk[3]
 	# Skull and face in one sculpted piece: chin, jaw, cheekbones, brow. Each
 	# player's face is a little different: jaw width, chin length, cheeks.
 	var jaw: float = (0.066 + 0.01 * m.build) * look.jaw
@@ -520,16 +746,18 @@ func _head() -> void:
 		[-0.05, jaw, 0.08, -0.018], [-0.015, 0.074 * cheek, 0.094, -0.006], [0.02, 0.079, 0.1, 0.0],
 		[0.06, 0.079, 0.1, 0.006], [0.095, 0.068, 0.086, 0.01], [0.118, 0.04, 0.052, 0.012],
 		[0.128, 0.01, 0.014, 0.012]]
-	_mesh(head, _loft(face, seg + 2, 2.1), skin, c)
+	if not own_head:
+		_mesh(head, _loft(face, seg + 2, 2.1), skin, c)
 	# Nose: narrow bridge, rounded tip, wider at the nostrils.
 	var ns: float = look.nose
 	var nose := ShintyMesh.sweep(PackedVector3Array([Vector3(0, 0.032, -0.088), Vector3(0, 0.008, -0.1 + (1.0 - ns) * 0.012),
 		Vector3(0, -0.012, -0.109 + (1.0 - ns) * 0.016), Vector3(0, -0.022, -0.106 + (1.0 - ns) * 0.012)]),
 		PackedVector2Array([Vector2(0.0065, 0.005), Vector2(0.008, 0.008) * ns, Vector2(0.0125, 0.011) * ns, Vector2(0.013, 0.007) * ns]), 8)
-	_mesh(head, nose, skin, c)
+	if not own_head:
+		_mesh(head, nose, skin, c)
 	if detail:
 		# Brow ridge (under the helmet's front edge when one is worn).
-		if not m.wear_helmet:
+		if not m.wear_helmet and not own_head:
 			_mesh(head, ShintyMesh.sweep(PackedVector3Array([Vector3(-0.058, 0.04, -0.078), Vector3(-0.03, 0.043, -0.088),
 				Vector3(0, 0.044, -0.09), Vector3(0.03, 0.043, -0.088), Vector3(0.058, 0.04, -0.078)]),
 				PackedVector2Array([Vector2(0.003, 0.003), Vector2(0.006, 0.006), Vector2(0.006, 0.006), Vector2(0.006, 0.006), Vector2(0.003, 0.003)]), 8), skin, c)
@@ -537,25 +765,31 @@ func _head() -> void:
 		# middle, a touch further out under a beard so they still show.
 		var lip := ShintyMesh.solid(m.skin_color.lerp(Color(0.62, 0.3, 0.3), 0.35), 0.5)
 		var lz := -0.003 if facial == "beard" else 0.0
-		_mesh(head, ShintyMesh.sweep(PackedVector3Array([Vector3(-0.022, -0.043, -0.094 + lz), Vector3(-0.01, -0.0405, -0.099 + lz),
-			Vector3(0, -0.0415, -0.1 + lz), Vector3(0.01, -0.0405, -0.099 + lz), Vector3(0.022, -0.043, -0.094 + lz)]),
-			PackedVector2Array([Vector2(0.002, 0.002), Vector2(0.0035, 0.004), Vector2(0.003, 0.0035), Vector2(0.0035, 0.004), Vector2(0.002, 0.002)]), 6), lip, c)
-		_mesh(head, ShintyMesh.sweep(PackedVector3Array([Vector3(-0.02, -0.0455, -0.094 + lz), Vector3(0, -0.048, -0.0995 + lz),
-			Vector3(0.02, -0.0455, -0.094 + lz)]),
-			PackedVector2Array([Vector2(0.0025, 0.003), Vector2(0.0055, 0.0055), Vector2(0.0025, 0.003)]), 6), lip, c)
+		if not own_head:
+			_mesh(head, ShintyMesh.sweep(PackedVector3Array([Vector3(-0.022, -0.043, -0.094 + lz), Vector3(-0.01, -0.0405, -0.099 + lz),
+				Vector3(0, -0.0415, -0.1 + lz), Vector3(0.01, -0.0405, -0.099 + lz), Vector3(0.022, -0.043, -0.094 + lz)]),
+				PackedVector2Array([Vector2(0.002, 0.002), Vector2(0.0035, 0.004), Vector2(0.003, 0.0035), Vector2(0.0035, 0.004), Vector2(0.002, 0.002)]), 6), lip, c)
+			_mesh(head, ShintyMesh.sweep(PackedVector3Array([Vector3(-0.02, -0.0455, -0.094 + lz), Vector3(0, -0.048, -0.0995 + lz),
+				Vector3(0.02, -0.0455, -0.094 + lz)]),
+				PackedVector2Array([Vector2(0.0025, 0.003), Vector2(0.0055, 0.0055), Vector2(0.0025, 0.003)]), 6), lip, c)
 		# Eyes: white, iris, pupil; eyebrows in the hair colour.
 		var white := ShintyMesh.solid(Color("f2eee6"), 0.25)
 		var iris := ShintyMesh.solid(_pick(EYE_COLOURS, 2), 0.2)
 		var pupil := ShintyMesh.solid(Color("0b0b0c"), 0.1)
+		var eyes: Array = body_file.get("eyes", []) if own_head else []
 		for sx in [-1.0, 1.0]:
 			var e := c + Vector3(sx * 0.034, 0.02, -0.084)
+			if eyes.size() == 2:  # in the imported face's sockets (head-bone space)
+				var ep: Array = eyes[0 if sx < 0.0 else 1]
+				var hr: Array = body_file["ref"]["Head"]
+				e = Vector3(ep[0] - hr[0], ep[1] - hr[1], ep[2] - hr[2]) + Vector3(0, 0, -0.003)
 			_mesh(head, _ellipsoid(0.0135, 0.009, 0.008, 6, 10), white, e)
 			_mesh(head, _ellipsoid(0.0068, 0.0068, 0.004, 4, 8), iris, e + Vector3(0, 0, -0.0065))
 			_mesh(head, _ellipsoid(0.0032, 0.0032, 0.002, 3, 6), pupil, e + Vector3(0, 0, -0.0092))
 			var brow := _mesh(head, _loft([[-0.016, 0.004, 0.003], [0.016, 0.003, 0.002]], 6), hair,
 				e + Vector3(sx * 0.002, 0.017, -0.011))
 			brow.rotation.z = PI / 2 + sx * 0.12
-			if not m.wear_helmet:  # otherwise inside the helmet's ear pads
+			if not m.wear_helmet and not own_head:  # otherwise inside the helmet's ear pads
 				var ear := _mesh(head, _ellipsoid(0.01, 0.028, 0.018, 6, 8), skin, c + Vector3(sx * 0.08, 0.005, 0.012))
 				ear.rotation.y = sx * 0.3
 	# Hair. A crop sits close to the skull; a buzz cut closer still and
@@ -568,15 +802,17 @@ func _head() -> void:
 			[0.12, 0.042, 0.056, 0.012], [0.131, 0.01, 0.014, 0.012]]:
 		cap.append([r[0] + (cap_off if r[0] > 0.125 else 0.0), r[1] + cap_off, r[2] + cap_off, r[3]])
 	var cap_mat := hair if cap_col == hair_col else ShintyMesh.solid(cap_col, 0.95)
-	_mesh(head, _loft(cap, seg, 2.1, false, -0.3, PI + 0.3), cap_mat, c)
-	if not m.wear_helmet:  # the front, from a hairline across the forehead
+	var before := head.get_child_count()
+	if not own_head:  # the imported head has its hair in the mesh
+		_mesh(head, _loft(cap, seg, 2.1, false, -0.3, PI + 0.3), cap_mat, c)
+	if not m.wear_helmet and not own_head:  # the front, from a hairline across the forehead
 		_mesh(head, _loft(cap.slice(1), seg, 2.1, false, PI - 0.1, TAU + 0.1), cap_mat, c)
 	if style == "long":
 		_mesh(head, _loft([[-0.125, 0.058, 0.066, 0.034], [-0.105, 0.066, 0.078, 0.03], [-0.07, 0.074, 0.09, 0.022],
 			[-0.03, 0.082, 0.1, 0.014], [0.0, 0.085, 0.103, 0.012], [0.035, 0.084, 0.102, 0.01]], seg, 2.2, false, 0.3, PI - 0.3), hair, c)
 	# Facial hair: a shell over the jaw and chin, close for stubble and
 	# standing off for a beard, or just the chin and lip for a goatee.
-	if detail and facial != "none":
+	if detail and facial != "none" and not own_head:
 		var fh_col := hair_col.lerp(m.skin_color, 0.15)
 		match facial:
 			"stubble":
@@ -592,6 +828,11 @@ func _head() -> void:
 				_moustache(head, ShintyMesh.solid(fh_col, 0.95), c, 0.0)
 	if m.wear_helmet:
 		_helmet(head, c)
+	if fit != 1.0:  # sized for the built skull: scale round its centre
+		var about := Transform3D(Basis.from_scale(Vector3.ONE * fit), c * (1.0 - fit))
+		for i in range(before, head.get_child_count()):
+			var n := head.get_child(i) as Node3D
+			n.transform = about * n.transform
 
 
 ## How this player looks: hair colour, hair style, facial hair and face

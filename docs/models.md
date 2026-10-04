@@ -81,8 +81,9 @@ animation or physics.
   darker tone.
 - **Kit** uses a fabric shader with a fine knit and soft folds, a chest band
   and cuffs in the trim colour, a collar, a crest on the left breast, a small
-  number on the front, and the number and surname on the back (surnames show
-  once squads have real names). Socks have trim hoops. A team can set
+  number on the front, a big number on the back (no names: shinty shirts
+  don't carry them) and the team's sponsor across the front in matches.
+  Socks have trim hoops. A team can set
   `colors.pattern` to `"hoops"` or `"stripes"`.
 - **Boots** are low-cut football boots: a flat sole plate with a little toe
   spring, a heel collar round the ankle, a lace panel over the instep, a
@@ -101,6 +102,65 @@ animation or physics.
   tape spiralled round the handle, a knob at the end and tape on the bas.
 - **Ball**: leather with a stitched seam drawn by a shader, and a raised ridge
   so spin reads from a distance.
+
+### Bodies from Blender (MPFB)
+
+Bodies made in Blender with the MPFB add-on can replace the built torso, arms,
+legs, head and face. The game keeps its own gripping hands, boots, eyes and
+helmet; the helmet is sized to the body's skull.
+
+1. In Blender (4.2 or newer) with MPFB: New Human, set the body (male, about
+   25, muscle fairly high), add the **Game engine** rig, no clothes or hair,
+   then File > Export > glTF 2.0 (.glb) with Armature and Skinning ticked.
+2. Convert it (needs `pip install bpy`, Blender as a Python module):
+
+       python3 tools/blender/import_body.py lean.glb models/bodies/lean.json
+
+   It maps the rig onto the game skeleton, bends the A-pose into the game's
+   rest pose and stretches the limbs to its bone lengths (so poses, the arm
+   solver and the caman grip are unchanged), cuts off the hands and feet,
+   stands the head upright on a slightly longer neck, cuts the body down to
+   about 3,400 triangles (`--tris`), and splits it into skin, hair, shirt,
+   cuff, shorts and socks with straight hems and neckline, the kit lifted a
+   little off the skin. The shirt hangs loose from the chest down over the
+   shorts' waistband, the sleeves widen towards the hem, and the socks have a
+   shin pad under them (a raised front panel with a lip at each end), ribbed
+   and folded over at the top. Hair colour and skin tone still come from each
+   player. MPFB's lips, scalp and ears groups (carried in the .glb as a
+   vertex colour by `rig_mpfb_basemesh.py`) give the lips, the hairline and
+   flushed ears; cheeks and nose are flushed too, and each player's facial
+   hair (stubble, beard, goatee, moustache) is painted on the jaw, chin and
+   upper lip by the skin shader. `--no-head` cuts the head off too and the
+   game builds its own head and face.
+3. Files named `lean`, `average` and `stocky` are picked by each player's
+   build (below 0.36, between, above 0.64); shoulder and hip width and girth
+   are then fitted per player. With no files in `models/bodies/` the built
+   body is used. `ShintyPlayerLook.use_imported_bodies = false` turns them off.
+
+An unrigged MPFB human saved as a .blend works too: `python3
+tools/blender/rig_mpfb_basemesh.py Character.blend body.glb` finds the
+joints from MPFB's joint vertex groups, builds the rig, weights the body and
+exports the .glb for step 2. `models/bodies/average.json` comes from
+Alistair's "Character medium" MPFB body (male, muscle 1.0, weight 0.5), rigged
+with `--height 0.5`: the game scales every body to its own height, so MPFB's
+tall setting only made it slender. The rig script also switches off the small
+female chest targets MPFB leaves on for a male human, and the converter hangs
+the shirt off the chest and shoulder blades (`drape()`) instead of hugging
+the skin, so a muscular chest doesn't read as a bust. The sponsor print is
+skinned like the shirt under it, so it bends with the chest.
+
+The shirt's fit comes from a real MPFB shirt: `python3
+tools/blender/shirt_fit.py Clothed.blend tools/blender/shirt_fit.json`
+measures how far the shirt in a clothed MPFB file sits off the skin at each
+base-mesh vertex (tools/blender/shirt_fit.json is from Alistair's "Medium
+male with clothes", a long-sleeved shirt). `rig_mpfb_basemesh.py ... --fit
+tools/blender/shirt_fit.json` carries it in the zones colour, and the
+converter lifts the shirt by it (capped, so the sleeves stay short and the
+chest stays flat enough to print on). No triangles are added.
+
+`tools/blender/make_standin_body.py` makes a rough stand-in body with the same
+rig, for testing the converter without MPFB. Bodies made with MakeHuman/MPFB
+are CC0.
 
 ### Ball and hitting
 
