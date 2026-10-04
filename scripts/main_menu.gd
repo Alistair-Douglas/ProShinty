@@ -141,13 +141,17 @@ func _screen(name: String) -> Control:
 	return c
 
 
+## Title, camera shot, then the hints along the bottom for a controller and
+## for the keyboard (Settings > Controls on screen picks which).
 const SCREEN_INFO := {
-	"hub": ["", "hub", "▲ ▼  Move       Enter  Select"],
-	"kickoff": ["KICK OFF", "kickoff", "◀ ▶  Change       ▲ ▼  Move       Enter  Play       Esc  Back"],
-	"squads": ["SQUADS", "squads", "◀ ▶  Change club       Esc  Back"],
-	"controls": ["CONTROLS", "wide", "Esc  Back"],
-	"camans": ["CAMAN DESIGNER", "designer", "▲ ▼  Move       ◀ ▶  Change       Drag  Turn the caman       Esc  Back"],
-	"problem": ["", "", ""],
+	"hub": ["", "hub", "L Stick  Move       A  Select", "▲ ▼  Move       Enter  Select"],
+	"kickoff": ["KICK OFF", "kickoff", "L Stick  Move       R Stick / LB RB  Change       A  Play       B  Back",
+		"▲ ▼  Move       ◀ ▶  Change       Enter  Play       Esc  Back"],
+	"squads": ["SQUADS", "squads", "R Stick / LB RB  Change club       B  Back", "◀ ▶  Change club       Esc  Back"],
+	"controls": ["SETTINGS", "wide", "L Stick  Move       R Stick / LB RB  Change       B  Back", "◀ ▶  Change       Esc  Back"],
+	"camans": ["CAMAN DESIGNER", "designer", "L Stick  Move       R Stick / LB RB  Change       B  Back",
+		"▲ ▼  Move       ◀ ▶  Change       Drag  Turn the caman       Esc  Back"],
+	"problem": ["", "", "", ""],
 }
 
 
@@ -159,7 +163,7 @@ func _show(name: String, instant := false) -> void:
 	s.visible = true
 	var info: Array = SCREEN_INFO[name]
 	screen_title.text = info[0]
-	hints.text = info[2]
+	hints.text = Game.hint(info[2], info[3])
 	if backdrop and info[1] != "":
 		backdrop.set_shot(info[1], instant)
 	var sm: ShaderMaterial = overlay.material
@@ -211,7 +215,7 @@ func _build_hub() -> void:
 	_tile(col, "CAMAN DESIGNER", "Build a caman and give it to a club", func():
 		_open_designer()
 		_show("camans"))
-	_tile(col, "CONTROLS", "Keyboard, controller and graphics", func(): _show("controls"))
+	_tile(col, "SETTINGS", "Controls, graphics and music", func(): _show("controls"))
 	_tile(col, "QUIT", "Back to the desktop", func(): get_tree().quit())
 	s.set_meta("first", play)
 
@@ -372,6 +376,7 @@ func _start() -> void:
 	Game.human_side = side_pick.selected
 	Game.difficulty = diff_pick.selected
 	Game.half_minutes = HALF_LENGTHS[length_pick.selected]
+	Game.prematch_next = true
 	get_tree().change_scene_to_file("res://scenes/loading.tscn")
 
 
@@ -528,10 +533,31 @@ func _build_controls() -> void:
 	mus.size = Vector2(300, 74)
 	mus.changed.connect(func(i): Music.set_volume_step(i))
 	s.add_child(mus)
+	# Which buttons the hints along the bottom show, here and in a match.
+	var show := ShintyStepper.new("Controls on screen", Game.HINT_DEVICES, Game.hint_device)
+	show.position = Vector2(890, 586)
+	show.size = Vector2(334, 74)
+	show.changed.connect(func(i):
+		Game.set_hint_device(i)
+		var info: Array = SCREEN_INFO[current]
+		hints.text = Game.hint(info[2], info[3]))
+	s.add_child(show)
+	# Match camera (TV, close TV, end to end), remembered; Y changes it on
+	# the pause screen too.
+	var cam := ShintyStepper.new("Match camera", Game.CAMERA_NAMES, Game.camera_view)
+	cam.position = Vector2(1000, 120)
+	cam.size = Vector2(250, 74)
+	cam.changed.connect(func(i): Game.set_camera_view(i))
+	s.add_child(cam)
+	cam.focus_neighbor_bottom = back.get_path()
+	for c in [back, gfx, mus, show]:
+		c.focus_neighbor_top = cam.get_path()
 	back.focus_neighbor_right = gfx.get_path()
 	gfx.focus_neighbor_left = back.get_path()
 	gfx.focus_neighbor_right = mus.get_path()
 	mus.focus_neighbor_left = gfx.get_path()
+	mus.focus_neighbor_right = show.get_path()
+	show.focus_neighbor_left = mus.get_path()
 	s.set_meta("first", back)
 
 

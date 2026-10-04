@@ -12,17 +12,21 @@ extends Node3D
 ## - Tighnabruaich (Kyles Athletic): on the shore of the Kyles of Bute, with a
 ##   rocky sea wall and the loch along one side, the shore road and a wooded
 ##   hillside along the other, and the clubhouse and tennis court at one end.
+## - Portree (Skye Camanachd): on a shelf above the town, with the white social
+##   club and the school on one side, a steep heather bank with the ad boards
+##   on the other, a wooded gully and glamping pods past one end, and Portree
+##   Bay and Ben Tianavaig beyond the other.
 ##
 ## Everything is generated when the node enters the tree (also in the editor).
 ## The layout of each ground lives in venues/; this script holds the pitch,
-## markings, lighting, the public API and the building blocks both grounds use.
+## markings, lighting, the public API and the building blocks every ground uses.
 ##
 ## Coordinates: the pitch is centred on this node, lengthways along X and
 ## across along Z. West goal is at -X, east goal at +X, the far (north)
 ## touchline at -Z. Match code that works in yards with the origin in a corner
 ## (like the 2D game) converts with sim_to_world() / world_to_sim().
 
-enum Venue { ABERDOUR, KINGUSSIE, TIGHNABRUAICH }
+enum Venue { ABERDOUR, KINGUSSIE, TIGHNABRUAICH, PORTREE }
 enum Lighting { SUMMER_AFTERNOON, SUMMER_EVENING, OVERCAST, WINTER_SUN, RAIN }
 enum Detail { LOW, MEDIUM, HIGH }
 
@@ -30,9 +34,9 @@ enum Detail { LOW, MEDIUM, HIGH }
 const SceneryModels := preload("res://pitch/scenery_models.gd")
 
 ## Display names for menus, in Venue order.
-const VENUE_NAMES := ["Aberdour", "Kingussie (The Dell)", "Tighnabruaich (Kyles Athletic)"]
+const VENUE_NAMES := ["Aberdour", "Kingussie (The Dell)", "Tighnabruaich (Kyles Athletic)", "Portree (Skye)"]
 ## The club that plays at each venue, for matching a home team to its ground.
-const VENUE_CLUBS := ["Aberdour", "Kingussie", "Kyles"]
+const VENUE_CLUBS := ["Aberdour", "Kingussie", "Kyles", "Skye"]
 const YARD_M := 0.9144
 const GOAL_WIDTH_YD := 4.0      # 12 ft between the posts
 const GOAL_HEIGHT_YD := 3.3333  # 10 ft to the crossbar
@@ -131,7 +135,20 @@ var noise := FastNoiseLite.new()
 
 
 func _ready() -> void:
-	_rebuild()
+	if _gen == null:  # not already built off the tree (see build_now)
+		_rebuild()
+
+
+## Builds most of the ground before the node joins the tree, and is safe to
+## call from a worker thread so a menu can get a ground ready without a
+## stall. Call finish_build() on the main thread afterwards: merging the
+## scenery reads meshes back from the renderer, which only works there.
+func build_now() -> void:
+	_rebuild(false)
+
+
+func finish_build() -> void:
+	_finish_build()
 
 
 # --- Public API -------------------------------------------------------------
@@ -204,7 +221,7 @@ func _queue_rebuild() -> void:
 	_rebuild.call_deferred()
 
 
-func _rebuild() -> void:
+func _rebuild(finish := true) -> void:
 	_pending = false
 	if _gen:
 		remove_child(_gen)
@@ -219,7 +236,7 @@ func _rebuild() -> void:
 	noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
 	noise.frequency = 0.012
 	_mats.clear()
-	var files := ["aberdour.gd", "kingussie.gd", "tighnabruaich.gd"]
+	var files := ["aberdour.gd", "kingussie.gd", "tighnabruaich.gd", "portree.gd"]
 	_layout = _load_local("venues/" + files[venue]).new(self)
 
 	var s := units_per_yard / YARD_M
@@ -241,7 +258,14 @@ func _rebuild() -> void:
 		_cars.clear()
 		_layout.build(root, rng)
 		_emit_car_models(root)
-		_batch_scenery(root)
+	if finish:
+		_finish_build()
+
+
+func _finish_build() -> void:
+	var s := units_per_yard / YARD_M
+	if show_scenery:
+		_batch_scenery(_gen.get_node("Site"))
 	if add_ground_collision:
 		_build_collision(s)
 	if include_environment:
