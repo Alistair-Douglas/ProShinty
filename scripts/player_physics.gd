@@ -23,6 +23,10 @@ const BODY_R := 0.38          ## body radius for collisions (yards)
 const STICK_REACH := 1.8      ## body centre to caman head at full stretch (one hand)
 const TWO_HAND_REACH := 1.4   ## beyond this the lower hand lets go
 const LUNGE_REACH := 0.5      ## extra reach while lunging (poke check or dive)
+const DIVE_WIDE := 0.5        ## a keeper dives only for a ball crossing within this of a post
+const DIVE_REST := 1.2        ## seconds before a keeper who has dived can dive again
+const DIVE_BRAKE := 14.0      ## how hard a dive stops (yd/s/s), to size the burst
+const DIVE_ANCHOR := 1.0      ## a diving keeper ends up no further than this outside a post
 const STICK_SPEED := 10.0     ## how fast a player can move the caman head (yd/s)
 const STICK_REST := Vector2(0.62, 0.23)  ## carried: ahead, and out to the stick side
 const CONTACT_R := 0.32       ## caman head this close to the ball touches it
@@ -130,6 +134,13 @@ static func move(m, p, dt: float) -> void:
 	p.pos += p.vel * dt
 	p.pos.x = clampf(p.pos.x, -2.0, m.PITCH.x + 2.0)
 	p.pos.y = clampf(p.pos.y, -2.0, m.PITCH.y + 2.0)
+	if p.is_keeper() and p.dive_rest > 0.0 and absf(p.pos.x - m.own_goal(p.team).x) < 4.0:
+		# A dive stays in the goalmouth: nobody flies out past the post.
+		var gy: float = m.own_goal(p.team).y
+		var lim: float = m.GOAL_W / 2.0 + DIVE_ANCHOR
+		if absf(p.pos.y - gy) > lim:
+			p.pos.y = gy + signf(p.pos.y - gy) * lim
+			p.vel.y = 0.0
 	# The body turns at a limited rate too. Keepers, and anyone jogging or
 	# standing, keep their eyes on the ball; runners face where they run.
 	var look: Vector2 = p.desired
@@ -410,10 +421,15 @@ static func keeper_reflex(m, k, dt: float) -> void:
 	k.save_point = Vector3(k.pos.x, y, z)
 	var dy: float = y - k.pos.y
 	var standing := max_reach(k) - LUNGE_REACH * (1.0 if k.lunge > 0.0 else 0.0) - 0.35
-	if absf(dy) > standing and k.lunge <= 0.0 and t < 0.7 and k.stagger <= 0.0:
-		# Dive: a burst across the goal, faster for better keepers.
+	var in_goal: bool = absf(y - g.y) < m.GOAL_W / 2.0 + DIVE_WIDE
+	if absf(dy) > standing and in_goal and k.lunge <= 0.0 and k.dive_rest <= 0.0 and t < 0.7 and k.stagger <= 0.0:
+		# Dive: a burst across the goal, faster for better keepers, but only
+		# as far as the ball needs (the caman does the rest), and once: a
+		# keeper who has dived is on the ground and has to get up.
 		k.lunge = 0.7
-		var burst: float = 4.5 + k.r("keeping") / 100.0 * 3.5
-		k.vel.y += signf(dy) * burst
+		k.dive_rest = DIVE_REST
+		var need: float = absf(dy) - standing
+		var burst: float = minf(4.5 + k.r("keeping") / 100.0 * 3.5, sqrt(2.0 * DIVE_BRAKE * need) + 1.0)
+		k.vel.y = signf(dy) * burst
 		var side := signf(Vector2(0, dy).dot(right_of(k)))
 		m.anim(k, "save_right" if side > 0.0 else "save_left")

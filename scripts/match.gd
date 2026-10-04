@@ -114,6 +114,7 @@ class Player:
 	var accel := Vector2.ZERO
 	var stagger := 0.0       # off balance after a hard hit
 	var lunge := 0.0         # poke check or keeper dive in progress
+	var dive_rest := 0.0     # keeper: getting up after a dive, no second dive yet
 	var hop := Vector2.ZERO  # a sideways jump, feet together, to get in line with a ball
 	var hop_t := 0.0         # time left in the jump
 	var stick := Vector3.ZERO    # caman head: pitch x, y and height
@@ -566,6 +567,7 @@ func _update_players(dt: float) -> void:
 		p.stagger = max(0.0, p.stagger - dt)
 		p.lunge = max(0.0, p.lunge - dt)
 		p.sold = max(0.0, p.sold - dt)
+		p.dive_rest = max(0.0, p.dive_rest - dt)
 		if p.hop_t > 0.0:
 			var step: float = min(dt, p.hop_t)
 			p.pos += p.hop * step / HOP_TIME
@@ -718,7 +720,7 @@ func _ai_team(t: int, dt: float) -> void:
 		if state == State.THROW_UP:
 			p.desired = Vector2.ZERO
 			continue
-		if p.is_keeper():
+		if p.is_keeper() and not (p == carrier and p == set_piece_taker_now()):
 			_ai_keeper(p, dt)
 		elif p.sold > 0.0:
 			p.desired = Vector2.ZERO   # bought a dummy: planted, going nowhere
@@ -2298,6 +2300,8 @@ func _check_ball_out() -> void:
 
 func _restart(team: int, spot: Vector2, label: String) -> void:
 	var taker := _nearest_outfield(team, spot, null)
+	if label == "Hit-out" and _keeper_of(team) != null:
+		taker = _keeper_of(team)   # the keeper takes the bye-hits
 	var toward := (Vector2(PITCH.x / 2.0, PITCH.y / 2.0) - spot).normalized()
 	if label == "Hit-out":
 		toward = Vector2(attack_dir[team], 0)
