@@ -9,6 +9,11 @@ const TeamData := preload("res://scripts/team_data.gd")
 
 var match_node: Node
 var replay_active := false
+## Shown under a replay (e.g. the foul it shows); empty for none.
+var replay_caption := ""
+## Whether the "Skip" hint shows during replays.
+var show_skip_hint := true
+var hide_strap := false   ## the stats screen (scripts/stats_panel.gd) is up instead
 
 var _goal_t := -1.0
 var _goal_team := 0
@@ -83,14 +88,37 @@ func _draw() -> void:
 	_draw_channel(screen)
 	if _goal_t >= 0.0:
 		_draw_goal(m, screen)
-	elif not replay_active and (m.state == m.State.HALF_TIME or m.state == m.State.FULL_TIME):
+	elif not replay_active and not hide_strap and (m.state == m.State.HALF_TIME or m.state == m.State.FULL_TIME):
 		var strap := "FULL TIME"
 		if m.state == m.State.HALF_TIME:
 			strap = "EXTRA TIME" if m.half == 2 else "HALF TIME"
 		_draw_strap(m, screen, strap)
 	if _sub_t >= 0.0 and not replay_active:
 		_draw_sub(m, screen)
+	if replay_active:
+		_draw_replay_strip(screen)
 	_draw_wipe(screen)
+
+
+## During a replay: what it shows (bottom left) and how to skip it (bottom right).
+func _draw_replay_strip(screen: Vector2) -> void:
+	var bold := ShintyStyle.font("bold")
+	var black := ShintyStyle.font("black")
+	var y := screen.y - 64.0
+	if replay_caption != "":
+		var cw := bold.get_string_size(replay_caption, HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x + 40.0
+		draw_style_box(ShintyStyle.box(Color(0.05, 0.07, 0.09, 0.85), ShintyStyle.SLANT), Rect2(28, y, cw, 34))
+		draw_string(bold, Vector2(48, y + 24), replay_caption, HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color.WHITE)
+	if not show_skip_hint:
+		return
+	var key := "A / ENTER"
+	var kw := black.get_string_size(key, HORIZONTAL_ALIGNMENT_LEFT, -1, 16).x + 20.0
+	var w := kw + 76.0
+	var x := screen.x - 28.0 - w
+	draw_style_box(ShintyStyle.box(Color(0.05, 0.07, 0.09, 0.85), ShintyStyle.SLANT), Rect2(x, y, w, 34))
+	draw_style_box(ShintyStyle.box(ShintyStyle.GOLD, ShintyStyle.SLANT), Rect2(x + 8, y + 6, kw, 22))
+	draw_string(black, Vector2(x + 8, y + 23), key, HORIZONTAL_ALIGNMENT_CENTER, kw, 16, ShintyStyle.GOLD_DARK)
+	draw_string(bold, Vector2(x + kw + 18, y + 24), "Skip", HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color.WHITE)
 
 
 ## Put the board up for each change the match makes, one after the other.

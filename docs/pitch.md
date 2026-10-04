@@ -9,6 +9,7 @@ it for a match, and picking a home team moves the match to that team's ground.
 | Aberdour | Alistair's three photos and a satellite view of the club |
 | Kingussie (The Dell) | A satellite view of the club |
 | Tighnabruaich (Kyles Athletic) | An aerial photo of the ground |
+| Portree (Skye Camanachd) | Aerial views, a terrain map and photos of the ground |
 
 ## The pitch
 
@@ -57,6 +58,17 @@ posts, then the wooded hillside, with villas above the west end. South: the
 sea wall and a white rail, shingle, the Kyles with moored boats, and Bute
 across the water. East: the car park, the clubhouse, a fenced tennis court and
 a play area. West: a tall ball-stop net and a cottage by the shore.
+
+**Portree, Skye Camanachd.** The pitch sits on a shelf above the town. Near
+side: the white social club with its dark roof, green windows and blue sign,
+blue containers and picnic tables beside it, a gravel track that carries on
+round the south-east end, the car park, the turning circle, and the Gaelic
+school with its fenced all-weather pitch. Far side: a steep heather bank with
+the ad boards a couple of metres up it and birch, rowan and spruce along the
+top, then moorland rising to the hills. North-west end: the wooded gully of
+the Lon na h-Atha, with glamping pods on the hillside beyond. Floodlight
+poles stand along both sides. To the south-east the land falls to Portree
+Bay, with Ben Tianavaig's flat top across the water.
 
 ## Using it
 

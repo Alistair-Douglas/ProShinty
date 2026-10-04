@@ -159,6 +159,8 @@ var players: Array = []
 var squads := [[], []]
 var colors := [[Color.RED, Color.WHITE], [Color.BLUE, Color.YELLOW]]   # [shirt, trim] of the kit each side wears
 var kits := [{}, {}]   # the kit each side wears (TeamData.match_kits)
+var weather := {}      # wetness, wind, rain and light (ShintyWeather.make)
+var weather_t := 0.0   # seconds of match so far, for the gusts
 var score := [0, 0]
 var shots := [0, 0]
 var state := State.THROW_UP
@@ -233,6 +235,7 @@ var restart_base := Vector2.RIGHT  # straight in from the line (a shy) or the de
 var dribble_vel := Vector2.ZERO    # a dribbled ball rolling ahead of its carrier
 var dribble_taps := 0
 var flight := 0                    # bumped each time the ball is sent somewhere new (players re-read it)
+var ball_shift := Vector3.ZERO     # running total of the ball being moved onto a caman, body or glove (see _place_ball)
 
 
 
@@ -263,6 +266,8 @@ func _setup() -> void:
 	extra_time = bool(config.get("extra_time", true))
 	if config.has("seed"):
 		seed(int(config["seed"]))
+	weather = ShintyWeather.make(config.get("weather"))
+	ball_sim.physics.wetness = float(weather["wet"])
 	kits = TeamData.match_kits(teams[0], teams[1])
 	for t in 2:
 		var c: Dictionary = kits[t]
@@ -323,6 +328,9 @@ func _physics_process(delta: float) -> void:
 
 func step(dt: float) -> void:
 	message_timer = max(0.0, message_timer - dt)
+	weather_t += dt
+	var wind := ShintyWeather.wind_at(weather, weather_t) * ShintyMatchAdapter.YARD
+	ball_sim.physics.wind = Vector3(wind.x, 0.0, wind.y)
 	subs.step(dt)
 	if state != State.PLAY and state != State.FULL_TIME:
 		referee.step(dt)
@@ -1286,8 +1294,7 @@ func _contact(p: Player) -> void:
 		if met[1].z > REACH_HEIGHT or offset > 0.7:
 			offset = 99.0
 		else:
-			ball_pos = Vector2(met[1].x, met[1].y)
-			ball_z = met[1].z
+			_place_ball(Vector2(met[1].x, met[1].y), met[1].z)
 	else:
 		offset = 99.0   # a team-mate has it
 	var mine := carrier == p
@@ -1316,11 +1323,9 @@ func _contact(p: Player) -> void:
 		events.append({"type": "beat_to_it", "team": p.team})
 	carrier = null
 	if not shy:
-		# Struck where it is: the caman is steered to the ball (the view's
-		# set_meet), not the ball pulled onto the caman.
-		if mine:
-			ball_pos = Vector2(p.stick.x, p.stick.y)
-		ball_z = max(ball_z, 0.2)
+		# Struck where it is, carried or loose: the caman is steered to the
+		# ball (the view's set_meet), not the ball pulled onto the caman.
+		_place_ball(ball_pos, max(ball_z, 0.2))
 	flight += 1
 	ball_vel = res["ball_vel"]
 	ball_vz = res["ball_vz"]
@@ -1696,6 +1701,15 @@ func spill(p: Player, by: Player) -> void:
 
 
 ## Tell the view to play a one-off animation on this player.
+## Puts the ball somewhere it didn't fly to on its own (onto the caman that met
+## it, a chest, a glove). The jump is added to ball_shift so the view can draw
+## the ball from where it was and blend the gap out over a few frames.
+func _place_ball(at: Vector2, z: float) -> void:
+	ball_shift += Vector3(at.x - ball_pos.x, at.y - ball_pos.y, z - ball_z)
+	ball_pos = at
+	ball_z = z
+
+
 func anim(p: Player, name: String, power: float = 1.0, from_charge: float = 0.0) -> void:
 	p.anim = {"name": name, "power": power, "charge": from_charge}
 	p.anim_seq += 1
@@ -2083,7 +2097,7 @@ func _body_touch(p: Player, sp: float) -> void:
 	if at_them and sp < limit and randf() < chance:
 		var front := (ball_pos - p.pos)
 		front = front.normalized() if front.length() > 0.05 else p.facing
-		ball_pos = p.pos + front * (Body.BODY_R + 0.12)
+		_place_ball(p.pos + front * (Body.BODY_R + 0.12), ball_z)
 		# Softened, and dropped where it's useful: a yard or so the way they
 		# want to go, moving with them; better players place it better.
 		ball_vel = _useful_dir(p) * lerp(0.4, 1.6, p.r("control") / 100.0) + p.vel * 0.6
@@ -2137,7 +2151,7 @@ func _feet_stop(p: Player, sp: float, limit: float) -> void:
 		var at := p.pos + p.hop
 		var front := (ball_pos - at)
 		front = front.normalized() if front.length() > 0.05 else p.facing
-		ball_pos = at + front * (Body.BODY_R + 0.12)
+		_place_ball(at + front * (Body.BODY_R + 0.12), ball_z)
 		ball_vel = _useful_dir(p) * lerp(0.4, 1.6, p.r("control") / 100.0) + p.vel * 0.6
 		ball_vz = 0.0
 		ball_sim.set_spin(Vector3.ZERO)
@@ -2159,7 +2173,7 @@ func _keeper_save(k: Player, how: String = "smother") -> void:
 	var flat := ball_pos - k.pos
 	var reach: float = Body.max_reach(k)
 	var at := k.pos + flat.limit_length(reach)
-	ball_pos = at
+	_place_ball(at, ball_z)
 	k.stick = Vector3(at.x, at.y, min(ball_z, KEEPER_REACH_HEIGHT))
 	if how == "stick":
 		# Turned away with the caman: the ball flies back out, away from the

@@ -12,27 +12,31 @@ extends Node3D
 ## - Tighnabruaich (Kyles Athletic): on the shore of the Kyles of Bute, with a
 ##   rocky sea wall and the loch along one side, the shore road and a wooded
 ##   hillside along the other, and the clubhouse and tennis court at one end.
+## - Portree (Skye Camanachd): on a shelf above the town, with the white social
+##   club and the school on one side, a steep heather bank with the ad boards
+##   on the other, a wooded gully and glamping pods past one end, and Portree
+##   Bay and Ben Tianavaig beyond the other.
 ##
 ## Everything is generated when the node enters the tree (also in the editor).
 ## The layout of each ground lives in venues/; this script holds the pitch,
-## markings, lighting, the public API and the building blocks both grounds use.
+## markings, lighting, the public API and the building blocks every ground uses.
 ##
 ## Coordinates: the pitch is centred on this node, lengthways along X and
 ## across along Z. West goal is at -X, east goal at +X, the far (north)
 ## touchline at -Z. Match code that works in yards with the origin in a corner
 ## (like the 2D game) converts with sim_to_world() / world_to_sim().
 
-enum Venue { ABERDOUR, KINGUSSIE, TIGHNABRUAICH }
-enum Lighting { SUMMER_AFTERNOON, SUMMER_EVENING, OVERCAST }
+enum Venue { ABERDOUR, KINGUSSIE, TIGHNABRUAICH, PORTREE }
+enum Lighting { SUMMER_AFTERNOON, SUMMER_EVENING, OVERCAST, WINTER_SUN, RAIN }
 enum Detail { LOW, MEDIUM, HIGH }
 
 ## Tree and car models dropped into pitch/models/ (see scenery_models.gd).
 const SceneryModels := preload("res://pitch/scenery_models.gd")
 
 ## Display names for menus, in Venue order.
-const VENUE_NAMES := ["Aberdour", "Kingussie (The Dell)", "Tighnabruaich (Kyles Athletic)"]
+const VENUE_NAMES := ["Aberdour", "Kingussie (The Dell)", "Tighnabruaich (Kyles Athletic)", "Portree (Skye)"]
 ## The club that plays at each venue, for matching a home team to its ground.
-const VENUE_CLUBS := ["Aberdour", "Kingussie", "Kyles"]
+const VENUE_CLUBS := ["Aberdour", "Kingussie", "Kyles", "Skye"]
 const YARD_M := 0.9144
 const GOAL_WIDTH_YD := 4.0      # 12 ft between the posts
 const GOAL_HEIGHT_YD := 3.3333  # 10 ft to the crossbar
@@ -103,6 +107,11 @@ const GOAL_HEIGHT_YD := 3.3333  # 10 ft to the crossbar
 	set(v):
 		show_flags = v
 		_queue_rebuild()
+## 0 = dry, 0.5 = damp, 1 = soaking: wet grass is darker and shines.
+@export_range(0.0, 1.0) var wetness := 0.0:
+	set(v):
+		wetness = v
+		_queue_rebuild()
 ## 0 = lush green, 1 = dry midsummer park. Negative uses the ground's own look.
 @export_range(-1.0, 1.0) var grass_wear := -1.0:
 	set(v):
@@ -126,7 +135,20 @@ var noise := FastNoiseLite.new()
 
 
 func _ready() -> void:
-	_rebuild()
+	if _gen == null:  # not already built off the tree (see build_now)
+		_rebuild()
+
+
+## Builds most of the ground before the node joins the tree, and is safe to
+## call from a worker thread so a menu can get a ground ready without a
+## stall. Call finish_build() on the main thread afterwards: merging the
+## scenery reads meshes back from the renderer, which only works there.
+func build_now() -> void:
+	_rebuild(false)
+
+
+func finish_build() -> void:
+	_finish_build()
 
 
 # --- Public API -------------------------------------------------------------
@@ -199,7 +221,7 @@ func _queue_rebuild() -> void:
 	_rebuild.call_deferred()
 
 
-func _rebuild() -> void:
+func _rebuild(finish := true) -> void:
 	_pending = false
 	if _gen:
 		remove_child(_gen)
@@ -214,7 +236,7 @@ func _rebuild() -> void:
 	noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
 	noise.frequency = 0.012
 	_mats.clear()
-	var files := ["aberdour.gd", "kingussie.gd", "tighnabruaich.gd"]
+	var files := ["aberdour.gd", "kingussie.gd", "tighnabruaich.gd", "portree.gd"]
 	_layout = _load_local("venues/" + files[venue]).new(self)
 
 	var s := units_per_yard / YARD_M
@@ -236,7 +258,14 @@ func _rebuild() -> void:
 		_cars.clear()
 		_layout.build(root, rng)
 		_emit_car_models(root)
-		_batch_scenery(root)
+	if finish:
+		_finish_build()
+
+
+func _finish_build() -> void:
+	var s := units_per_yard / YARD_M
+	if show_scenery:
+		_batch_scenery(_gen.get_node("Site"))
 	if add_ground_collision:
 		_build_collision(s)
 	if include_environment:
@@ -304,6 +333,8 @@ func _build_ground(root: Node3D) -> void:
 		mat.set_shader_parameter(k, look[k])
 	if grass_wear >= 0.0:
 		mat.set_shader_parameter("wear", grass_wear)
+	# Damp is the usual Scottish pitch; only past that does the grass look wet.
+	mat.set_shader_parameter("wet", clampf((wetness - 0.4) / 0.6, 0.0, 1.0))
 	mi.material_override = mat
 	root.add_child(mi)
 
@@ -479,7 +510,7 @@ func _build_environment() -> void:
 	# blue rather than washing out white.
 	env.fog_light_color = p.sky_horizon.lerp(p.sky_top, 0.35) * 0.8
 	env.fog_sun_scatter = 0.08
-	env.fog_density = _layout.fog_density() / units_per_yard * YARD_M
+	env.fog_density = _layout.fog_density() * p.get("fog", 1.0) / units_per_yard * YARD_M
 	env.fog_aerial_perspective = 0.4
 	env.fog_sky_affect = 0.0
 	env.glow_enabled = true
@@ -521,6 +552,23 @@ func _lighting_preset() -> Dictionary:
 				"shadow_blur": 4.0, "sky_top": Color(0.55, 0.58, 0.62), "sky_horizon": Color(0.74, 0.76, 0.78),
 				"clouds": 0.95, "cloud_color": Color(0.8, 0.81, 0.83), "cloud_shadow": Color(0.56, 0.58, 0.62),
 				"ambient": 1.3, "exposure": 1.1,
+			}
+		Lighting.WINTER_SUN:
+			# A clear winter afternoon: the sun barely clears the hills, long
+			# shadows across the pitch and a pale, golden sky.
+			return {
+				"elevation": 9.0, "yaw": -70.0, "sun_color": Color(1.0, 0.8, 0.58), "sun_energy": 1.45,
+				"shadow_blur": 1.5, "sky_top": Color(0.26, 0.42, 0.68), "sky_horizon": Color(0.9, 0.8, 0.68),
+				"clouds": 0.22, "cloud_color": Color(1.0, 0.9, 0.8), "cloud_shadow": Color(0.6, 0.58, 0.64),
+				"ambient": 0.6, "exposure": 1.05,
+			}
+		Lighting.RAIN:
+			# Low, dark cloud and murk: the far hills fade into the rain.
+			return {
+				"elevation": 40.0, "yaw": -30.0, "sun_color": Color(0.82, 0.86, 0.92), "sun_energy": 0.22,
+				"shadow_blur": 5.0, "sky_top": Color(0.36, 0.38, 0.42), "sky_horizon": Color(0.55, 0.57, 0.6),
+				"clouds": 1.0, "cloud_color": Color(0.58, 0.6, 0.63), "cloud_shadow": Color(0.34, 0.36, 0.4),
+				"ambient": 1.15, "exposure": 1.0, "fog": 4.0,
 			}
 		_:
 			return {

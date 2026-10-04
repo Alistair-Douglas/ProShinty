@@ -24,6 +24,7 @@ var hints: Label
 var home_pick: ShintyTeamCard
 var away_pick: ShintyTeamCard
 var pitch_pick: ShintyStepper
+var weather_pick: ShintyStepper
 var side_pick: ShintyStepper
 var diff_pick: ShintyStepper
 var length_pick: ShintyStepper
@@ -140,13 +141,17 @@ func _screen(name: String) -> Control:
 	return c
 
 
+## Title, camera shot, then the hints along the bottom for a controller and
+## for the keyboard (Settings > Controls on screen picks which).
 const SCREEN_INFO := {
-	"hub": ["", "hub", "▲ ▼  Move       Enter  Select"],
-	"kickoff": ["KICK OFF", "kickoff", "◀ ▶  Change       ▲ ▼  Move       Enter  Play       Esc  Back"],
-	"squads": ["SQUADS", "squads", "◀ ▶  Change club       Esc  Back"],
-	"controls": ["CONTROLS", "wide", "Esc  Back"],
-	"camans": ["CAMAN DESIGNER", "designer", "▲ ▼  Move       ◀ ▶  Change       Drag  Turn the caman       Esc  Back"],
-	"problem": ["", "", ""],
+	"hub": ["", "hub", "L Stick  Move       A  Select", "▲ ▼  Move       Enter  Select"],
+	"kickoff": ["KICK OFF", "kickoff", "L Stick  Move       R Stick / LB RB  Change       A  Play       B  Back",
+		"▲ ▼  Move       ◀ ▶  Change       Enter  Play       Esc  Back"],
+	"squads": ["SQUADS", "squads", "R Stick / LB RB  Change club       B  Back", "◀ ▶  Change club       Esc  Back"],
+	"controls": ["SETTINGS", "wide", "L Stick  Move       R Stick / LB RB  Change       B  Back", "◀ ▶  Change       Esc  Back"],
+	"camans": ["CAMAN DESIGNER", "designer", "L Stick  Move       R Stick / LB RB  Change       B  Back",
+		"▲ ▼  Move       ◀ ▶  Change       Drag  Turn the caman       Esc  Back"],
+	"problem": ["", "", "", ""],
 }
 
 
@@ -158,7 +163,7 @@ func _show(name: String, instant := false) -> void:
 	s.visible = true
 	var info: Array = SCREEN_INFO[name]
 	screen_title.text = info[0]
-	hints.text = info[2]
+	hints.text = Game.hint(info[2], info[3])
 	if backdrop and info[1] != "":
 		backdrop.set_shot(info[1], instant)
 	var sm: ShaderMaterial = overlay.material
@@ -210,7 +215,7 @@ func _build_hub() -> void:
 	_tile(col, "CAMAN DESIGNER", "Build a caman and give it to a club", func():
 		_open_designer()
 		_show("camans"))
-	_tile(col, "CONTROLS", "Keyboard, controller and graphics", func(): _show("controls"))
+	_tile(col, "SETTINGS", "Controls, graphics and music", func(): _show("controls"))
 	_tile(col, "PRACTICE", "Training ground: try every move, slow it down", func():
 		get_tree().change_scene_to_file("res://scenes/practice.tscn"))
 	_tile(col, "QUIT", "Back to the desktop", func(): get_tree().quit())
@@ -294,11 +299,13 @@ func _build_kickoff() -> void:
 	s.add_child(row)
 	side_pick = ShintyStepper.new("You play as", ["Home team", "Away team"], Game.human_side)
 	pitch_pick = ShintyStepper.new("Pitch", ShintyPitch.VENUE_NAMES, maxi(Game.venue, 0))
+	weather_pick = ShintyStepper.new("Weather", ShintyWeather.NAMES, Game.weather)
 	diff_pick = ShintyStepper.new("Difficulty", ["Easy", "Normal", "Hard"], Game.difficulty)
 	length_pick = ShintyStepper.new("Half length", HALF_LENGTHS.map(func(m): return "%d minutes" % m), maxi(HALF_LENGTHS.find(Game.half_minutes), 0))
-	for st in [side_pick, pitch_pick, diff_pick, length_pick]:
-		st.custom_minimum_size = Vector2(280, 74)
+	for st in [side_pick, pitch_pick, weather_pick, diff_pick, length_pick]:
+		st.custom_minimum_size = Vector2(280 if st == pitch_pick else 200, 74)
 		row.add_child(st)
+	weather_pick.custom_minimum_size.x = 220
 	if Game.venue < 0:
 		_pick_home_ground()
 
@@ -324,11 +331,11 @@ func _build_kickoff() -> void:
 		card.focus_neighbor_bottom = side_pick.get_path()
 	home_pick.focus_neighbor_right = away_pick.get_path()
 	away_pick.focus_neighbor_left = home_pick.get_path()
-	for st in [side_pick, pitch_pick]:
+	for st in [side_pick, pitch_pick, weather_pick]:
 		st.focus_neighbor_top = home_pick.get_path()
 	for st in [diff_pick, length_pick]:
 		st.focus_neighbor_top = away_pick.get_path()
-	for st in [side_pick, pitch_pick, diff_pick, length_pick]:
+	for st in [side_pick, pitch_pick, weather_pick, diff_pick, length_pick]:
 		st.focus_neighbor_bottom = start_button.get_path()
 	start_button.focus_neighbor_top = length_pick.get_path()
 	start_button.focus_neighbor_left = back.get_path()
@@ -367,9 +374,11 @@ func _start() -> void:
 	Game.home_index = home_pick.selected
 	Game.away_index = away_pick.selected
 	Game.venue = pitch_pick.selected
+	Game.weather = weather_pick.selected
 	Game.human_side = side_pick.selected
 	Game.difficulty = diff_pick.selected
 	Game.half_minutes = HALF_LENGTHS[length_pick.selected]
+	Game.prematch_next = true
 	get_tree().change_scene_to_file("res://scenes/loading.tscn")
 
 
@@ -526,10 +535,31 @@ func _build_controls() -> void:
 	mus.size = Vector2(300, 74)
 	mus.changed.connect(func(i): Music.set_volume_step(i))
 	s.add_child(mus)
+	# Which buttons the hints along the bottom show, here and in a match.
+	var show := ShintyStepper.new("Controls on screen", Game.HINT_DEVICES, Game.hint_device)
+	show.position = Vector2(890, 586)
+	show.size = Vector2(334, 74)
+	show.changed.connect(func(i):
+		Game.set_hint_device(i)
+		var info: Array = SCREEN_INFO[current]
+		hints.text = Game.hint(info[2], info[3]))
+	s.add_child(show)
+	# Match camera (TV, close TV, end to end), remembered; Y changes it on
+	# the pause screen too.
+	var cam := ShintyStepper.new("Match camera", Game.CAMERA_NAMES, Game.camera_view)
+	cam.position = Vector2(1000, 120)
+	cam.size = Vector2(250, 74)
+	cam.changed.connect(func(i): Game.set_camera_view(i))
+	s.add_child(cam)
+	cam.focus_neighbor_bottom = back.get_path()
+	for c in [back, gfx, mus, show]:
+		c.focus_neighbor_top = cam.get_path()
 	back.focus_neighbor_right = gfx.get_path()
 	gfx.focus_neighbor_left = back.get_path()
 	gfx.focus_neighbor_right = mus.get_path()
 	mus.focus_neighbor_left = gfx.get_path()
+	mus.focus_neighbor_right = show.get_path()
+	show.focus_neighbor_left = mus.get_path()
 	s.set_meta("first", back)
 
 

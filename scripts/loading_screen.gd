@@ -41,6 +41,16 @@ var _status: Label
 var _tip: Label
 var _tip_i := 0
 var _packed: PackedScene
+## The match, built behind this screen so that pressing play starts it at
+## once: the ground, players and crowd are made, and a few frames drawn so the
+## graphics are ready, before READY shows.
+var _match: Node
+var _phase := 0          # 0 loading files, 1 building the match, 2 warming up
+var _warm_frames := 0
+const WARM_FRAMES := 4
+## Share of the bar for each stage: files, then building, then warming up.
+const FILES_SHARE := 0.55
+const BUILD_SHARE := 0.35
 
 
 func _ready() -> void:
@@ -156,7 +166,7 @@ func _build_matchup_bar() -> void:
 	_bar.size = Vector2(380, 16)
 	_bar.draw.connect(_draw_bar)
 	add_child(_bar)
-	_prompt = ShintyStyle.label("PRESS SPACE OR  Ⓐ  TO PLAY", 24, "black", ShintyStyle.GOLD)
+	_prompt = ShintyStyle.label(Game.hint("PRESS  A  TO PLAY", "PRESS SPACE TO PLAY"), 24, "black", ShintyStyle.GOLD)
 	_prompt.position = Vector2(844, 664)
 	_prompt.visible = false
 	add_child(_prompt)
@@ -203,22 +213,40 @@ func _draw_bar() -> void:
 func _process(delta: float) -> void:
 	_elapsed += delta
 	if not ready_to_play:
-		var p := []
-		var st := ResourceLoader.load_threaded_get_status(MATCH_SCENE, p)
-		if st == ResourceLoader.THREAD_LOAD_LOADED:
-			_progress = 1.0
-		elif st == ResourceLoader.THREAD_LOAD_IN_PROGRESS and not p.is_empty():
-			_progress = p[0]
-		elif st == ResourceLoader.THREAD_LOAD_FAILED or st == ResourceLoader.THREAD_LOAD_INVALID_RESOURCE:
-			_status.text = "COULDN'T LOAD THE MATCH"
-			_status.add_theme_color_override("font_color", ShintyStyle.BAD)
-			set_process(false)
-			return
+		match _phase:
+			0:
+				var p := []
+				var st := ResourceLoader.load_threaded_get_status(MATCH_SCENE, p)
+				if st == ResourceLoader.THREAD_LOAD_LOADED:
+					_packed = ResourceLoader.load_threaded_get(MATCH_SCENE)
+					_progress = FILES_SHARE
+					_phase = 1
+					# Show this for a frame before the build holds things up.
+					_status.text = "BUILDING THE GROUND"
+				elif st == ResourceLoader.THREAD_LOAD_IN_PROGRESS and not p.is_empty():
+					_progress = p[0] * FILES_SHARE
+				elif st == ResourceLoader.THREAD_LOAD_FAILED or st == ResourceLoader.THREAD_LOAD_INVALID_RESOURCE:
+					_status.text = "COULDN'T LOAD THE MATCH"
+					_status.add_theme_color_override("font_color", ShintyStyle.BAD)
+					set_process(false)
+					return
+			1:
+				# Wait for any menu ground still building on another thread
+				# (ShintyMenuBackdrop.GroundReaper): building the match at the
+				# same time can trip over it in the renderer.
+				if _shown >= FILES_SHARE - 0.001 and get_tree().get_nodes_in_group(&"ground_reapers").is_empty():
+					_build_match()
+					_progress = FILES_SHARE + BUILD_SHARE
+					_phase = 2
+					_status.text = "WARMING UP"
+			2:
+				# Draw a few frames of the match behind this screen.
+				_warm_frames += 1
+				_progress = FILES_SHARE + BUILD_SHARE + (1.0 - FILES_SHARE - BUILD_SHARE) * minf(1.0, float(_warm_frames) / WARM_FRAMES)
 		# The bar never runs ahead of the real load, and takes at least
 		# MIN_SECONDS so the picture and fact can be read.
 		_shown = minf(_progress, minf(1.0, _elapsed / MIN_SECONDS))
 		if _shown >= 1.0:
-			_packed = ResourceLoader.load_threaded_get(MATCH_SCENE)
 			ready_to_play = true
 			_status.text = "READY"
 			_status.add_theme_color_override("font_color", ShintyStyle.GOLD)
@@ -232,6 +260,35 @@ func _process(delta: float) -> void:
 	_bar.queue_redraw()
 
 
+## Make the match now, held still and hidden under this screen: its clock
+## and players don't move, but the view runs so the camera is in place and
+## the ground is drawn (which gets the graphics card ready for it).
+func _build_match() -> void:
+	_match = _packed.instantiate()
+	_match.process_mode = Node.PROCESS_MODE_DISABLED
+	get_tree().root.add_child(_match)
+	for c in _match.get_children():
+		if c is CanvasLayer:
+			c.visible = false   # the score and controls come up with the match
+		elif c.name == "View":
+			c.process_mode = Node.PROCESS_MODE_ALWAYS
+
+
+## Hand over to the match that is already built.
+func _start_match() -> void:
+	if _match == null:
+		get_tree().change_scene_to_packed(_packed)
+		return
+	_match.process_mode = Node.PROCESS_MODE_INHERIT
+	for c in _match.get_children():
+		if c is CanvasLayer:
+			c.visible = true
+		elif c.name == "View":
+			c.process_mode = Node.PROCESS_MODE_INHERIT
+	get_tree().current_scene = _match
+	queue_free()
+
+
 func _unhandled_input(e: InputEvent) -> void:
 	if not ready_to_play:
 		return
@@ -243,4 +300,4 @@ func _unhandled_input(e: InputEvent) -> void:
 		set_process_unhandled_input(false)
 		var tw := create_tween()
 		tw.tween_property(self, "modulate", Color.BLACK, 0.25)
-		tw.tween_callback(func(): get_tree().change_scene_to_packed(_packed))
+		tw.tween_callback(_start_match)
