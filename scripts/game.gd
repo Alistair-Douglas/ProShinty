@@ -20,6 +20,9 @@ const CAMERA_NAMES := ["TV", "Close TV", "End to end"]
 ## Set by the menu as a match starts: the view plays the pre-match build-up
 ## once (tests that load a match straight in skip it).
 var prematch_next := false
+## Which buttons the on-screen hints show: 0 controller, 1 keyboard. Saved.
+var hint_device := 0
+const HINT_DEVICES := ["Controller", "Keyboard"]
 
 ## Camans from the caman designer, saved between runs, by club id:
 ## {"team": design, "players": {shirt number: design}}. A player with their
@@ -46,7 +49,22 @@ func _ready() -> void:
 		graphics_quality = 2  # first run on a gaming GPU: the full look
 	if cfg.has_section_key("camera", "view"):
 		camera_view = clampi(int(cfg.get_value("camera", "view")), 0, CAMERA_NAMES.size() - 1)
+	if cfg.has_section_key("controls", "show"):
+		hint_device = clampi(int(cfg.get_value("controls", "show")), 0, 1)
 	_apply_graphics()
+
+
+## Pick the on-screen hint for the chosen device (Settings > Controls).
+func hint(controller: String, keyboard: String) -> String:
+	return keyboard if hint_device == 1 else controller
+
+
+func set_hint_device(i: int) -> void:
+	hint_device = clampi(i, 0, 1)
+	var cfg := ConfigFile.new()
+	cfg.load(SETTINGS_PATH)
+	cfg.set_value("controls", "show", hint_device)
+	cfg.save(SETTINGS_PATH)
 
 
 func set_graphics_quality(q: int, remember := true) -> void:
@@ -222,6 +240,22 @@ func _setup_input() -> void:
 	# screen Y changes the camera.
 	_bind("camera_zoom", [KEY_V], [JOY_BUTTON_RIGHT_STICK])
 	_bind("camera_next", [KEY_TAB], [JOY_BUTTON_Y])
+	# Menus on a controller: A selects and B goes back. Godot's own ui_accept
+	# and ui_cancel only have keys.
+	_add_button("ui_accept", JOY_BUTTON_A)
+	_add_button("ui_cancel", JOY_BUTTON_B)
+	# Change a picker (club, pitch, ...) with the right stick or bumpers.
+	_bind("menu_prev", [], [JOY_BUTTON_LEFT_SHOULDER], [JOY_AXIS_RIGHT_X, -1.0])
+	_bind("menu_next", [], [JOY_BUTTON_RIGHT_SHOULDER], [JOY_AXIS_RIGHT_X, 1.0])
+
+
+func _add_button(action: String, button: JoyButton) -> void:
+	for e in InputMap.action_get_events(action):
+		if e is InputEventJoypadButton and e.button_index == button:
+			return
+	var b := InputEventJoypadButton.new()
+	b.button_index = button
+	InputMap.action_add_event(action, b)
 
 
 func _bind(action: String, keys: Array, buttons: Array = [], axis: Array = [], mouse: Array = []) -> void:

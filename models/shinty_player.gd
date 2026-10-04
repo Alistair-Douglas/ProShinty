@@ -569,7 +569,8 @@ func _build() -> void:
 	# Meshes, materials and the caman live in ShintyPlayerLook.
 	_caman = ShintyPlayerLook.dress(self, _skel)
 	_pose(0.0)
-	_head_prev = get_caman_head_position()
+	if is_inside_tree():  # may be dressed before it joins the scene
+		_head_prev = get_caman_head_position()
 
 
 static func _contrasting_keeper(primary: Color, secondary: Color) -> Color:
