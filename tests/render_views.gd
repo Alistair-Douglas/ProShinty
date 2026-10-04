@@ -3,7 +3,8 @@ extends SceneTree
 ## lighting preset) to renders/. Needs a display:
 ##   xvfb-run godot --path . --rendering-method gl_compatibility -s tests/render_views.gd
 ## Add `-- quick` for just the match camera and west end of each ground, and
-## `quality=0|1|2` for the Low/Medium/High graphics setting (default High).
+## `quality=0|1|2` for the Low/Medium/High graphics setting (default High), and
+## `venue=<n>` for one ground only.
 
 func _initialize() -> void:
 	var scene: Node3D = load("res://preview/preview.tscn").instantiate()
@@ -29,6 +30,10 @@ func _run(scene: Node3D) -> void:
 		shots = shots.filter(func(s): return s[1] == 6 or s[1] == 2)
 	shots.append([0, 1, 1, "broadcast_evening"])
 	shots.append([0, 1, 2, "broadcast_overcast"])
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("venue="):
+			var only := int(a.get_slice("=", 1))
+			shots = shots.filter(func(s): return s[0] == only)
 	for s in shots:
 		if pitch.venue != s[0]:
 			pitch.venue = s[0]
@@ -37,7 +42,7 @@ func _run(scene: Node3D) -> void:
 		cam.set_view(s[1])
 		for i in 12:
 			await process_frame
-		var name: String = ["aberdour", "kingussie", "tighnabruaich"][s[0]] + "_" + s[3]
+		var name: String = ["aberdour", "kingussie", "tighnabruaich", "portree"][s[0]] + "_" + s[3]
 		root.get_viewport().get_texture().get_image().save_png("res://renders/%s.png" % name)
 		print("saved ", name)
 	pitch.venue = 0
