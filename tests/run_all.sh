@@ -39,6 +39,7 @@ run crowd    timeout 600  "$GODOT" --headless --fixed-fps 60 --path . -s tests/c
 run camera   timeout 1200 "$GODOT" --headless --fixed-fps 60 --path . -s tests/camera_test.gd
 run audio    timeout 600  "$GODOT" --headless --path . -s tests/audio_test.gd
 run music    timeout 120  "$GODOT" --headless --path . -s tests/music_test.gd
+run feel     timeout 600  "$GODOT" --headless --fixed-fps 60 --path . -s tests/feel_test.gd
 run subs     timeout 1200 "$GODOT" --headless --path . -s tests/subs_test.gd
 run sim      timeout 1200 "$GODOT" --headless --path . -s tests/sim_test.gd
 run ratings  timeout 1200 "$GODOT" --headless --path . -s tests/rating_gap_test.gd
