@@ -23,7 +23,7 @@ const PENALTY_YARDS := 20.0       ## penalty hit, from the goal line
 const ADVANTAGE_SECONDS := 3.0
 ## A poke that misses the ball can catch the carrier's caman or body instead.
 const TACKLE_FOUL := 0.07
-const HACK_FOUL := 0.06     ## a one-handed lunge onto the man that misses the ball
+const HACK_FOUL := 0.03     ## a one-handed lunge onto the man that misses the ball
 ## A stick battle can turn into hacking at the other player's caman.
 const BATTLE_FOUL := 0.01
 ## Chance of a yellow card for a foul of severity 1 (scaled down for milder
@@ -202,7 +202,7 @@ func _on_tackle(e: Dictionary) -> void:
 	# Hacking is the rarest foul in shinty: only a player coming in one-handed,
 	# at full stretch, onto the man. A two-handed poke from the front that
 	# misses the ball is no foul at all.
-	var one_handed: bool = t.pos.distance_to(e.get("at", o.pos)) > m.Body.TWO_HAND_REACH
+	var one_handed: bool = e.get("one_hand", false)
 	if behind <= 0.6 and not one_handed:
 		return
 	var chance: float = TACKLE_FOUL * (1.6 - t.r("tackling") / 100.0) + behind * 0.12 + (1.0 - t.stamina) * 0.05

@@ -1658,7 +1658,7 @@ func _try_tackle(t: Player, o: Player) -> void:
 	# Rarely a clean steal: a poke that gets there usually starts a battle.
 	var roll := randf()
 	var won := roll < chance * 0.3
-	events.append({"type": "tackle", "by": t, "on": o, "won": won, "at": o.pos})
+	events.append({"type": "tackle", "by": t, "on": o, "won": won, "at": o.pos, "one_hand": d > Body.TWO_HAND_REACH})
 	if not won and roll < chance:
 		battle = {"t": t, "o": o, "time": 0.0, "effort": {}}
 		events.append({"type": "battle", "team": t.team, "at": ball_pos})
