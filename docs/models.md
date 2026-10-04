@@ -117,13 +117,19 @@ and legs. The game keeps its own gripping hands, boots, head, face and helmet.
    It maps the rig onto the game skeleton, bends the A-pose into the game's
    rest pose and stretches the limbs to its bone lengths (so poses, the arm
    solver and the caman grip are unchanged), cuts off the head, hands and
-   feet, cuts the body down to about 4,400 triangles (`--tris`), and splits it
+   feet, cuts the body down to about 3,900 triangles (`--tris`), and splits it
    into skin, shirt, cuff, shorts and socks with straight hems, the kit lifted
    a little off the skin.
 3. Files named `lean`, `average` and `stocky` are picked by each player's
    build (below 0.36, between, above 0.64); shoulder and hip width and girth
    are then fitted per player. With no files in `models/bodies/` the built
    body is used. `ShintyPlayerLook.use_imported_bodies = false` turns them off.
+
+An unrigged MPFB human saved as a .blend works too: `python3
+tools/blender/rig_mpfb_basemesh.py Character.blend body.glb` finds the
+joints from MPFB's joint vertex groups, builds the rig, weights the body and
+exports the .glb for step 2. `models/bodies/average.json` comes from
+Alistair's "Character medium" MPFB body (male, muscle 1.0, weight 0.5).
 
 `tools/blender/make_standin_body.py` makes a rough stand-in body with the same
 rig, for testing the converter without MPFB. Bodies made with MakeHuman/MPFB

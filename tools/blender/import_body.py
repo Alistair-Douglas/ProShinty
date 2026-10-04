@@ -1,7 +1,7 @@
 """Turn a body exported from Blender (MPFB "Game engine" rig, or any rig with
 similar bone names) into a body file the game loads: models/bodies/<name>.json.
 
-    python3 tools/blender/import_body.py body.glb models/bodies/average.json [--tris 4400]
+    python3 tools/blender/import_body.py body.glb models/bodies/average.json [--tris 3900]
 
 Needs the `bpy` module (pip install bpy, Blender as a Python module), so it
 runs anywhere Python 3.11 does; no Blender window or MPFB needed here.
@@ -132,7 +132,7 @@ def split(pos, vn, dense, tri, level, applies):
 def main():
     args = sys.argv[1:]
     src, out = args[0], args[1]
-    tris = int(args[args.index("--tris") + 1]) if "--tris" in args else 4400
+    tris = int(args[args.index("--tris") + 1]) if "--tris" in args else 3900
     name = out.rsplit("/", 1)[-1].rsplit(".", 1)[0]
     build = float(args[args.index("--build") + 1]) if "--build" in args else \
         (0.2 if "lean" in name else 0.8 if "stocky" in name else 0.5)
