@@ -1307,15 +1307,19 @@ func _add_far_trees(root: Node3D, mmi: MultiMeshInstance3D, chunk: MultiMeshInst
 	for part in parts:
 		# Each part (a model's far version, or a fitted blob crown and trunk)
 		# sits at `offset` within every tree.
-		var copies := chunk.multimesh.duplicate() as MultiMesh
+		# Copied by hand: MultiMesh.duplicate() fails on the headless renderer.
+		var src := chunk.multimesh
+		var copies := MultiMesh.new()
+		copies.transform_format = MultiMesh.TRANSFORM_3D
+		copies.use_colors = src.use_colors
 		copies.mesh = part[0]
+		copies.instance_count = src.instance_count
 		var offset: Transform3D = part[2]
 		var tint: Color = part[3] if part.size() > 3 else Color.WHITE
-		for i in copies.instance_count:
-			if offset != Transform3D.IDENTITY:
-				copies.set_instance_transform(i, copies.get_instance_transform(i) * offset)
-			if tint != Color.WHITE and copies.use_colors:
-				copies.set_instance_color(i, copies.get_instance_color(i) * tint)
+		for i in src.instance_count:
+			copies.set_instance_transform(i, src.get_instance_transform(i) * offset)
+			if src.use_colors:
+				copies.set_instance_color(i, src.get_instance_color(i) * tint)
 		var far := MultiMeshInstance3D.new()
 		far.name = "%sFar%d" % [chunk.name, k]
 		far.multimesh = copies
