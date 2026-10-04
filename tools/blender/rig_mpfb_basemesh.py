@@ -4,7 +4,7 @@ joint (that is how MPFB places its own rigs), so the joints are found from
 those, a Game engine-style skeleton is built on them, and the body is
 weighted automatically.
 
-    python3 tools/blender/rig_mpfb_basemesh.py Character.blend out.glb [--fit tools/blender/shirt_fit.json]
+    python3 tools/blender/rig_mpfb_basemesh.py Character.blend out.glb [--fit tools/blender/shirt_fit.json] [--height 0.5]
 
 MPFB's lips, scalp and ears groups go into a vertex colour, and its mouth and
 jaw joints become marker bones, for the converter's face shading. With --fit
@@ -43,6 +43,26 @@ def joint(name):
     return c / len(pts)
 
 
+# MPFB leaves some of its female targets (breasts) switched on a little even
+# for a fully male human; on a muscular body they read as a bust under the
+# shirt, so they go.
+if human.get("MPFB_HUM_gender", 0.0) > 0.9 and human.data.shape_keys:
+    for k in human.data.shape_keys.key_blocks:
+        if "$fe-" in k.name and k.value > 0.0:
+            print("dropped female target %s (%.3f)" % (k.name, k.value))
+            k.value = 0.0
+# --height H re-weighs MPFB's height targets as if its height slider were H
+# (0.5 average). The game scales every body to its own height anyway, so a
+# tall MPFB human only comes out slender: long thin limbs and a narrow chest.
+if "--height" in sys.argv and human.data.shape_keys:
+    want = float(sys.argv[sys.argv.index("--height") + 1])
+    had = human.get("MPFB_HUM_height", 0.5)
+    for k in human.data.shape_keys.key_blocks:
+        if "max$hg" in k.name or "min$hg" in k.name:
+            tall = "max$hg" in k.name
+            f = (max(0.0, want - 0.5) / max(1e-6, had - 0.5)) if tall else (max(0.0, 0.5 - want) / max(1e-6, 0.5 - had))
+            print("height target %s: %.3f -> %.3f" % (k.name, k.value, k.value * f))
+            k.value *= f
 # Bake the sliders: evaluate shape keys (not the mask) into a plain mesh.
 for m in list(human.modifiers):
     human.modifiers.remove(m)

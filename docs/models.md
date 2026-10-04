@@ -141,7 +141,13 @@ An unrigged MPFB human saved as a .blend works too: `python3
 tools/blender/rig_mpfb_basemesh.py Character.blend body.glb` finds the
 joints from MPFB's joint vertex groups, builds the rig, weights the body and
 exports the .glb for step 2. `models/bodies/average.json` comes from
-Alistair's "Character medium" MPFB body (male, muscle 1.0, weight 0.5).
+Alistair's "Character medium" MPFB body (male, muscle 1.0, weight 0.5), rigged
+with `--height 0.5`: the game scales every body to its own height, so MPFB's
+tall setting only made it slender. The rig script also switches off the small
+female chest targets MPFB leaves on for a male human, and the converter hangs
+the shirt off the chest and shoulder blades (`drape()`) instead of hugging
+the skin, so a muscular chest doesn't read as a bust. The sponsor print is
+skinned like the shirt under it, so it bends with the chest.
 
 The shirt's fit comes from a real MPFB shirt: `python3
 tools/blender/shirt_fit.py Clothed.blend tools/blender/shirt_fit.json`

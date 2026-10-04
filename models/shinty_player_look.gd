@@ -375,6 +375,8 @@ func _imported_body(mats: Dictionary) -> void:
 	k = clampf(lerpf(1.0, k, 0.6), 0.9, 1.12)
 	var parts := []
 	var torso_pts := PackedVector3Array()
+	var torso_bones := PackedInt32Array()
+	var torso_weights := PackedFloat32Array()
 	for key in body_file["surfaces"]:
 		if not mats.has(key):
 			continue
@@ -415,6 +417,9 @@ func _imported_body(mats: Dictionary) -> void:
 			uvs[i] = Vector2(uv[i * 2], uv[i * 2 + 1])
 			if key == "torso":
 				torso_pts.append(p)
+				for j in 4:
+					torso_bones.append(bones[i * 4 + j])
+					torso_weights.append(weights[i * 4 + j])
 		# Skin shading baked by the converter (flush, lips, beard zones).
 		var cols := PackedColorArray()
 		var c: Array = sd.get("c", [])
@@ -442,6 +447,9 @@ func _imported_body(mats: Dictionary) -> void:
 				box = box.expand(p - at)
 	if not first:
 		skel.set_meta("sponsor_holder", String(holder.name))
+		# The shirt's skinning, so the print bends with it instead of riding
+		# one bone (in skeleton rest space).
+		skel.set_meta("torso_skin", [torso_pts, torso_bones, torso_weights])
 		holder.set_meta("mesh_aabb", box)
 		# The shirt front across the sponsor's height, for the print to follow.
 		var y := box.position.y + box.size.y * 0.5

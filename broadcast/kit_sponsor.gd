@@ -6,7 +6,8 @@ extends RefCounted
 ## on its "Spine" bone (or the bone the skeleton names in "sponsor_holder") (or their size, recorded as "mesh_aabb" when they were
 ## baked into one mesh), measures them, and adds a print flush with the front of
 ## the shirt, so it follows the body and fits slim and heavy builds. Call it
-## after setup() (and again after rebuild(), which clears it).
+## after setup() (and again after rebuild(), which clears it). On an imported
+## body the print is skinned like the shirt, so it bends with the chest.
 ##
 ## `texture` is white on transparent (ShintySponsors.shirt_texture()); it is
 ## printed in the kit's trim colour unless `color` is given, on a panel in the
@@ -22,9 +23,10 @@ static func apply(model: ShintyPlayerModel, texture: Texture2D, color = null) ->
 	var holder := skel.get_node_or_null(str(skel.get_meta("sponsor_holder", "SpineAttach"))) as Node3D
 	if holder == null:
 		return null
-	var old := holder.get_node_or_null(NODE_NAME)
-	if old:
-		old.free()
+	for parent in [holder, skel]:
+		var old: Node = (parent as Node).get_node_or_null(NODE_NAME)
+		if old:
+			old.free()
 	# The shirt's front surface and width, from the meshes on this bone.
 	var box := AABB()
 	var first := true
@@ -76,8 +78,49 @@ static func apply(model: ShintyPlayerModel, texture: Texture2D, color = null) ->
 	mi.material_override = mat
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	root.add_child(mi)
-	holder.add_child(root)
+	if skel.has_meta("torso_skin") and holder is BoneAttachment3D:
+		# Skinned like the shirt under it (an imported body), so it bends
+		# with the chest when the player twists and swings.
+		var at := skel.get_bone_global_rest(skel.find_bone((holder as BoneAttachment3D).bone_name)).origin
+		var skin := skel.create_skin_from_rest_transforms()
+		var data: Array = skel.get_meta("torso_skin")
+		for m in [root, mi]:
+			m.mesh = _skinned(m.mesh, at, data)
+			m.skin = skin
+		skel.add_child(root)
+		root.skeleton = NodePath("..")
+		mi.skeleton = NodePath("../..")
+	else:
+		holder.add_child(root)
 	return root
+
+
+## The strip moved into skeleton space at `at`, each corner weighted like the
+## nearest point of the shirt (`data`: points, then 4 bones and 4 weights each).
+static func _skinned(mesh: ArrayMesh, at: Vector3, data: Array) -> ArrayMesh:
+	var pts: PackedVector3Array = data[0]
+	var arrays := mesh.surface_get_arrays(0)
+	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var bones := PackedInt32Array()
+	var weights := PackedFloat32Array()
+	for i in verts.size():
+		verts[i] += at
+		var best := 0
+		var dist := INF
+		for k in pts.size():
+			var d := pts[k].distance_squared_to(verts[i])
+			if d < dist:
+				dist = d
+				best = k
+		for j in 4:
+			bones.append(data[1][best * 4 + j])
+			weights.append(data[2][best * 4 + j])
+	arrays[Mesh.ARRAY_VERTEX] = verts
+	arrays[Mesh.ARRAY_BONES] = bones
+	arrays[Mesh.ARRAY_WEIGHTS] = weights
+	var m := ArrayMesh.new()
+	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	return m
 
 
 ## A strip facing -Z (the model's front), centred on `c`, following `curve`

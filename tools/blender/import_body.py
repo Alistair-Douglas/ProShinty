@@ -136,6 +136,70 @@ def split(pos, vn, dense, tri, level, applies):
     return np.array(pos), np.array(vn), np.array(dense), np.array(out, dtype=np.int64)
 
 
+def drape(p, tri, nrm, top=None, slope=0.2, most=0.04):
+    """Hang a shirt off the body's high points: below the chest (or the
+    shoulder blades) the cloth falls nearly straight instead of following the
+    skin back in, and it bridges the hollows (between the pecs, under them)
+    rather than dipping into them, so a muscular chest doesn't read as a
+    bust. Works on the distance from the body's axis: a closing (spread the
+    high points, then pull back) over the mesh, then a fall down each angle
+    bin. Seam edges (where the sleeves join) stay put, the push is smoothed,
+    and the normals come from the draped shape so the shading drapes too.
+    Returns the points and normals."""
+    c = np.array([0.0, 0.0, np.mean(p[:, 2])])
+    ang = np.arctan2(p[:, 0], p[:, 2] - c[2])
+    r = np.hypot(p[:, 0], p[:, 2] - c[2])
+    bins = np.floor((ang + math.pi) / (2 * math.pi) * 48).astype(int) % 48
+    top = np.max(p[:, 1]) - 0.1 if top is None else top
+    nb = [set() for _ in range(len(p))]
+    for a, b2, c2 in tri:
+        nb[a].update((b2, c2)); nb[b2].update((a, c2)); nb[c2].update((a, b2))
+    nb = [np.array(sorted(x)) for x in nb]
+    hull = r.copy()
+    for op in (np.max,) * 3 + (np.min,) * 3:  # closing: fills hollows, keeps bulges
+        hull = np.array([op(np.append(hull[x], hull[k])) for k, x in enumerate(nb)])
+    r = np.where(p[:, 1] <= top, np.maximum(r, hull), r)
+    push = r - np.hypot(p[:, 0], p[:, 2] - c[2])
+    best = {}
+    for k in np.argsort(-p[:, 1]):
+        y = p[k][1]
+        if y > top:
+            continue
+        b = bins[k]
+        def held(bb):
+            br, by = best.get(bb % 48, (0.0, y))
+            return br - slope * (by - y)
+        if r[k] >= held(b):
+            best[b] = (r[k], y)
+        push[k] = min(most, push[k] + max(0.0, max(held(b - 1), held(b), held(b + 1)) - r[k]))
+    # Edges used by one triangle: the sleeve joins and the neckline stay put
+    # (the hem, at the bottom, may move).
+    e = np.sort(np.vstack([tri[:, [0, 1]], tri[:, [1, 2]], tri[:, [2, 0]]]), axis=1)
+    eu, ec = np.unique(e, axis=0, return_counts=True)
+    edge = np.unique(eu[ec == 1].ravel())
+    fixed = np.zeros(len(p), bool)
+    fixed[edge[p[edge, 1] > np.min(p[:, 1]) + 0.03]] = True
+    push[fixed] = 0.0
+    for _ in range(6):
+        acc, cnt = np.zeros(len(p)), np.zeros(len(p))
+        for c3 in range(3):
+            for d3 in range(3):
+                np.add.at(acc, tri[:, c3], push[tri[:, d3]])
+                np.add.at(cnt, tri[:, c3], 1)
+        push = np.where(fixed, 0.0, acc / np.maximum(cnt, 1))
+    out = np.stack([p[:, 0], np.zeros(len(p)), p[:, 2] - c[2]], 1)
+    out /= np.maximum(np.linalg.norm(out, axis=1, keepdims=True), 1e-9)
+    print("drape: %d of %d shirt points hang off the body (most %.3f m)" % (np.sum(push > 0.002), len(p), push.max()))
+    p = p + out * push[:, None]
+    fn = np.cross(p[tri[:, 1]] - p[tri[:, 0]], p[tri[:, 2]] - p[tri[:, 0]])
+    nn = np.zeros_like(p)
+    for c3 in range(3):
+        np.add.at(nn, tri[:, c3], fn)
+    nn /= np.maximum(np.linalg.norm(nn, axis=1, keepdims=True), 1e-9)
+    nn = -nn if np.mean(np.einsum("ij,ij->i", nn, nrm)) < 0 else nn
+    return p, np.where(fixed[:, None], nrm, nn)
+
+
 def main():
     args = sys.argv[1:]
     src, out = args[0], args[1]
@@ -362,7 +426,7 @@ def main():
         zone[:, 3] = f
     SLEEVE, CUFF = 0.155, 0.185
     WAIST_SHIRT, WAIST_SHORTS = 1.0, 1.06
-    SHORTS_LEG = 0.2
+    SHORTS_LEG = 0.25  # down to mid-thigh, as shinty shorts are worn
     NECKLINE = 1.5
     # Shin pads under the socks: a flat raised panel down the front of the
     # shin with a small lip at each end (PAD_EDGE wide).
@@ -515,6 +579,7 @@ def main():
                 out_dir = np.array([p[k][0], 0.0, p[k][2]])
                 out_dir /= max(np.linalg.norm(out_dir), 1e-9)
                 p[k] += nrm[k] * (lift + fitv) + out_dir * (loose + (0.006 if y < WAIST_SHORTS + 0.02 else 0.0))
+            p, nrm = drape(p, inv.reshape(-1, 3), nrm)
         else:
             p += nrm * lift
         uv = np.zeros((len(used), 2))
