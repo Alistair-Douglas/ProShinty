@@ -55,13 +55,20 @@ func _process(_d: float) -> bool:
 	if stop_frame > 0 and frame == stop_frame + 30:
 		_check(is_equal_approx(Engine.time_scale, 1.0), "game back to full speed after the hit-stop")
 	if frame == 200:
-		# The ball put a yard onto a caman: drawn from where it was.
+		# The ball put a yard onto a caman: drawn from where it was. The
+		# match is held still while the view blends it, so that a player's
+		# own touches on the ball in the meantime (which open small gaps of
+		# their own) can't be mistaken for this one not closing.
+		m.process_mode = Node.PROCESS_MODE_DISABLED
+		view.process_mode = Node.PROCESS_MODE_ALWAYS
 		m._place_ball(m.ball_pos + Vector2(1.0, 0.0), m.ball_z)
 		gap_frame = frame
 	if gap_frame > 0 and frame == gap_frame + 2:
 		_check(view._ball_gap.length() > 0.2, "gap to the caman blended, not snapped (%.2f yd)" % view._ball_gap.length())
 	if gap_frame > 0 and frame == gap_frame + 10:
 		_check(view._ball_gap.length() < 0.02, "gap closed within a few frames (%.3f yd)" % view._ball_gap.length())
+		m.process_mode = Node.PROCESS_MODE_INHERIT
+		view.process_mode = Node.PROCESS_MODE_INHERIT
 	if frame == 900:
 		_check(worst < 3.5, "ball drawn close to the match's ball (worst %.2f yd)" % worst)
 		_check(is_equal_approx(Engine.time_scale, 1.0), "full speed at the end")
