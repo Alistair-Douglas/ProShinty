@@ -619,7 +619,9 @@ func _place_tree_model(b: TreeBatch, kinds: Array, rng: RandomNumberGenerator, b
 	var xf := Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3.ONE * k), base + Vector3(0, -0.1, 0))
 	if not b.models.has(m):
 		b.models[m] = []
-	b.models[m].append([xf, (m.leaf_color * rng.randf_range(0.9, 1.08)).srgb_to_linear()])
+	# A little variation per tree; the far blob multiplies in the leaf colour.
+	var v := rng.randf_range(0.88, 1.06)
+	b.models[m].append([xf, Color(v, v * rng.randf_range(0.97, 1.03), v)])
 	return true
 
 
@@ -771,38 +773,51 @@ func emit_trees(root: Node3D, b: TreeBatch, segs: int, rings: int, cards: int, l
 	root.add_child(mmi2)
 
 
-## One MultiMesh per tree model. Each carries the parts of its far version
-## (see _add_far_trees): the model's own _far file, or else a plain blob
-## crown and trunk fitted to the model.
+## One MultiMesh per tree model for the near view. Far away every model
+## tree in the batch shares two MultiMeshes, plain blob crowns and trunks
+## fitted to each model, so the far view costs the same few draw calls
+## however many models there are. A model's own _far file is drawn instead
+## of its blob and trunk.
 func _emit_tree_models(root: Node3D, b: TreeBatch, label: String) -> void:
+	if b.models.is_empty():
+		return
+	var blobs: Array[Transform3D] = []
+	var blob_colors: Array[Color] = []
+	var trunks: Array[Transform3D] = []
+	var trunk_colors: Array[Color] = []
 	var n := 0
 	for m in b.models:
 		var list: Array = b.models[m]
-		var mm := MultiMesh.new()
-		mm.transform_format = MultiMesh.TRANSFORM_3D
-		mm.use_colors = true
-		mm.mesh = m.mesh
-		mm.instance_count = list.size()
-		for i in list.size():
-			mm.set_instance_transform(i, list[i][0])
-			mm.set_instance_color(i, list[i][1])
-		var mmi := MultiMeshInstance3D.new()
-		mmi.name = "%sModel%d" % [label, n]
-		mmi.multimesh = mm
-		mmi.set_meta("far_parts", _tree_far_parts(m))
-		root.add_child(mmi)
+		var xforms: Array[Transform3D] = []
+		var colors: Array[Color] = []
+		for item in list:
+			xforms.append(item[0])
+			colors.append(item[1])
+		_add_lod_multimesh(root, "%sModel%d" % [label, n], m.mesh, null, xforms, colors, "near")
+		if m.far:
+			_add_lod_multimesh(root, "%sModelFar%d" % [label, n], m.far, null, xforms, colors, "far")
+		else:
+			var crown: AABB = m.canopy
+			var blob := Transform3D(Basis.from_scale(crown.size * 0.5), crown.get_center())
+			var top: float = crown.position.y + crown.size.y * 0.3
+			var r := maxf(m.size.y * 0.014, 0.08)
+			var trunk := Transform3D(Basis.from_scale(Vector3(r, top, r)), Vector3(0, top * 0.5, 0))
+			# Darker and greyer than the model's bark: far trunks are mostly in shade.
+			var bark: Color = (m.bark_color.lerp(Color(0.3, 0.28, 0.25), 0.5) * 0.75).srgb_to_linear()
+			var leaf: Color = m.leaf_color.srgb_to_linear()
+			for i in xforms.size():
+				blobs.append(xforms[i] * blob)
+				blob_colors.append(colors[i] * leaf)
+				trunks.append(xforms[i] * trunk)
+				trunk_colors.append(bark)
 		n += 1
-
-
-func _tree_far_parts(m) -> Array:
-	if m.far:
-		return [[m.far, null, Transform3D.IDENTITY]]
+	if blobs.is_empty():
+		return
 	var far := ShaderMaterial.new()
 	far.shader = _load_local("canopy_far.gdshader")
 	far.set_shader_parameter("noise_tex", _load_local("ground_noise.png"))
 	far.set_shader_parameter("leaf_tile", _load_local("leaves_tile.png"))
-	var crown: AABB = m.canopy
-	var blob := Transform3D(Basis.from_scale(crown.size * 0.5), crown.get_center())
+	_add_lod_multimesh(root, label + "ModelFarCrowns", _canopy_mesh(10, 6, 0, 0.95), far, blobs, blob_colors, "far")
 	var cyl := CylinderMesh.new()
 	cyl.top_radius = 0.65
 	cyl.bottom_radius = 1.0
@@ -811,11 +826,29 @@ func _tree_far_parts(m) -> Array:
 	cyl.rings = 1
 	cyl.cap_top = false
 	cyl.cap_bottom = false
-	var top: float = crown.position.y + crown.size.y * 0.3
-	var r := maxf(m.size.y * 0.018, 0.1)
-	var trunk := Transform3D(Basis.from_scale(Vector3(r, top, r)), Vector3(0, top * 0.5, 0))
-	var bark := mat("far_bark%s" % m.bark_color.to_html(), m.bark_color, 0.95)
-	return [[_canopy_mesh(10, 6, 0, 0.95), far, blob], [cyl, bark, trunk]]
+	var bark_mat := StandardMaterial3D.new()
+	bark_mat.vertex_color_use_as_albedo = true
+	bark_mat.roughness = 0.95
+	_add_lod_multimesh(root, label + "ModelFarTrunks", cyl, bark_mat, trunks, trunk_colors, "far")
+
+
+## A MultiMesh that _split_multimesh cuts into cells and shows only near the
+## camera (`lod` "near") or only beyond TREE_NEAR ("far"); see _apply_lod.
+func _add_lod_multimesh(root: Node3D, name: String, mesh: Mesh, material: Material, xforms: Array[Transform3D], colors: Array[Color], lod: String) -> void:
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_colors = true
+	mm.mesh = mesh
+	mm.instance_count = xforms.size()
+	for i in xforms.size():
+		mm.set_instance_transform(i, xforms[i])
+		mm.set_instance_color(i, colors[i])
+	var mmi := MultiMeshInstance3D.new()
+	mmi.name = name
+	mmi.multimesh = mm
+	mmi.material_override = material
+	mmi.set_meta("lod", lod)
+	root.add_child(mmi)
 
 
 ## Unit-radius canopy blob: a sphere core (UV2.x = 0) of radius `core` and
@@ -1213,7 +1246,7 @@ func _cell_distance(cell: Vector2i) -> float:
 
 func _split_multimesh(root: Node3D, mmi: MultiMeshInstance3D, reach: float) -> void:
 	var mm := mmi.multimesh
-	var lod := mmi.has_meta("far_mesh") or mmi.has_meta("far_parts")
+	var lod := mmi.has_meta("far_mesh") or mmi.has_meta("far_parts") or mmi.has_meta("lod")
 	if mm == null or mm.transform_format != MultiMesh.TRANSFORM_3D or (mm.instance_count < 64 and not lod):
 		return
 	var cells := {}
@@ -1247,7 +1280,9 @@ func _split_multimesh(root: Node3D, mmi: MultiMeshInstance3D, reach: float) -> v
 		if not shadows:
 			chunk.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		mmi.get_parent().add_child(chunk)
-		if lod:
+		if mmi.has_meta("lod"):
+			_apply_lod(root, chunk, shadows, mmi.get_meta("lod"))
+		elif lod:
 			_add_far_trees(root, mmi, chunk, shadows)
 	mmi.get_parent().remove_child(mmi)
 	mmi.queue_free()
@@ -1275,9 +1310,12 @@ func _add_far_trees(root: Node3D, mmi: MultiMeshInstance3D, chunk: MultiMeshInst
 		var copies := chunk.multimesh.duplicate() as MultiMesh
 		copies.mesh = part[0]
 		var offset: Transform3D = part[2]
-		if offset != Transform3D.IDENTITY:
-			for i in copies.instance_count:
+		var tint: Color = part[3] if part.size() > 3 else Color.WHITE
+		for i in copies.instance_count:
+			if offset != Transform3D.IDENTITY:
 				copies.set_instance_transform(i, copies.get_instance_transform(i) * offset)
+			if tint != Color.WHITE and copies.use_colors:
+				copies.set_instance_color(i, copies.get_instance_color(i) * tint)
 		var far := MultiMeshInstance3D.new()
 		far.name = "%sFar%d" % [chunk.name, k]
 		far.multimesh = copies
@@ -1294,6 +1332,28 @@ func _add_far_trees(root: Node3D, mmi: MultiMeshInstance3D, chunk: MultiMeshInst
 			caster.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_SHADOWS_ONLY
 			chunk.get_parent().add_child(caster)
 		k += 1
+
+
+## One cell of a near-only or far-only MultiMesh (see _add_lod_multimesh).
+## The far one also casts the shadows below HIGH, as in _add_far_trees.
+func _apply_lod(root: Node3D, chunk: MultiMeshInstance3D, shadows: bool, lod: String) -> void:
+	var near: float = TREE_NEAR[graphics_quality] * root.scale.x
+	var high := graphics_quality == Detail.HIGH
+	if lod == "near":
+		chunk.visibility_range_end = near
+		if shadows and not high:
+			chunk.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		return
+	chunk.visibility_range_begin = near
+	if not shadows:
+		return
+	if not high:
+		chunk.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		var caster := chunk.duplicate(0) as MultiMeshInstance3D
+		caster.name = chunk.name + "Shadow"
+		caster.visibility_range_begin = 0.0
+		caster.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_SHADOWS_ONLY
+		chunk.get_parent().add_child(caster)
 
 
 func _load_local(file: String) -> Resource:
