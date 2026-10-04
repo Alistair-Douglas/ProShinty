@@ -31,6 +31,7 @@ run() {
 "$GODOT" --headless --import --path . > "$OUT/import.log" 2>&1 || true
 
 run models   timeout 300  "$GODOT" --headless --path . -s tests/model_test.gd
+run stats    timeout 900  "$GODOT" --headless --path . -s tests/stats_test.gd
 run kits     timeout 120  "$GODOT" --headless --path . -s tests/kit_test.gd
 run camans   timeout 300  "$GODOT" --headless --path . -s tests/caman_test.gd
 run referee  timeout 300  "$GODOT" --headless --path . -s tests/referee_test.gd
