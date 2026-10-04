@@ -1,0 +1,68 @@
+{
+ "stand": {
+  "length": 1.0,
+  "keys": [
+   {
+    "spine_bend": 12,
+    "left_hip": 14,
+    "right_hip": 12,
+    "left_knee": 26,
+    "right_knee": 24,
+    "head_nod": 8
+   },
+   {},
+   {}
+  ]
+ },
+ "jog": {
+  "length": 1.0,
+  "keys": [
+   {},
+   {},
+   {
+    "spine_bend": 5,
+    "head_nod": 4
+   }
+  ]
+ },
+ "sprint": {
+  "length": 1.0,
+  "keys": [
+   {},
+   {},
+   {
+    "spine_bend": 7,
+    "head_nod": 6
+   }
+  ]
+ },
+ "swing": {
+  "length": 1.0,
+  "keys": [
+   {
+    "spine_bend": 14,
+    "left_knee": 14,
+    "right_knee": 18,
+    "left_hip": 8,
+    "right_hip": -4,
+    "shoulder_turn": 20,
+    "hips_turn": 10
+   },
+   {
+    "spine_bend": 9,
+    "left_knee": 16,
+    "right_knee": 18,
+    "left_hip": 10,
+    "right_hip": -4,
+    "head_nod": 4
+   },
+   {
+    "spine_bend": 6,
+    "left_knee": 8,
+    "right_knee": 12,
+    "shoulder_turn": -15,
+    "hips_turn": -12
+   }
+  ]
+ }
+}
