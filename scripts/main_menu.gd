@@ -216,6 +216,8 @@ func _build_hub() -> void:
 		_open_designer()
 		_show("camans"))
 	_tile(col, "SETTINGS", "Controls, graphics and music", func(): _show("controls"))
+	_tile(col, "PRACTICE", "Training ground: try every move, slow it down", func():
+		get_tree().change_scene_to_file("res://scenes/practice.tscn"))
 	_tile(col, "QUIT", "Back to the desktop", func(): get_tree().quit())
 	s.set_meta("first", play)
 
