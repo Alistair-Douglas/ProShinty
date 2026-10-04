@@ -1018,14 +1018,12 @@ func _human_control(dt: float) -> void:
 		charge_steer = hit_aim if hit_aim != Vector2.ZERO else raw
 	if Input.is_action_just_pressed("block"):
 		# Y / F: with the ball it's a through ball (as in FIFA); without it,
-		# a block on an opponent's swing.
+		# a block or a cleek on an opponent's swing, picked by where you are.
 		if carrier == p and p.swing_t < 0.0 and p != set_piece_taker_now() and not p.shy_ready:
 			# Holding LB (switch, which does nothing on the ball) chips it.
 			_human_through(p, aim, Input.is_action_pressed("switch"))
 		else:
-			Counters.start_block(self, p)
-	if Input.is_action_just_pressed("cleek"):
-		Counters.start_cleek(self, p)
+			Counters.start_counter(self, p)
 	if Input.is_action_just_pressed("barge"):
 		Counters.start_barge(self, p)
 	if charge >= 0.0 and Input.is_action_just_pressed("pass") and carrier == p \
