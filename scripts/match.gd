@@ -23,6 +23,11 @@ const REACH := 1.7           # how far a caman reaches
 const REACH_HEIGHT := 2.3
 const KEEPER_REACH_HEIGHT := 3.2
 const THIGH_HEIGHT := 1.0       # a body stop below this is on the thigh, above it the chest
+const KEEPER_BEAT := 0.2         # chance a shot on target beats the keeper outright...
+const KEEPER_BEAT_HARD := 0.2    # ...more for a hard one...
+const KEEPER_BEAT_CORNER := 0.35 # ...and more again high into a corner
+const KEEPER_HIGH := 1.8         # a shot this high is a high one
+const CORNER_IN := 1.0           # within this of a post is in the corner
 const KEEPER_STICK_HEIGHT := 1.2   # above this a keeper turns the ball away with the caman
 const SHOT_INSIDE := 0.45       # shots are aimed this far inside the post
 const LOW_SHOT := 0.35          # a low shot crosses the line about this high (yards)
@@ -143,6 +148,7 @@ class Player:
 	var shielding := false   # carrier holding the ball up, body between it and the man
 	var judge := Vector3.ZERO  # how far off this player's read of the ball in the air is
 	var judge_flight := -1     # the flight that read was made for
+	var beat_flight := -1      # keeper: the shot already judged for beating them
 	var use_body := false      # going to take this ball on the body, stick out of the way
 	var hold_t := 0.0        # AI: how long to keep holding it up
 	var sold := 0.0          # bit on a dummy: committed and planted for this long
@@ -1945,6 +1951,8 @@ func _ball_touches(before: Vector3) -> void:
 			var hands: float = 0.75 + p.r("keeping") / 100.0 * 0.45 + (0.8 if p.lunge > 0.0 else 0.0)
 			if body_d < hands and min(before.z, now.z) < KEEPER_REACH_HEIGHT:
 				d = min(d, body_d * Body.CONTACT_R / hands)
+		if keeping and d < reach and _keeper_beaten(p, sp):
+			continue
 		if d < reach and d < best_d:
 			best = p
 			best_d = d
@@ -2012,6 +2020,37 @@ func _ball_touches(before: Vector3) -> void:
 	else:
 		# Off the keeper's caman: wood, so it comes off it rather than through it.
 		_stick_rebound(p, p.r("keeping") / 100.0, ball_z > FEET_HEIGHT)
+
+
+## A shot on target reaching the keeper: are they beaten by it before they
+## can get a touch? Judged once a shot. Most shots are kept out, the hard
+## ones less often, and one hit high into a corner beats the keeper more
+## often than not. A beaten keeper is left grasping as it goes by.
+func _keeper_beaten(k: Player, sp: float) -> bool:
+	if k.beat_flight == flight:
+		return false
+	var g := own_goal(k.team)
+	var toward: float = -attack_dir[k.team]
+	if ball_vel.x * toward < 5.0:
+		return false
+	var t: float = (g.x - ball_pos.x) / ball_vel.x
+	if t < 0.0 or t > 1.5:
+		return false
+	var y: float = ball_pos.y + ball_vel.y * t
+	var z: float = ball_z + ball_vz * t - 0.5 * GRAVITY * t * t
+	if absf(y - g.y) > GOAL_W / 2.0 or z > CROSSBAR or z < -0.5:
+		return false   # going wide or over: nothing to beat
+	k.beat_flight = flight
+	if absf(y - k.pos.y) < Body.BODY_R + 0.3 and z < Body.BODY_HEIGHT:
+		return false   # straight at them: it hits the keeper
+	var hard: float = clampf((sp - 20.0) / 15.0, 0.0, 1.0)
+	var corner: bool = z > KEEPER_HIGH and absf(y - g.y) > GOAL_W / 2.0 - CORNER_IN
+	var beat: float = KEEPER_BEAT + KEEPER_BEAT_HARD * hard + (KEEPER_BEAT_CORNER if corner else 0.0) \
+		- (k.r("keeping") - 60.0) / 100.0 * 0.4 - _skill_mod(k.team)
+	if randf() >= clampf(beat, 0.05, 0.9):
+		return false
+	k.touch_block = maxf(k.touch_block, t + 0.2)
+	return true
 
 
 ## An outfield player's caman has got to the ball. Nothing goes through a
