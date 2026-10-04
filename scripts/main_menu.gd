@@ -480,6 +480,8 @@ const CONTROL_ROWS := [
 	["Shoot at goal (hold for power)", "Space  /  Left click", "B  /  Circle"],
 	["Long hit / cross (hold for power)", "X", "X  /  Square"],
 	["Through ball  /  block (no ball)", "F", "Y  /  Triangle"],
+	["Chipped through ball", "Q + F", "LB + Y"],
+	["Dummy (pull out of a hit)", "E while holding Space / X", "A while holding B / X"],
 	["Sprint", "Shift", "RT  /  R2"],
 	["Shield / hold up the ball (hold)", "Z", "LT  /  L2"],
 	["Switch player", "Q", "LB  /  L1"],
