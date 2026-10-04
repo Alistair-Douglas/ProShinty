@@ -1,9 +1,100 @@
 {
-	"_note": "Menu music. The mp3s are NOT in git (see README.md). demo_only tracks play only in the editor or in a build exported with the \"demo\" feature, and are left out of every other export.",
+	"_note": "Menu music. cc0/ tracks are in git and ship in every build. The Epidemic Sound mp3s are NOT in git (see README.md): demo_only tracks play only in the editor or in a build exported with the \"demo\" feature, and are left out of every other export.",
 	"tracks": [
-		{"file": "clever_bankston.mp3", "title": "Clever (Instrumental)", "artist": "Bankston", "source": "Epidemic Sound", "licensed": false, "demo_only": true},
-		{"file": "out_of_glory_trabant33.mp3", "title": "Out of Glory", "artist": "Trabant 33", "source": "Epidemic Sound", "licensed": false, "demo_only": true},
-		{"file": "long_way_home_aiyo.mp3", "title": "Long Way Home", "artist": "Aiyo", "source": "Epidemic Sound", "licensed": false, "demo_only": true},
-		{"file": "take_me_for_granted_grateful7.mp3", "title": "Take Me for Granted", "artist": "The Grateful 7", "source": "Epidemic Sound", "licensed": false, "demo_only": true}
+		{
+			"file": "clever_bankston.mp3",
+			"title": "Clever (Instrumental)",
+			"artist": "Bankston",
+			"source": "Epidemic Sound",
+			"licensed": false,
+			"demo_only": true
+		},
+		{
+			"file": "out_of_glory_trabant33.mp3",
+			"title": "Out of Glory",
+			"artist": "Trabant 33",
+			"source": "Epidemic Sound",
+			"licensed": false,
+			"demo_only": true
+		},
+		{
+			"file": "long_way_home_aiyo.mp3",
+			"title": "Long Way Home",
+			"artist": "Aiyo",
+			"source": "Epidemic Sound",
+			"licensed": false,
+			"demo_only": true
+		},
+		{
+			"file": "take_me_for_granted_grateful7.mp3",
+			"title": "Take Me for Granted",
+			"artist": "The Grateful 7",
+			"source": "Epidemic Sound",
+			"licensed": false,
+			"demo_only": true
+		},
+		{
+			"file": "cc0/play_house_its_all_a_game.mp3",
+			"title": "It's All a Game",
+			"artist": "Play House",
+			"licence": "CC0",
+			"licence_source": "As stated by Alistair, 2026-10-04 (no licence tag in the file)",
+			"licensed": true,
+			"demo_only": false
+		},
+		{
+			"file": "cc0/play_house_misunderstood_genius.mp3",
+			"title": "Misunderstood Genius",
+			"artist": "Play House",
+			"licence": "CC0",
+			"licence_source": "As stated by Alistair, 2026-10-04 (no licence tag in the file)",
+			"licensed": true,
+			"demo_only": false
+		},
+		{
+			"file": "cc0/play_house_say_sorry.mp3",
+			"title": "Say Sorry",
+			"artist": "Play House",
+			"licence": "CC0",
+			"licence_source": "As stated by Alistair, 2026-10-04 (no licence tag in the file)",
+			"licensed": true,
+			"demo_only": false
+		},
+		{
+			"file": "cc0/play_house_dont_let_me_go.mp3",
+			"title": "Don't Let Me Go",
+			"artist": "Play House",
+			"licence": "CC0",
+			"licence_source": "As stated by Alistair, 2026-10-04 (no licence tag in the file)",
+			"licensed": true,
+			"demo_only": false
+		},
+		{
+			"file": "cc0/play_house_run_run_run.mp3",
+			"title": "Run Run Run",
+			"artist": "Play House",
+			"licence": "CC0",
+			"licence_source": "As stated by Alistair, 2026-10-04 (file tag only links youtube.com/watch?v=0ZTRnkJYoIk)",
+			"licensed": true,
+			"demo_only": false
+		},
+		{
+			"file": "cc0/section31_let_the_games_begin.ogg",
+			"title": "Let the Games Begin",
+			"artist": "Section 31 - Tech",
+			"licence": "CC0 / no copyright",
+			"licence_source": "As stated by Alistair, 2026-10-04; file tag: \"No Copyright, free to do whatever you want with it (s31tech.org)\"",
+			"licensed": true,
+			"demo_only": false
+		},
+		{
+			"file": "cc0/sdacfn_arbitrary.mp3",
+			"title": "arbitrary",
+			"artist": "sdacfn",
+			"licence": "CC0 1.0",
+			"licence_source": "As stated by Alistair, 2026-10-04; file tag: \"This work is marked CC0 1.0\"",
+			"licensed": true,
+			"demo_only": false
+		}
 	]
 }

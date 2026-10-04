@@ -19,22 +19,29 @@ func _process(_delta: float) -> bool:
 func _run() -> void:
 	var ok := true
 	var list := Music.read_playlist()
-	if list.size() != 4:
-		push_error("playlist.json should list 4 tracks, has %d" % list.size())
-		ok = false
+	var cc0 := 0
 	for t in list:
-		if not Music.is_demo_only(t):
-			push_error("%s is not licensed and must be demo_only" % t.get("file"))
+		var in_git := str(t["file"]).begins_with("cc0/")
+		if in_git == Music.is_demo_only(t):
+			push_error("%s: cc0/ tracks are licensed, every other track must be demo_only" % t["file"])
 			ok = false
+		if in_git:
+			cc0 += 1
+			if not FileAccess.file_exists(Music.DIR + str(t["file"])):
+				push_error("%s is listed but missing from the repo" % t["file"])
+				ok = false
+	if list.size() - cc0 != 4 or cc0 != 7:
+		push_error("playlist.json should list 4 demo and 7 CC0 tracks")
+		ok = false
 	if not Music.is_demo_only({"licensed": false}) or Music.is_demo_only({"licensed": true}):
 		push_error("licensed: false should imply demo_only")
 		ok = false
 
 	var mus = root.get_node("Music")
-	var present: int = Music._music_files().size()
-	print("music: %d of %d mp3s present, %d playable" % [present, list.size(), mus.tracks.size()])
+	var present: int = Music._music_files().size() + cc0
+	print("music: %d of %d tracks present, %d playable" % [present, list.size(), mus.tracks.size()])
 	if mus.tracks.size() != present:
-		push_error("every present mp3 (and only those) should be playable here")
+		push_error("every present track (and only those) should be playable here")
 		ok = false
 	mus.set_volume_step(2, false)
 	mus.play()
@@ -63,8 +70,8 @@ func _run() -> void:
 	if load("res://addons/demo_music/export_plugin.gd") == null:
 		push_error("the export guard script should load")
 		ok = false
-	if Music.files_to_leave_out(PackedStringArray(["pc", "release"])).size() != Music.all_tracks().size():
-		push_error("a release export should leave out every demo track")
+	if Music.files_to_leave_out(PackedStringArray(["pc", "release"])).size() != Music.all_tracks().size() - cc0:
+		push_error("a release export should leave out every demo track and keep the CC0 ones")
 		ok = false
 	if not Music.files_to_leave_out(PackedStringArray(["pc", "demo"])).is_empty():
 		push_error("a demo export should keep the demo tracks")
