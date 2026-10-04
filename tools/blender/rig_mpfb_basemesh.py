@@ -46,7 +46,7 @@ if old.users == 0:
     bpy.data.meshes.remove(old)
 
 J = {}
-for n in ["pelvis", "spine-1", "spine-2", "spine-3", "spine-4", "neck", "head", "head-2", "ground"]:
+for n in ["pelvis", "spine-1", "spine-2", "spine-3", "spine-4", "neck", "head", "head-2", "ground", "l-eye", "r-eye"]:
     J[n] = joint(n)
 for s in ("l", "r"):
     for n in ["clavicle", "shoulder", "elbow", "hand", "hand-2", "upper-leg", "knee", "ankle", "foot-1", "foot-2"]:
@@ -97,6 +97,11 @@ for s in ("l", "r"):
     bone("calf_" + s, J[s + "-knee"], J[s + "-ankle"], "thigh_" + s)
     toe = min((J[s + "-foot-1"], J[s + "-foot-2"]), key=lambda p: p.y)  # the figure faces -Y
     bone("foot_" + s, J[s + "-ankle"], toe, "calf_" + s)
+# Eye centres, as markers that weigh nothing (the converter reads them to
+# place the game's eyeballs; MPFB's own eyes are helper geometry).
+for s in ("l", "r"):
+    e = bone("eye_" + s, J[s + "-eye"], J[s + "-eye"] + Vector((0, -0.03, 0)), "head")
+    e.use_deform = False
 bpy.ops.object.mode_set(mode="OBJECT")
 
 bpy.ops.object.select_all(action="DESELECT")

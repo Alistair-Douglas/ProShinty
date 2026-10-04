@@ -1,7 +1,7 @@
 """Turn a body exported from Blender (MPFB "Game engine" rig, or any rig with
 similar bone names) into a body file the game loads: models/bodies/<name>.json.
 
-    python3 tools/blender/import_body.py body.glb models/bodies/average.json [--tris 3900]
+    python3 tools/blender/import_body.py body.glb models/bodies/average.json [--tris 3900] [--no-head]
 
 Needs the `bpy` module (pip install bpy, Blender as a Python module), so it
 runs anywhere Python 3.11 does; no Blender window or MPFB needed here.
@@ -9,8 +9,11 @@ runs anywhere Python 3.11 does; no Blender window or MPFB needed here.
 What it does:
   1. Reads the .glb and maps every rig bone onto the game's skeleton
      (Hips, Spine, Chest, UpperChest, Neck, Left/Right UpperArm, LowerArm,
-     UpperLeg, LowerLeg). Hands, feet and the head are cut off: the game
-     keeps its own gripping hands, boots and face with helmet.
+     UpperLeg, LowerLeg, Head). Hands and feet are cut off: the game keeps
+     its own gripping hands and boots. The body's own head and face are
+     kept (the game sizes its helmet to the skull and puts its eyes where
+     the rig's eye_l/eye_r markers are); --no-head cuts the head off too and
+     the game builds its own.
   2. Bends the body from its A-pose into the game's rest pose (arms and legs
      straight down) and stretches each limb to the game's bone lengths, so
      poses, the arm solver and the caman grip work unchanged.
@@ -46,7 +49,11 @@ for s in ("Left", "Right"):
     CHILD[s + "UpperLeg"] = s + "LowerLeg"
     CHILD[s + "LowerLeg"] = s + "Foot"
 DROPPED = {"Head", "LeftHand", "RightHand", "LeftFoot", "RightFoot"}
+NECK_LIFT = 0.035  # metres
+if "--no-head" not in sys.argv:  # keep the body's own head and face
+    DROPPED.discard("Head")
 KEPT = [b for b in REF if b not in DROPPED]
+HEAD_TOP = 0.238  # the game's skull top above the Head bone, which the helmet fits
 
 
 def side_of(name):
@@ -182,6 +189,8 @@ def main():
     # Per game bone: rig frame -> game frame, stretched along the bone.
     xf = {}
     for g in KEPT:
+        if g == "Head":
+            continue  # sized from the mesh below
         c = CHILD[g]
         o_src, e_src = joint[g], joint[c]
         o_dst, e_dst = np.array(REF[g], float), np.array(REF[c], float)
@@ -236,6 +245,8 @@ def main():
         bpy.ops.object.modifier_apply(modifier="Decimate")
     print("triangles: %d after cutting, %d after decimating" % (before, len(me.polygons)))
 
+    eyes = []
+    skull = None
     # --- Bend into the game's rest pose ----------------------------------------
     wmat = body.matrix_world
     n = len(me.vertices)
@@ -252,6 +263,41 @@ def main():
     if empty.any():  # unweighted: nearest joint
         for i in np.where(empty)[0]:
             W[i, int(np.argmin([np.linalg.norm(pos[i] - joint[g]) for g in KEPT]))] = 1.0
+    if "Head" in KEPT:
+        # Turn the head upright and size it so its crown meets the game's
+        # skull top, so the helmet fits.
+        hi = KEPT.index("Head")
+        mine = np.argmax(W, 1) == hi
+        tail = to_godot(mw @ rig.data.bones[[n for n, x in mapping.items() if x == "Head"][0]].tail_local) * scale
+        o_src = joint["Head"]
+        r_src = frame(o_src, tail)
+        o_dst = np.array(REF["Head"], float)
+        r_dst = frame(o_dst, o_dst + np.array([0.0, 1.0, 0.0]))
+        m = r_dst @ r_src.T
+        # The head keeps its own size; the game fits its helmet to it. Our
+        # built skull is 16 cm wide with its centre 12.8 cm below the crown.
+        q = (pos[mine] - o_src) @ m.T
+        top = q[:, 1].max()
+        cran = q[q[:, 1] > top - 0.1]
+        k = np.abs(cran[:, 0]).max() / 0.081
+        cz = (cran[:, 2].max() + cran[:, 2].min()) / 2
+        skull = [0.0, float(top - 0.128 * k), float(cz - 0.004 * k), float(k)]
+        # Warped onto our shorter neck the chin sits on the collar: lift the
+        # head a little and stretch the neck to meet it.
+        dy, dz = NECK_LIFT, 0.0
+        skull[1] += dy
+        o_n, e_n = np.array(REF["Neck"], float), o_dst + np.array([0.0, dy, 0.0])
+        r_n = frame(joint["Neck"], joint["Head"])
+        stretch = np.linalg.norm(e_n - o_n) / np.linalg.norm(joint["Head"] - joint["Neck"])
+        xf["Neck"] = (frame(o_n, e_n) @ np.diag([1.0, stretch, 1.0]) @ r_n.T, joint["Neck"], o_n)
+        print("head: helmet scaled %.2f, lifted %.3f m (neck stretched %.2f)" % (k, dy, stretch))
+        xf["Head"] = (m, o_src, o_dst + np.array([0.0, dy, dz]))
+        for side in ("l", "r"):
+            b = rig.data.bones.get("eye_" + side)
+            if b:
+                e = to_godot(mw @ b.head_local) * scale
+                m, a, d = xf["Head"]
+                eyes.append(list(np.round((e - a) @ m.T + d, 4)))
     # Keep the four strongest, normalised.
     order = np.argsort(-W, axis=1)
     keep = order[:, :4]
@@ -286,6 +332,7 @@ def main():
     SLEEVE, CUFF = 0.155, 0.185
     WAIST_SHIRT, WAIST_SHORTS = 1.0, 1.06
     SHORTS_LEG = 0.2
+    NECKLINE = 1.5
     SOCK_TOP = REF["LeftLowerLeg"][1] - 0.07
     # Cut the mesh along each kit edge (limbs hang straight down at rest, so
     # every edge is a height) so hems and sock tops are straight, not jagged.
@@ -299,7 +346,8 @@ def main():
             (arm_y - SLEEVE, lambda d: np.char.endswith(d, "UpperArm").any()),
             (arm_y - CUFF, lambda d: np.char.endswith(d, "UpperArm").any()),
             (WAIST_SHIRT, lambda d: all(x in ("Hips", "Spine", "Chest") for x in d)),
-            (WAIST_SHORTS, lambda d: all(x in ("Hips", "Spine", "Chest") for x in d))]
+            (WAIST_SHORTS, lambda d: all(x in ("Hips", "Spine", "Chest") for x in d)),
+            (NECKLINE, lambda d: all(x in ("Chest", "UpperChest", "Neck") for x in d))]
     for level, applies in cuts:
         pos, vn, dense, tri = split(pos, vn, dense, tri, level, lambda t: applies(names[np.argmax(dense[t], 1)]))
     order = np.argsort(-dense, axis=1)
@@ -323,14 +371,20 @@ def main():
                 out.append("cuff" if d > SLEEVE else "shirt")
             if d > SLEEVE - 0.03:
                 out.append("skin")
-        elif g.endswith("LowerArm") or g == "Neck" and y > 1.47:
+        elif g == "Head" and eyes:
+            # Hair: above a hairline on the forehead, over the crown and
+            # down the back to the nape, and above the ears at the sides.
+            r = c - np.mean(np.array(eyes), 0)
+            hair = r[1] > 0.045 or r[2] > 0.065 and r[1] > -0.07 or abs(r[0]) > 0.06 and r[2] > 0.02 and r[1] > 0.025
+            out.append("hair" if hair else "skin")
+        elif g.endswith("LowerArm") or g == "Head":
             out.append("skin")
         elif g in ("Spine", "Chest", "UpperChest", "Neck", "Hips"):
-            if y > WAIST_SHIRT and y < 1.5:
+            if y > WAIST_SHIRT and y < NECKLINE:
                 out.append("torso")
             if y < WAIST_SHORTS:
                 out.append("shorts")
-            if y >= 1.5:
+            if y > NECKLINE - 0.03:
                 out.append("skin")
         elif g.endswith("UpperLeg"):
             d = along(c, g)
@@ -347,7 +401,7 @@ def main():
             out.append("skin")
         return out
 
-    LIFT = {"skin": 0.0, "torso": 0.009, "shirt": 0.01, "cuff": 0.011, "shorts": 0.013, "socks": 0.003}
+    LIFT = {"hair": 0.002, "skin": 0.0, "torso": 0.009, "shirt": 0.01, "cuff": 0.011, "shorts": 0.013, "socks": 0.003}
     surf = {k: {"tri": []} for k in LIFT}
     for fi, t in enumerate(tri):
         i = int(t[np.argmax(W4[t, 0])])
@@ -358,6 +412,9 @@ def main():
     bones_out = KEPT
     result = {"name": name, "source": src.rsplit("/", 1)[-1], "build": build,
               "bones": bones_out, "ref": {b: list(REF[b]) for b in bones_out}, "surfaces": {}}
+    if "Head" in KEPT and eyes:
+        result["eyes"] = [[float(x) for x in e] for e in eyes]
+        result["skull"] = [round(x, 4) for x in skull]
     total = 0
     for name, s in surf.items():
         if not s["tri"]:

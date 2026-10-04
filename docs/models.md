@@ -104,8 +104,9 @@ animation or physics.
 
 ### Bodies from Blender (MPFB)
 
-Bodies made in Blender with the MPFB add-on can replace the built torso, arms
-and legs. The game keeps its own gripping hands, boots, head, face and helmet.
+Bodies made in Blender with the MPFB add-on can replace the built torso, arms,
+legs, head and face. The game keeps its own gripping hands, boots, eyes and
+helmet; the helmet is sized to the body's skull.
 
 1. In Blender (4.2 or newer) with MPFB: New Human, set the body (male, about
    25, muscle fairly high), add the **Game engine** rig, no clothes or hair,
@@ -116,10 +117,13 @@ and legs. The game keeps its own gripping hands, boots, head, face and helmet.
 
    It maps the rig onto the game skeleton, bends the A-pose into the game's
    rest pose and stretches the limbs to its bone lengths (so poses, the arm
-   solver and the caman grip are unchanged), cuts off the head, hands and
-   feet, cuts the body down to about 3,900 triangles (`--tris`), and splits it
-   into skin, shirt, cuff, shorts and socks with straight hems, the kit lifted
-   a little off the skin.
+   solver and the caman grip are unchanged), cuts off the hands and feet,
+   stands the head upright on a slightly longer neck, cuts the body down to
+   about 3,900 triangles (`--tris`), and splits it into skin, hair, shirt,
+   cuff, shorts and socks with straight hems and neckline, the kit lifted a
+   little off the skin. Hair colour and skin tone still come from each
+   player. `--no-head` cuts the head off too and the game builds its own
+   head and face.
 3. Files named `lean`, `average` and `stocky` are picked by each player's
    build (below 0.36, between, above 0.64); shoulder and hip width and girth
    are then fitted per player. With no files in `models/bodies/` the built
