@@ -55,6 +55,9 @@ var yellows := {}                 ## Player -> yellow cards
 var cards := []                   ## {player, team, colour, minute}
 var calls := []                   ## every decision: {call, team, kind, minute}
 var sent_off := []
+## Every foul the whistle went for, for the TV replay: {kind, at, ago, team}
+## (ago = seconds between the foul and the whistle, longer after advantage).
+var whistles := []
 
 var _next_event := 0
 var _offside_team := -1           ## team whose strike froze offside positions
@@ -271,8 +274,9 @@ func _card_for(p, kind: String, severity: float) -> String:
 	return ""
 
 
-func _whistle(p, team: int, at: Vector2, kind: String, in_d: bool, card: String) -> void:
+func _whistle(p, team: int, at: Vector2, kind: String, in_d: bool, card: String, ago := 0.0) -> void:
 	_advantage = {}
+	whistles.append({"kind": kind, "at": at, "ago": ago, "team": team})
 	var what: String = FOUL_NAMES.get(kind, kind)
 	var text: String
 	if in_d:
@@ -310,7 +314,7 @@ func _update_advantage(dt: float) -> void:
 	var lost: bool = (m.carrier != null and m.carrier.team != team) or (m.carrier == null and m.last_team != team)
 	if lost:
 		var a := _advantage
-		_whistle(a["offender"], team, a["at"], a["kind"], false, "")
+		_whistle(a["offender"], team, a["at"], a["kind"], false, "", ADVANTAGE_SECONDS - a["timer"])
 		return
 	_advantage["timer"] -= dt
 	if _advantage["timer"] <= 0.0:
