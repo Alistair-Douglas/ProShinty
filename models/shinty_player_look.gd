@@ -441,8 +441,10 @@ var _torso_pts := PackedVector3Array()
 
 
 ## Depth of the shirt surface at a spot on a torso bone, for things printed
-## on it: the built body's guess, or the imported body's actual surface.
-func _shirt_z(holder: Node3D, guess: Vector3, lift := 0.002) -> float:
+## on it: the built body's guess, or the imported body's actual surface
+## (the outermost point within span either side, so a wide print clears
+## the shoulder blades).
+func _shirt_z(holder: Node3D, guess: Vector3, lift := 0.002, span := 0.03) -> float:
 	if _torso_pts.is_empty():
 		return guess.z
 	var at := skel.get_bone_global_rest(skel.find_bone((holder as BoneAttachment3D).bone_name)).origin
@@ -450,7 +452,7 @@ func _shirt_z(holder: Node3D, guess: Vector3, lift := 0.002) -> float:
 	var best := 0.0
 	var found := false
 	for p in _torso_pts:
-		if absf(p.x - q.x) < 0.03 and absf(p.y - q.y) < 0.03 and signf(p.z) == signf(guess.z):
+		if absf(p.x - q.x) < span and absf(p.y - q.y) < 0.03 and signf(p.z) == signf(guess.z):
 			if not found or absf(p.z) > absf(best):
 				best = p.z
 				found = true
@@ -631,7 +633,7 @@ func _kit_details() -> void:
 	# Number on the back, surname above it, small number on the front.
 	if m.shirt_number > 0:
 		var back := _label(str(m.shirt_number), 110, 0.0021)
-		back.position = Vector3(0, 0.0, _shirt_z(upper, Vector3(0, 0.0, 0.112 * w)))
+		back.position = Vector3(0, 0.0, _shirt_z(upper, Vector3(0, 0.0, 0.112 * w), 0.002, 0.075))
 		upper.add_child(back)
 		var front := _label(str(m.shirt_number), 64, 0.0012)
 		front.position = Vector3(0.075 * w, 0.02, _shirt_z(chest, Vector3(0.075 * w, 0.02, -0.118 * w)))
@@ -640,7 +642,7 @@ func _kit_details() -> void:
 	var surname := _surname()
 	if surname != "":
 		var name_label := _label(surname, 48, 0.00115)
-		name_label.position = Vector3(0, 0.1, _shirt_z(upper, Vector3(0, 0.1, 0.103 * w)))
+		name_label.position = Vector3(0, 0.1, _shirt_z(upper, Vector3(0, 0.1, 0.103 * w), 0.002, 0.09))
 		name_label.rotation.x = -0.12
 		upper.add_child(name_label)
 	# Club crest on the left breast: a shield in the trim colour.

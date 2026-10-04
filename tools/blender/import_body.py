@@ -333,6 +333,9 @@ def main():
     WAIST_SHIRT, WAIST_SHORTS = 1.0, 1.06
     SHORTS_LEG = 0.2
     NECKLINE = 1.5
+    # Shin pads under the socks: a flat raised panel down the front of the
+    # shin with a small lip at each end (PAD_EDGE wide).
+    PAD_TOP, PAD_BOTTOM, PAD_EDGE, PAD = REF["LeftLowerLeg"][1] - 0.09, REF["LeftFoot"][1] + 0.11, 0.008, 0.011
     SOCK_TOP = REF["LeftLowerLeg"][1] - 0.07
     # Cut the mesh along each kit edge (limbs hang straight down at rest, so
     # every edge is a height) so hems and sock tops are straight, not jagged.
@@ -341,12 +344,14 @@ def main():
     names = np.array(KEPT)
     arm_y = REF["LeftUpperArm"][1]
     leg_y = REF["LeftUpperLeg"][1]
-    cuts = [(SOCK_TOP, lambda d: np.char.endswith(d, "LowerLeg").any()),
+    shin = lambda d: np.char.endswith(d, "LowerLeg").any()
+    cuts = [(SOCK_TOP, shin), (PAD_TOP, shin), (PAD_TOP - PAD_EDGE, shin),
+            (PAD_BOTTOM, shin), (PAD_BOTTOM + PAD_EDGE, shin),
             (leg_y - SHORTS_LEG, lambda d: all(x.endswith("UpperLeg") or x == "Hips" for x in d)),
             (arm_y - SLEEVE, lambda d: np.char.endswith(d, "UpperArm").any()),
             (arm_y - CUFF, lambda d: np.char.endswith(d, "UpperArm").any()),
-            (WAIST_SHIRT, lambda d: all(x in ("Hips", "Spine", "Chest") for x in d)),
-            (WAIST_SHORTS, lambda d: all(x in ("Hips", "Spine", "Chest") for x in d)),
+            (WAIST_SHIRT, lambda d: not any("Arm" in x for x in d)),
+            (WAIST_SHORTS, lambda d: not any("Arm" in x for x in d)),
             (NECKLINE, lambda d: all(x in ("Chest", "UpperChest", "Neck") for x in d))]
     for level, applies in cuts:
         pos, vn, dense, tri = split(pos, vn, dense, tri, level, lambda t: applies(names[np.argmax(dense[t], 1)]))
@@ -388,6 +393,8 @@ def main():
                 out.append("skin")
         elif g.endswith("UpperLeg"):
             d = along(c, g)
+            if y > WAIST_SHIRT:  # round the back of the hips
+                out.append("torso")
             if d < SHORTS_LEG:
                 out.append("shorts")
             if d > SHORTS_LEG - 0.03:
@@ -424,16 +431,46 @@ def main():
         p = pos[used].copy()
         nrm = vn[used]
         lift = LIFT[name]
-        if name == "shorts":  # looser towards the hem of each leg
+        if name == "socks":  # shin pad: flat front panel with a lip at each end
+            for k in range(len(used)):
+                y = p[k][1]
+                band = min(1.0, max(0.0, (PAD_TOP - y) / PAD_EDGE), max(0.0, (y - PAD_BOTTOM) / PAD_EDGE))
+                front = min(1.0, max(0.0, (-nrm[k][2] - 0.25) / 0.35))
+                p[k] += nrm[k] * lift
+                p[k][2] -= PAD * band * front
+            # Shade the pad's edges: normals from the padded shape.
+            fn = np.cross(p[inv.reshape(-1, 3)[:, 1]] - p[inv.reshape(-1, 3)[:, 0]],
+                          p[inv.reshape(-1, 3)[:, 2]] - p[inv.reshape(-1, 3)[:, 0]])
+            nn = np.zeros_like(p)
+            for c3 in range(3):
+                np.add.at(nn, inv.reshape(-1, 3)[:, c3], fn)
+            nn /= np.maximum(np.linalg.norm(nn, axis=1, keepdims=True), 1e-9)
+            nn = -nn if np.mean(np.einsum("ij,ij->i", nn, vn[used])) < 0 else nn
+            near = (p[:, 1] > PAD_BOTTOM - PAD_EDGE) & (p[:, 1] < PAD_TOP + PAD_EDGE)
+            nrm = np.where(near[:, None], nn, nrm)
+        elif name == "shirt":  # sleeves loosen towards the hem
+            for k, vi in enumerate(used):
+                g = dom[vi]
+                d = along(vi, g) if g.endswith("UpperArm") else 0.0
+                p[k] += nrm[k] * (lift + 0.008 * min(1.0, max(0.0, d) / CUFF))
+        elif name == "cuff":
+            p += nrm * (lift + 0.008)
+        elif name == "shorts":  # looser towards the hem of each leg
             for k, vi in enumerate(used):
                 g = dom[vi]
                 if g.endswith("UpperLeg"):
                     p[k] += nrm[k] * (lift + 0.012 * min(1.0, max(0.0, along(vi, g)) / SHORTS_LEG))
                 else:
                     p[k] += nrm[k] * lift
-        elif name == "torso":  # the hem hangs over the shorts' waistband
+        elif name == "torso":
+            # The shirt hangs loose from the chest down (it doesn't follow
+            # the waist in), and its hem sits over the shorts' waistband.
             for k in range(len(used)):
-                p[k] += nrm[k] * (lift + (0.008 if p[k][1] < WAIST_SHORTS + 0.02 else 0.0))
+                y = p[k][1]
+                loose = 0.014 * min(1.0, max(0.0, (REF["UpperChest"][1] - y) / (REF["UpperChest"][1] - WAIST_SHIRT)))
+                out_dir = np.array([p[k][0], 0.0, p[k][2]])
+                out_dir /= max(np.linalg.norm(out_dir), 1e-9)
+                p[k] += nrm[k] * lift + out_dir * (loose + (0.006 if y < WAIST_SHORTS + 0.02 else 0.0))
         else:
             p += nrm * lift
         uv = np.zeros((len(used), 2))
@@ -450,14 +487,35 @@ def main():
                 uv[k] = (math.atan2(q[0], -q[2]) * 0.15, q[1] - REF["Chest"][1] + 0.02)
             else:
                 uv[k] = (math.atan2(q[0], -q[2]) * 0.15, q[1])
+        # u goes round the body; where it wraps (behind the back, inside a
+        # limb) a face would smear the whole pattern across itself, so those
+        # faces get their own copies of the low-u vertices, one turn on.
+        turn = 2 * math.pi * (0.05 if name in ("shirt", "cuff", "socks") else 0.15)
+        idx = inv.reshape(-1, 3).copy()
+        bones_v, w_v = keep[used], W4[used]
+        extra = {}
+        for f3 in idx:
+            u = uv[f3, 0]
+            if u.max() - u.min() > turn / 2:
+                for c3 in range(3):
+                    vi = f3[c3]
+                    if uv[vi, 0] < 0:
+                        if vi not in extra:
+                            extra[vi] = len(p) + len(extra)
+                        f3[c3] = extra[vi]
+        if extra:
+            src_i = np.array(list(extra.keys()))
+            p, nrm = np.vstack([p, p[src_i]]), np.vstack([nrm, nrm[src_i]])
+            uv = np.vstack([uv, uv[src_i] + np.array([turn, 0.0])])
+            bones_v, w_v = np.vstack([bones_v, bones_v[src_i]]), np.vstack([w_v, w_v[src_i]])
         total += len(t)
         result["surfaces"][name] = {
             "v": np.round(p, 4).ravel().tolist(),
             "n": np.round(nrm, 3).ravel().tolist(),
             "uv": np.round(uv, 4).ravel().tolist(),
-            "b": keep[used].ravel().tolist(),
-            "w": np.round(W4[used], 3).ravel().tolist(),
-            "i": inv.astype(int).ravel().tolist(),
+            "b": bones_v.ravel().tolist(),
+            "w": np.round(w_v, 3).ravel().tolist(),
+            "i": idx.astype(int).ravel().tolist(),
         }
     with open(out, "w") as f:
         json.dump(result, f, separators=(",", ":"))

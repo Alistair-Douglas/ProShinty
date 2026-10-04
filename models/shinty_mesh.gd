@@ -204,11 +204,23 @@ void fragment() {
 		t = max(t, step(0.5, fract(UV.x / pattern_scale)));
 	}
 	c = mix(c, trim_color.rgb, t);
-	// Knit: fine diagonal weave and soft folds, only visible up close.
+	// Knit: fine diagonal weave, only visible up close.
 	vec2 k = UV * 520.0;
 	float knit = sin(k.x + k.y) * sin(k.x - k.y);
-	float folds = sin(UV.x * 21.0 + sin(UV.y * 11.0) * 2.0) * 0.5 + 0.5;
-	c *= 1.0 + weave * (knit * 0.035 - (1.0 - folds) * 0.07);
+	// Folds: soft drapes hanging down the cloth plus a few diagonal creases,
+	// as a height (in metres) that bends the shading normal. u runs round
+	// the body; multiples of 20 in u repeat exactly once round a body, arm
+	// or leg, so there is no seam.
+	float drape = sin(UV.x * 20.0 + sin(UV.y * 11.0) * 2.0);
+	float crease = sin(UV.x * 40.0 + UV.y * 38.0 + cos(UV.x * 20.0) * 1.5);
+	crease *= smoothstep(0.2, 0.9, sin(UV.x * 20.0 + UV.y * 7.0 + 1.3));
+	float h = weave * (drape * 0.0055 + crease * 0.002);
+	vec3 dpx = dFdx(VERTEX), dpy = dFdy(VERTEX);
+	vec3 r1 = cross(dpy, NORMAL), r2 = cross(NORMAL, dpx);
+	float det = dot(dpx, r1);
+	vec3 grad = sign(det) * (dFdx(h) * r1 + dFdy(h) * r2);
+	NORMAL = normalize(abs(det) * NORMAL - grad);
+	c *= 1.0 + weave * (knit * 0.035 - (0.5 - 0.5 * drape) * 0.05);
 	ALBEDO = c;
 	ROUGHNESS = roughness;
 	SPECULAR = 0.25;
