@@ -189,6 +189,22 @@ func goal_transform(end: int) -> Transform3D:
 ## first sponsor. A venue can set its own with board_rows(); by default there
 ## is a row along the far touchline, where the TV camera sees it, and one
 ## behind each hail.
+## How the pre-match flight goes round this ground: {} for the usual sweep,
+## else "from" and "to" (angles round the pitch centre, 0 = the east end,
+## PI/2 = the near side), "look" (where it ends up looking) and optionally
+## "radius" and "height" (where the camera ends up), in world units.
+func intro_flight() -> Dictionary:
+	if _layout == null or not _layout.has_method("intro_flight"):
+		return {}
+	var f: Dictionary = _layout.intro_flight()
+	var s := units_per_yard / YARD_M
+	f["look"] = f["look"] * s
+	for k in ["radius", "height"]:
+		if f.has(k):
+			f[k] = f[k] * s
+	return f
+
+
 func board_rows() -> Array:
 	var rows: Array
 	if _layout != null and _layout.has_method("board_rows"):
