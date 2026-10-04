@@ -427,26 +427,28 @@ func _imported_body(mats: Dictionary) -> void:
 	var trim := mats["cuff"] as Material
 	for b in ["Hips", "Spine", "Chest", "UpperChest"]:
 		_attach(b)
-	# Shirt front for the sponsor print (ShintyKitSponsor reads mesh_aabb).
-	var spine := _find_attach("Spine")
-	var sp_at := skel.get_bone_global_rest(skel.find_bone("Spine")).origin
+	# Shirt front for the sponsor print, across the chest as on real shirts
+	# (ShintyKitSponsor reads sponsor_holder, then mesh_aabb and front_curve).
+	var holder := _find_attach("Chest")
+	var at := skel.get_bone_global_rest(skel.find_bone("Chest")).origin
 	var box := AABB()
 	var first := true
 	for p in torso_pts:
-		if p.y > sp_at.y - 0.06 and p.y < sp_at.y + 0.15:
+		if p.y > at.y - 0.04 and p.y < at.y + 0.12:
 			if first:
-				box = AABB(p - sp_at, Vector3.ZERO)
+				box = AABB(p - at, Vector3.ZERO)
 				first = false
 			else:
-				box = box.expand(p - sp_at)
+				box = box.expand(p - at)
 	if not first:
-		spine.set_meta("mesh_aabb", box)
+		skel.set_meta("sponsor_holder", String(holder.name))
+		holder.set_meta("mesh_aabb", box)
 		# The shirt front across the sponsor's height, for the print to follow.
 		var y := box.position.y + box.size.y * 0.5
 		var bins := {}
 		for p in torso_pts:
-			var q := p - sp_at
-			if q.z < 0.0 and absf(q.y - y) < 0.025:
+			var q := p - at
+			if q.z < 0.0 and absf(q.y - y) < 0.05:
 				var bin := roundi(q.x / 0.02)
 				bins[bin] = minf(bins.get(bin, 0.0), q.z)
 		var keys := bins.keys()
@@ -454,7 +456,7 @@ func _imported_body(mats: Dictionary) -> void:
 		var curve := PackedVector2Array()
 		for bin in keys:
 			curve.append(Vector2(bin * 0.02, bins[bin]))
-		spine.set_meta("front_curve", curve)
+		holder.set_meta("front_curve", curve)
 	var upper := _find_attach("UpperChest")
 	_mesh(upper, _loft([[0.13, 0.066, 0.056, 0.003], [0.165, 0.058, 0.05, 0.0]], seg, 2.0, true), trim)
 	for side in ["Left", "Right"]:
@@ -659,6 +661,9 @@ func _kit_details() -> void:
 		return
 	var upper := _find_attach("UpperChest")
 	var chest := _find_attach("Chest")
+	# Small number and crest: up near the collarbones when the sponsor goes
+	# across the chest (imported bodies), else on the chest.
+	var hi := 0.15 if skel.has_meta("sponsor_holder") else 0.02
 	# Number on the back and a small one on the front (shinty shirts carry no
 	# names).
 	if m.shirt_number > 0:
@@ -666,13 +671,13 @@ func _kit_details() -> void:
 		back.position = Vector3(0, 0.0, _shirt_z(upper, Vector3(0, 0.0, 0.112 * w), 0.002, 0.075))
 		upper.add_child(back)
 		var front := _label(str(m.shirt_number), 64, 0.0012)
-		front.position = Vector3(0.075 * w, 0.02, _shirt_z(chest, Vector3(0.075 * w, 0.02, -0.118 * w)))
+		front.position = Vector3(0.075 * w, hi, _shirt_z(chest, Vector3(0.075 * w, hi, -0.118 * w)))
 		front.rotation.y = PI
 		chest.add_child(front)
 	# Club crest on the left breast: a shield in the trim colour.
 	var crest := _loft([[0.0, 0.004, 0.022], [0.02, 0.018, 0.024], [0.045, 0.02, 0.022], [0.052, 0.02, 0.02]], 10, 3.0)
 	var ci := _mesh(chest, crest, ShintyMesh.solid(m.trim_color, 0.6),
-		Vector3(-0.075 * w, 0.03, _shirt_z(chest, Vector3(-0.075 * w, 0.03, -0.114 * w), 0.004)))
+		Vector3(-0.075 * w, hi + 0.01, _shirt_z(chest, Vector3(-0.075 * w, hi + 0.01, -0.114 * w), 0.004)))
 	ci.rotation = Vector3(PI / 2 - 0.1, 0, 0)
 	ci.scale = Vector3(1, 1, 0.12)
 

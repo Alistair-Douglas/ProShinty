@@ -3,7 +3,7 @@ extends RefCounted
 ## Prints a sponsor across the front of a player's shirt.
 ##
 ## Works with any ShintyPlayerModel: it finds the shirt pieces the model hangs
-## on its "Spine" bone (or their size, recorded as "mesh_aabb" when they were
+## on its "Spine" bone (or the bone the skeleton names in "sponsor_holder") (or their size, recorded as "mesh_aabb" when they were
 ## baked into one mesh), measures them, and adds a print flush with the front of
 ## the shirt, so it follows the body and fits slim and heavy builds. Call it
 ## after setup() (and again after rebuild(), which clears it).
@@ -19,7 +19,7 @@ static func apply(model: ShintyPlayerModel, texture: Texture2D, color = null) ->
 	var skel := model.find_child("Skeleton3D", true, false) as Skeleton3D
 	if skel == null or texture == null:
 		return null
-	var holder := skel.get_node_or_null("SpineAttach") as Node3D
+	var holder := skel.get_node_or_null(str(skel.get_meta("sponsor_holder", "SpineAttach"))) as Node3D
 	if holder == null:
 		return null
 	var old := holder.get_node_or_null(NODE_NAME)
@@ -40,7 +40,8 @@ static func apply(model: ShintyPlayerModel, texture: Texture2D, color = null) ->
 		return null
 	var width := box.size.x * 0.8
 	var height := width / 3.0
-	# Across the upper abdomen, below the chest number and crest.
+	# Across the middle of the box (the upper abdomen, or the chest when the
+	# model hangs it on its chest).
 	var centre := Vector3(box.get_center().x, box.position.y + box.size.y * 0.5, box.position.z)
 	# The shirt's front across that height (an imported body records it as
 	# "front_curve", x and z samples), so the print wraps round the body
@@ -57,7 +58,7 @@ static func apply(model: ShintyPlayerModel, texture: Texture2D, color = null) ->
 	var ink: Color = color if color is Color else model.trim_color
 	if ink.is_equal_approx(panel_col):
 		ink = Color.WHITE if panel_col.get_luminance() < 0.5 else Color(0.08, 0.08, 0.1)
-	root.mesh = _strip(width * 1.08, height * 1.25, centre, curve, 0.003)
+	root.mesh = _strip(width * 1.08, height * 1.25, centre, curve, 0.009)
 	var pm := StandardMaterial3D.new()
 	pm.albedo_color = panel_col
 	pm.roughness = 0.8
@@ -65,7 +66,7 @@ static func apply(model: ShintyPlayerModel, texture: Texture2D, color = null) ->
 	root.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	var mi := MeshInstance3D.new()
 	mi.name = "Print"
-	mi.mesh = _strip(width, height, centre, curve, 0.0045)
+	mi.mesh = _strip(width, height, centre, curve, 0.0105)
 	var mat := StandardMaterial3D.new()
 	mat.albedo_texture = texture
 	mat.albedo_color = ink
