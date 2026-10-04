@@ -441,6 +441,20 @@ func _imported_body(mats: Dictionary) -> void:
 				box = box.expand(p - sp_at)
 	if not first:
 		spine.set_meta("mesh_aabb", box)
+		# The shirt front across the sponsor's height, for the print to follow.
+		var y := box.position.y + box.size.y * 0.5
+		var bins := {}
+		for p in torso_pts:
+			var q := p - sp_at
+			if q.z < 0.0 and absf(q.y - y) < 0.025:
+				var bin := roundi(q.x / 0.02)
+				bins[bin] = minf(bins.get(bin, 0.0), q.z)
+		var keys := bins.keys()
+		keys.sort()
+		var curve := PackedVector2Array()
+		for bin in keys:
+			curve.append(Vector2(bin * 0.02, bins[bin]))
+		spine.set_meta("front_curve", curve)
 	var upper := _find_attach("UpperChest")
 	_mesh(upper, _loft([[0.13, 0.066, 0.056, 0.003], [0.165, 0.058, 0.05, 0.0]], seg, 2.0, true), trim)
 	for side in ["Left", "Right"]:
@@ -645,7 +659,8 @@ func _kit_details() -> void:
 		return
 	var upper := _find_attach("UpperChest")
 	var chest := _find_attach("Chest")
-	# Number on the back, surname above it, small number on the front.
+	# Number on the back and a small one on the front (shinty shirts carry no
+	# names).
 	if m.shirt_number > 0:
 		var back := _label(str(m.shirt_number), 110, 0.0021)
 		back.position = Vector3(0, 0.0, _shirt_z(upper, Vector3(0, 0.0, 0.112 * w), 0.002, 0.075))
@@ -654,12 +669,6 @@ func _kit_details() -> void:
 		front.position = Vector3(0.075 * w, 0.02, _shirt_z(chest, Vector3(0.075 * w, 0.02, -0.118 * w)))
 		front.rotation.y = PI
 		chest.add_child(front)
-	var surname := _surname()
-	if surname != "":
-		var name_label := _label(surname, 48, 0.00115)
-		name_label.position = Vector3(0, 0.1, _shirt_z(upper, Vector3(0, 0.1, 0.103 * w), 0.002, 0.09))
-		name_label.rotation.x = -0.12
-		upper.add_child(name_label)
 	# Club crest on the left breast: a shield in the trim colour.
 	var crest := _loft([[0.0, 0.004, 0.022], [0.02, 0.018, 0.024], [0.045, 0.02, 0.022], [0.052, 0.02, 0.02]], 10, 3.0)
 	var ci := _mesh(chest, crest, ShintyMesh.solid(m.trim_color, 0.6),
@@ -688,17 +697,6 @@ func _label(text: String, size: int, px: float) -> Label3D:
 	f.font_weight = 800
 	l.font = f
 	return l
-
-
-func _surname() -> String:
-	var n := str(m.player_data.get("name", "")).strip_edges()
-	if n == "":
-		return ""
-	var parts := n.split(" ", false)
-	var last: String = parts[parts.size() - 1]
-	if last.is_valid_int() or last.to_lower() == "player":
-		return ""
-	return last.to_upper()
 
 
 # --- Head, face, hair ----------------------------------------------------------------

@@ -81,8 +81,9 @@ animation or physics.
   darker tone.
 - **Kit** uses a fabric shader with a fine knit and soft folds, a chest band
   and cuffs in the trim colour, a collar, a crest on the left breast, a small
-  number on the front, and the number and surname on the back (surnames show
-  once squads have real names). Socks have trim hoops. A team can set
+  number on the front, a big number on the back (no names: shinty shirts
+  don't carry them) and the team's sponsor across the front in matches.
+  Socks have trim hoops. A team can set
   `colors.pattern` to `"hoops"` or `"stripes"`.
 - **Boots** are low-cut football boots: a flat sole plate with a little toe
   spring, a heel collar round the ankle, a lace panel over the instep, a
