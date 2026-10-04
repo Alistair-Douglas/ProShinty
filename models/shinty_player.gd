@@ -922,8 +922,11 @@ func _pose(_delta: float) -> void:
 	if free_target == null and carry_top != null:
 		free_target = top.lerp(carry_top, carry)
 	# A runner's free arm swings with the elbow tucked down and back.
-	_solve_arm(top_side, free_target if free_target != null else top, carry if carry_top != null else 0.0)
-	_solve_arm(low_side, _free_low if _free_low != null else low, carry if carry_top != null else 0.0)
+	var shaft_dir := -ct.basis.y
+	_solve_arm(top_side, free_target if free_target != null else top, carry if carry_top != null else 0.0,
+		shaft_dir if free_target == null else Vector3.ZERO)
+	_solve_arm(low_side, _free_low if _free_low != null else low, carry if carry_top != null else 0.0,
+		shaft_dir if _free_low == null else Vector3.ZERO)
 	if _rag != null and _rag_w > 0.0:
 		_apply_ragdoll()
 
@@ -1380,14 +1383,55 @@ func _arm_reach(side: String) -> float:
 
 ## Two-bone IK in skeleton space: bend the arm so the hand reaches `target`.
 ## `tuck` 0..1 brings the elbow in to the side (a runner's arm) instead of out.
-func _solve_arm(side: String, target: Vector3, tuck: float = 0.0) -> void:
+## `shaft` (the caman's direction, butt to bas) turns the hand to grip it: the
+## shaft runs across the hand along its local X, HAND_GRIP from the wrist, so
+## the fingers wrap round it (ShintyPlayerLook models them that way).
+func _solve_arm(side: String, target: Vector3, tuck: float = 0.0, shaft := Vector3.ZERO) -> void:
+	var hand_len: float = (_rest_origin[side + "Hand"] as Vector3).length()
+	var lb := _arm_ik(side, target, hand_len + HAND_GRIP, tuck)
+	var hd: int = _bone[side + "Hand"]
+	if shaft.length() < 0.001:
+		_skel.set_bone_pose_rotation(hd, Quaternion.IDENTITY)
+		return
+	# The hand points from the wrist to the shaft, square to it, so the wrist
+	# sits HAND_GRIP back from the grip along the forearm minus its slope
+	# along the shaft. Solve again to that wrist, then turn the hand.
+	var sd := shaft.normalized()
+	var fore := -lb.y.normalized()
+	var dn := fore - sd * fore.dot(sd)
+	dn = dn.normalized() if dn.length() > 0.2 else fore
+	# At full stretch, roll the hand round the shaft towards the shoulder
+	# (the wrist then sits nearest it) rather than overreach.
+	var ua: int = _bone[side + "UpperArm"]
+	var shoulder: Vector3 = _skel.get_bone_global_pose(_skel.get_bone_parent(ua)) * _rest_origin[side + "UpperArm"]
+	var reach: float = (_rest_origin[side + "LowerArm"] as Vector3).length() + hand_len
+	var away := target - shoulder
+	away = away - sd * away.dot(sd)
+	if away.length() > 0.01:
+		away = away.normalized()
+		for k in 6:
+			if (target - dn * HAND_GRIP - shoulder).length() < reach * 0.995:
+				break
+			dn = dn.slerp(away, 0.4).normalized() if dn.dot(away) > -0.99 else away
+	# Still short: the hand slides up the shaft a little, staying on it.
+	var grip := target
+	for k in 10:
+		if (grip - dn * HAND_GRIP - shoulder).length() < reach * 0.995:
+			break
+		grip -= sd * 0.01
+	lb = _arm_ik(side, grip - dn * HAND_GRIP, hand_len, tuck)
+	var hb := Basis(sd, -dn, sd.cross(-dn)).orthonormalized()
+	_skel.set_bone_pose_rotation(hd, (lb.orthonormalized().inverse() * hb).get_rotation_quaternion())
+
+
+## Bends the upper and lower arm so the end of a forearm-plus-`b` chain
+## reaches `target`; returns the forearm's skeleton-space basis.
+func _arm_ik(side: String, target: Vector3, b: float, tuck: float) -> Basis:
 	var ua: int = _bone[side + "UpperArm"]
 	var la: int = _bone[side + "LowerArm"]
-	var hd: int = _bone[side + "Hand"]
 	var parent_g := _skel.get_bone_global_pose(_skel.get_bone_parent(ua))
 	var shoulder: Vector3 = parent_g * _rest_origin[side + "UpperArm"]
 	var a: float = (_rest_origin[side + "LowerArm"] as Vector3).length()
-	var b: float = (_rest_origin[side + "Hand"] as Vector3).length() + HAND_GRIP
 	var to_t := target - shoulder
 	var d := clampf(to_t.length(), 0.05, (a + b) * 0.999)
 	var dir := to_t.normalized()
@@ -1406,7 +1450,7 @@ func _solve_arm(side: String, target: Vector3, tuck: float = 0.0) -> void:
 	var pb := parent_g.basis.orthonormalized()
 	_skel.set_bone_pose_rotation(ua, (pb.inverse() * ub).get_rotation_quaternion())
 	_skel.set_bone_pose_rotation(la, (ub.inverse() * lb).get_rotation_quaternion())
-	_skel.set_bone_pose_rotation(hd, Quaternion.IDENTITY)
+	return lb
 
 
 # --- Body physics ------------------------------------------------------------

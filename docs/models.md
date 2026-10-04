@@ -39,6 +39,11 @@ All models use metres, stand on y = 0 and face -Z.
   a steady per-player variation. See `ShintyPlayerModel.body_from_stats()`.
   Add `height_cm` and `weight_kg` to a player in `teams.json` to set them
   exactly. `hand: "L"` makes a left-hander; `skin: "#rrggbb"` sets skin tone.
+- **Faces from squad data.** Optional player keys: `hair` (a colour name:
+  black, dark, brown, mid, light, fair, blond, red, ginger, grey, white; or a
+  hex colour), `hair_style` (`crop`, `buzz`, `long`) and `facial_hair`
+  (`none`, `stubble`, `beard`, `goatee`, `moustache`). Anything left out is
+  picked from the player's seed, so the same player always looks the same.
 - **Colours from team data.** Shirt = `primary`, trim and shorts =
   `secondary`, socks and helmet = `primary`. Optional team colour keys
   `helmet`, `shorts`, `socks` and `keeper` override those. Keepers get a shirt
@@ -61,12 +66,19 @@ helpers. The skeleton, bones, `Caman` node and animation code in
 animation or physics.
 
 - **Bodies** are smooth swept shapes rather than capsules: shoulders slope
-  into the arms, thighs and calves have muscle shape, hands grip the caman
-  with a thumb, and build changes girth and shoulder width.
+  into the arms, thighs and calves have muscle shape, and build changes girth
+  and shoulder width.
+- **Hands** grip the caman properly: four fingers curl round the 2.5 cm grip
+  and the thumb wraps the other way. The arm solver turns each hand so the
+  shaft runs across the palm, with the top hand at the butt; if the lower hand
+  can't reach its spot it slides up the shaft rather than letting go.
 - **Faces** have a jaw, cheekbones, nose, brow, lips, eyes (whites, iris,
-  pupil), eyebrows and ears. Hair colour and eye colour vary per player, and
-  about a third of players have a beard. Skin uses a shader with a slight warm
-  edge.
+  pupil), eyebrows and ears. Jaw width, chin length, cheeks and nose size
+  vary per player, as do hair colour, eye colour, hair style (a crop, a buzz
+  cut, or long hair showing below the helmet) and facial hair (stubble, a
+  beard, a goatee or a moustache; a bit over half of players have some). Skin
+  uses a shader with a slight warm edge; stubble uses the same shader in a
+  darker tone.
 - **Kit** uses a fabric shader with a fine knit and soft folds, a chest band
   and cuffs in the trim colour, a collar, a crest on the left breast, a small
   number on the front, and the number and surname on the back (surnames show
@@ -163,9 +175,9 @@ launch on the model's `strike` signal.
 
 ## Performance
 
-Each player is about 14,600 triangles, baked into one skinned mesh of about
-nine surfaces (one per material; every plain-coloured part shares a single
+Each player is about 15,100 triangles, baked into one skinned mesh of about
+nine surfaces (ten with stubble) (one per material; every plain-coloured part shares a single
 surface) plus a shadow-only copy. The helmet cage, boots and vents add
 triangles but no draw calls. `low_detail = true` halves the triangles (about
-7,700) by leaving out the face details, most cage bars, vents, studs, laces,
+8,400) by leaving out the face details, most cage bars, vents, studs, laces,
 names and numbers; use it for distant players.
