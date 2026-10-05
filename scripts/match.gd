@@ -27,6 +27,8 @@ const SAVE_AT_50 := 0.5          # a 50-rated keeper keeps out about half the sh
 const SAVE_TOP_AIR := 0.93       # the best keep out this many in the air...
 const SAVE_TOP_GROUND := 0.42    # ...and this many along the ground
 const SAVE_AIR_Z := 0.5          # a shot crossing higher than this is in the air
+const SAVE_SPREAD := 0.4         # a shot down the middle is saved this much more than one by the post
+const SAVE_EDGE_USUAL := 0.7     # where most shots cross (0 the middle, 1 a post)
 const SAVE_HARD := 0.06          # a hard shot is saved less often...
 const SAVE_CORNER := 0.1         # ...and one high into a corner less again
 const SAVE_LINE_GAP := 0.4       # a saved ball is stopped at least this far out from the line
@@ -43,7 +45,8 @@ const GOAL_PAUSE := 3.0
 const HALF_TIME_PAUSE := 7.0     # long enough to see everyone walk off towards the dugouts
 const EXTRA_TIME_PAUSE := 4.0    # the break before extra time: players stay out on the pitch
 const THROW_UP_AIM_MAX := 1.1   # rad: how far off straight up the park a throw-up can be aimed
-const THROUGH_LEAD := 8.0       # yd: a through ball is played this far ahead of the runner
+const THROUGH_MIN := 8.0        # a tapped through ball runs this far (yards)
+const THROUGH_MAX := 45.0       # a fully held one this far
 const CHIP_ANGLE := 36.0        # degrees: a chipped through ball is launched this steeply
 const CHIP_PACE := 1.12         # a lofted strike comes off a little slower than asked: make it up
 const WALK_SPEED := 1.6
@@ -213,6 +216,7 @@ var battle := {}
 const SHOOT_RANGE := 70.0   # the shoot button aims at goal from within this many yards
 var charge_aim := Vector2.RIGHT   # where the stick pointed as the hit button went down
 var charge_steer := Vector2.ZERO  # and the steer for a shot (zero: the far corner)
+var charge_chip := false          # LB was held as Y went down: a chipped through ball
 var charge_kind := "shoot"   # which button is being held: "shoot" (at goal) or "hit" (long)
 var steer := Vector2.ZERO   # smoothed human steering direction
 var message := ""
@@ -1034,8 +1038,14 @@ func _human_control(dt: float) -> void:
 		# Y / F: with the ball it's a through ball (as in FIFA); without it,
 		# a block or a cleek on an opponent's swing, picked by where you are.
 		if carrier == p and p.swing_t < 0.0 and p != set_piece_taker_now() and not p.shy_ready:
-			# Holding LB (switch, which does nothing on the ball) chips it.
-			_human_through(p, aim, Input.is_action_pressed("switch"))
+			# Hold for weight, as in FIFA: the longer, the further it's
+			# played. Holding LB (switch, which does nothing on the ball)
+			# as Y goes down chips it.
+			charge = 0.0
+			charge_kind = "block"
+			charge_aim = aim
+			charge_steer = aim
+			charge_chip = Input.is_action_pressed("switch")
 		else:
 			Counters.start_counter(self, p)
 	if Input.is_action_just_pressed("barge"):
@@ -1055,6 +1065,8 @@ func _human_control(dt: float) -> void:
 			var restart: bool = p == set_piece_taker_now() or (p.shy_ready and carrier == p)
 			if charge_kind == "shoot" and not restart:
 				_human_shoot(p, charge_steer, charge)
+			elif charge_kind == "block":
+				_human_through(p, charge_aim, charge_chip, minf(charge, 1.0))
 			else:
 				_human_hit(p, aim if restart else charge_aim, charge)
 			charge = -1.0
@@ -1167,8 +1179,8 @@ func _human_hit(p: Player, aim: Vector2, charged: float) -> void:
 	# launched, so a full clearance is a proper parabola, not a skimmer.
 	# A long hit is the full swing: at full power it carries past halfway
 	# from a hit-out.
-	var speed: float = lerp(10.0, _full_speed(p) * LONG_HIT_BOOST, max(power, 0.2))
-	_strike_speed(p, aim, speed, _loft_at(speed, lerp(8.0, LONG_HIT_ANGLE, power)), "shooting", max(power, 0.2))
+	var speed: float = lerp(6.0, _full_speed(p) * LONG_HIT_BOOST, max(power, 0.05))
+	_strike_speed(p, aim, speed, _loft_at(speed, lerp(8.0, LONG_HIT_ANGLE, power)), "shooting", max(power, 0.05))
 
 
 func _human_pass(p: Player, aim: Vector2) -> void:
@@ -1194,37 +1206,12 @@ func _human_pass(p: Player, aim: Vector2) -> void:
 		_strike_speed(p, aim, 18.0, 0.5, "passing")
 
 
-## A through ball: played into the space ahead of a team-mate making a run
-## (the one most in line with the stick), for them to run onto.
-func _human_through(p: Player, aim: Vector2, chip: bool = false) -> void:
-	var best: Player = null
-	var best_score := -INF
-	for m in squads[p.team]:
-		if m == p or m.is_keeper():
-			continue
-		var off: Vector2 = m.pos - p.pos
-		var d := off.length()
-		if d < 4.0 or d > 55.0:
-			continue
-		var cosang := aim.dot(off / d)
-		var fwd: float = (m.pos.x - p.pos.x) * attack_dir[p.team]
-		if cosang < 0.3 or fwd < 0.0:
-			continue
-		var s := cosang * 30.0 + fwd * 0.3 - d * 0.3
-		if s > best_score:
-			best_score = s
-			best = m
-	if best == null:
-		if chip:
-			_strike_speed(p, aim, 16.0, 7.0, "passing")
-		else:
-			_strike_speed(p, aim, 20.0, 0.4, "passing")
-		return
-	# Into space ahead of them: where they're running, or up the park.
-	var run: Vector2 = best.vel.normalized() if best.vel.length() > 2.0 else Vector2(attack_dir[p.team], 0)
-	if run.x * attack_dir[p.team] < 0.2:
-		run = (run + Vector2(attack_dir[p.team], 0) * 0.8).normalized()
-	var spot: Vector2 = best.pos + run * THROUGH_LEAD
+## A through ball, played where the stick points and weighted by how long
+## the button was held: a tap rolls it a few yards, a full hold sends it
+## well up the park. Chipped, it is lifted over the defence to drop there.
+## You switch to whoever is nearest where it's going.
+func _human_through(p: Player, aim: Vector2, chip: bool = false, weight: float = 0.5) -> void:
+	var spot: Vector2 = p.pos + aim * through_reach(weight)
 	spot = Vector2(clampf(spot.x, 2.0, PITCH.x - 2.0), clampf(spot.y, 2.0, PITCH.y - 2.0))
 	var d := p.pos.distance_to(spot)
 	if chip:
@@ -1235,10 +1222,43 @@ func _human_through(p: Player, aim: Vector2, chip: bool = false) -> void:
 		var cs: float = sqrt(0.5 * GRAVITY * d * (1.0 + d * SHOT_DRAG) / up) * CHIP_PACE
 		_strike_speed(p, (spot - p.pos).normalized(), cs, cs * up, "passing")
 	else:
-		var speed: float = clampf(d * 0.75 + 10.0, 14.0, 34.0)
+		var speed: float = clampf(_roll_speed_for(d), 8.0, 34.0)
 		_strike_speed(p, (spot - p.pos).normalized(), speed, 0.4, "passing")
-	if p.team == human_side:
+	if p.team != human_side:
+		return
+	var best: Player = null
+	var best_d := INF
+	for m in squads[p.team]:
+		if m == p or m.is_keeper():
+			continue
+		var md: float = m.pos.distance_to(spot)
+		if md < best_d:
+			best_d = md
+			best = m
+	if best != null and best_d < 20.0:
 		human = best
+
+
+## How far a through ball of this weight (0 a tap, 1 a full hold) goes.
+func through_reach(weight: float) -> float:
+	return lerpf(THROUGH_MIN, THROUGH_MAX, clampf(weight, 0.0, 1.0))
+
+
+## Speed (yd/s) a ball along the grass needs to roll `d` yards and stop,
+## from the ball physics' grass resistance and drag (dry pitch).
+func _roll_speed_for(d: float) -> float:
+	var a: float = ShintyBallPhysics.ROLL_DECEL / ShintyMatchAdapter.YARD
+	var c: float = ShintyBallPhysics.ROLL_DRAG
+	var lo := 0.0
+	var hi := 60.0
+	for i in 30:
+		var v := (lo + hi) * 0.5
+		var run: float = v / c - a / (c * c) * log(1.0 + c * v / a)
+		if run < d:
+			lo = v
+		else:
+			hi = v
+	return (lo + hi) * 0.5
 
 
 ## A dummy: shape to hit, then pull out of it. A computer marker close
@@ -2069,6 +2089,9 @@ func keeper_save_chance(k: Player, speed: float, off: float, z: float) -> float:
 	var air: bool = z > SAVE_AIR_Z
 	var save: float = lerpf(SAVE_AT_50, SAVE_TOP_AIR if air else SAVE_TOP_GROUND, skill) if skill >= 0.0 \
 		else SAVE_AT_50 + skill * 0.5
+	# Down the middle is easier, out by the posts harder (most shots go
+	# for the corners, which is what the rating numbers above are for).
+	save += SAVE_SPREAD * (SAVE_EDGE_USUAL - clampf(absf(off) / (GOAL_W / 2.0), 0.0, 1.0))
 	save -= SAVE_HARD * clampf((speed - 20.0) / 15.0, 0.0, 1.0)
 	if z > KEEPER_HIGH and absf(off) > GOAL_W / 2.0 - CORNER_IN:
 		save -= SAVE_CORNER

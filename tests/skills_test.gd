@@ -142,8 +142,9 @@ func _through(chip: bool) -> Array:
 	mate.pos = h.pos + Vector2(m.attack_dir[0] * 22.0, 4.0)
 	mate.vel = Vector2.ZERO
 	q.pos = h.pos + Vector2(m.attack_dir[0] * 6.0, 1.0)   # in the way
-	var spot: Vector2 = mate.pos + Vector2(m.attack_dir[0], 0) * m.THROUGH_LEAD
-	m._human_through(h, (mate.pos - h.pos).normalized(), chip)
+	var aim: Vector2 = (mate.pos - h.pos).normalized()
+	var spot: Vector2 = h.pos + aim * m.through_reach(0.5)   # where it's played: the stick, half weight
+	m._human_through(h, aim, chip, 0.5)
 	var top := 0.0
 	var landed = null
 	var struck := false
