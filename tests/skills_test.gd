@@ -127,8 +127,8 @@ func _dummy_tests() -> void:
 	m.free()
 
 
-## Hit a through ball and follow it until it lands. Returns [highest, where
-## it first came down].
+## Hit a through ball and follow it until it lands or the marker gets to
+## it. Returns [highest, where it first came down].
 func _through(chip: bool) -> Array:
 	var m = _new_match(11)
 	var h = m.human
@@ -152,6 +152,8 @@ func _through(chip: bool) -> Array:
 		m.step(1.0 / 60.0)
 		if m.carrier == null:
 			struck = true
+		if struck and m.last_team != h.team:
+			break   # the marker got to it: what they do with it isn't the pass
 		if struck:
 			top = maxf(top, m.ball_z)
 			if landed == null and top > 0.3 and m.ball_z <= 0.05:
@@ -165,13 +167,7 @@ func _through(chip: bool) -> Array:
 
 func _chip_tests() -> void:
 	var chip := _through(true)
-	# The strike can be mishit (a fat one balloons), and the strike's dice
-	# aren't seeded: judge the plain ball by the best of three.
 	var flat := _through(false)
-	for i in 2:
-		var again := _through(false)
-		if again[0] < flat[0]:
-			flat = again
 	print("chip: top %.2f yd, came down at %s for %s; flat top %.2f yd" % [chip[0], str(chip[1]), str(chip[2]), flat[0]])
 	_check(chip[0] > 2.4, "a chipped through ball goes over a caman held up")
 	_check(chip[1] != null and chip[1].distance_to(chip[2]) < 6.0, "and comes down near the runner's spot")
