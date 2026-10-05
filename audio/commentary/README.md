@@ -59,7 +59,7 @@ and saves `<id>.ogg` here. Give it as many file and id pairs as you like.
 
 The `elevenlabs` command records every line that has no file yet, or whose
 text has changed, as `<id>.mp3` here, and keeps `manifest.json` (id to the text
-recorded). Use `--only goal` for one category, or `--all` to redo everything.
+recorded; it stays on your machine, outside git). Use `--only goal` for one category, or `--all` to redo everything.
 A full run is about 490 clips (lines plus 37 clubs and 4 grounds) and
 roughly 13,700 characters.
 

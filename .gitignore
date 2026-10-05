@@ -24,3 +24,4 @@ Thumbs.db
 /music/*.wav.import
 /music/*.MP3
 __pycache__/
+audio/commentary/manifest.json
