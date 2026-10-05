@@ -1005,8 +1005,11 @@ func _pose(_delta: float) -> void:
 		free_target = top.lerp(carry_top, carry)
 	# A runner's free arm swings with the elbow tucked down and back.
 	var shaft_dir := -ct.basis.y
+	# Carried across the body, the top hand holds the shaft from underneath,
+	# cradling it, as players do (Alistair).
+	var cradle := carry_top != null and _free_hand == null and carry * (1.0 - carry_arm_swing) > 0.5
 	_solve_arm(top_side, free_target if free_target != null else top, carry * carry_arm_swing if carry_top != null else 0.0,
-		shaft_dir if free_target == null else Vector3.ZERO)
+		shaft_dir if free_target == null or cradle else Vector3.ZERO, cradle)
 	_solve_arm(low_side, _free_low if _free_low != null else low, carry if carry_top != null else 0.0,
 		shaft_dir if _free_low == null else Vector3.ZERO)
 	if _rag != null and _rag_w > 0.0:
@@ -1467,8 +1470,9 @@ func _arm_reach(side: String) -> float:
 ## `tuck` 0..1 brings the elbow in to the side (a runner's arm) instead of out.
 ## `shaft` (the caman's direction, butt to bas) turns the hand to grip it: the
 ## shaft runs across the hand along its local X, HAND_GRIP from the wrist, so
-## the fingers wrap round it (ShintyPlayerLook models them that way).
-func _solve_arm(side: String, target: Vector3, tuck: float = 0.0, shaft := Vector3.ZERO) -> void:
+## the fingers wrap round it (ShintyPlayerLook models them that way). `under`
+## puts the wrist below the shaft, the hand cradling it from underneath.
+func _solve_arm(side: String, target: Vector3, tuck: float = 0.0, shaft := Vector3.ZERO, under := false) -> void:
 	var hand_len: float = (_rest_origin[side + "Hand"] as Vector3).length()
 	var lb := _arm_ik(side, target, hand_len + HAND_GRIP, tuck)
 	var hd: int = _bone[side + "Hand"]
@@ -1481,6 +1485,8 @@ func _solve_arm(side: String, target: Vector3, tuck: float = 0.0, shaft := Vecto
 	var sd := shaft.normalized()
 	var fore := -lb.y.normalized()
 	var dn := fore - sd * fore.dot(sd)
+	if under:  # the wrist below the shaft, the hand reaching up round it
+		dn = Vector3.UP - sd * sd.y
 	dn = dn.normalized() if dn.length() > 0.2 else fore
 	# At full stretch, roll the hand round the shaft towards the shoulder
 	# (the wrist then sits nearest it) rather than overreach.
