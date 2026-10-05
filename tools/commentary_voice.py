@@ -13,13 +13,15 @@ See audio/commentary/README.md.
   ELEVENLABS_API_KEY=... python3 tools/commentary_voice.py elevenlabs VOICE_ID [--all] [--only CATEGORY]
       Records the missing and stale lines with ElevenLabs (needs a paid plan
       for commercial use) as mp3 into audio/commentary/, and notes what each
-      file says in audio/commentary/manifest.json.
+      file says in audio/commentary/manifest.json. --only team and --only
+      ground record the club and ground names (spelt as they should sound).
 
 Standard library only.
 """
 import csv
 import json
 import os
+import re
 import sys
 import time
 import urllib.error
@@ -34,10 +36,22 @@ EXTS = (".ogg", ".mp3", ".wav")
 
 def lines():
     with open(LINES, encoding="utf-8") as f:
-        data = json.load(f)["lines"]
-    for cat, pool in data.items():
+        data = json.load(f)
+    for cat, pool in data["lines"].items():
         for i, text in enumerate(pool):
-            yield "%s_%02d" % (cat, i + 1), cat, text
+            id_ = "%s_%02d" % (cat, i + 1)
+            if "{" not in text:
+                yield id_, cat, text
+                continue
+            # {home}, {away}, {ground}: the bits between are recorded on their own
+            pieces = [p.strip() for p in re.split(r"\{(?:home|away|ground)\}", text) if p.strip()]
+            for n, piece in enumerate(pieces):
+                yield "%s_%s" % (id_, chr(97 + n)), cat, piece
+    # club and ground names, spelt as they should sound
+    for club, text in data.get("teams", {}).items():
+        yield "team_" + club, "team", text
+    for venue, ground in data.get("grounds", {}).items():
+        yield "ground_" + venue, "ground", ground["say"]
 
 
 def manifest():

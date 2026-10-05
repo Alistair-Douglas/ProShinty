@@ -24,6 +24,20 @@ The game looks for, in this order:
 
 A line without a file just shows as a caption.
 
+Club and ground names are recorded on their own, spelt the way they should
+sound (`"teams"` and `"grounds"` in `data/commentary.json`): `team_kingussie`
+says "King-YOO-see", `ground_portree` says "Port-REE". Captions show the real
+spelling. A line with `{home}`, `{away}` or `{ground}` in it, like the intro
+("This is Dougal Glenorchy, your commentator for another great game of shinty
+between {home} and {away} at the beautiful {ground}"), is recorded in pieces:
+`intro_01_a` is the text before the first name, `intro_01_b` the next bit, and
+so on. The game plays the pieces and the names one after another, and only if
+every piece is recorded. After a goal the commentator names the scorers with
+their `team_` clip.
+
+If a name comes out wrong, change its spelling in the json and record it
+again (`--only team` or `--only ground`).
+
 Add new lines to the end of a category's list and never reorder one, or ids
 will point at the wrong recordings. If you change a line's text, record it
 again: `status` below lists the stale ones.
@@ -41,7 +55,8 @@ ELEVENLABS_API_KEY=... python3 tools/commentary_voice.py elevenlabs <voice id>
 The `elevenlabs` command records every line that has no file yet, or whose
 text has changed, as `<id>.mp3` here, and keeps `manifest.json` (id to the text
 recorded). Use `--only goal` for one category, or `--all` to redo everything.
-A full run is about 452 lines and roughly 13,500 characters.
+A full run is about 490 clips (lines plus 37 clubs and 4 grounds) and
+roughly 13,700 characters.
 
 Which voice to use:
 
@@ -52,7 +67,7 @@ Which voice to use:
   suits the lines best. Don't clone or imitate a real commentator.
 - Keep the plan's licence terms, or a screenshot of them, with the project.
 - Listen to a sample from each category before recording everything. The Scots
-  spellings ("nae", "no'", "deid", "cannae") read well with a Scottish voice;
+  spellings ("no'", "deid", "canny"; "-nae" is spelt "-nay", which reads better) read well with a Scottish voice;
   if one comes out wrong, re-spell it in the json and record that line again.
 
 ## Steam

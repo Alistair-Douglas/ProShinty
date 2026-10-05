@@ -1,13 +1,73 @@
 {
-	"_about": "Match commentary lines, all original. broadcast/commentary.gd picks one when the match does something (the category). Each line's voice file is <category>_<nn>, nn its place in the list from 01, so add new lines at the end of a list and never reorder: see audio/commentary/README.md. Say ball and goal, never hail.",
+	"_about": "Match commentary lines, all original. broadcast/commentary.gd picks one when the match does something (the category). Each line's voice file is <category>_<nn>, nn its place in the list from 01, so add new lines at the end of a list and never reorder: see audio/commentary/README.md. Say ball and goal, never hail. {home}, {away} and {ground} in a line are filled in at play time; the voice plays the text between them as <id>_a, <id>_b and so on, with the names. \"teams\" is each club's name spelt the way it should sound, for the voice (file team_<club id>); captions show the real name. \"grounds\" does the same for each ground (file ground_<venue>), keyed by pitch/shinty_pitch.gd Venue.",
+	"teams": {
+		"kingussie": "King-YOO-see",
+		"aberdour": "Aber-DOWER",
+		"aberdeen_university": "Aberdeen University",
+		"ardnamurchan": "Ard-na-MURR-a-han",
+		"badenoch": "BAD-en-ock",
+		"ballachulish": "Bal-a-HOO-lish",
+		"beauly": "BYOO-lee",
+		"boleskine": "Bo-LESS-kin",
+		"bute": "Byoot",
+		"caberfeidh": "Caber-FAY",
+		"camanachd_dhun_eideann": "CAM-an-ack Doon AY-jin",
+		"col_glen": "Col Glen",
+		"east_lothian": "East LOH-thee-an",
+		"fort_william": "Fort William",
+		"glasgow_mid_argyll": "Glasgow Mid Ar-GUYLE",
+		"glen_urquhart": "Glen URK-hurt",
+		"glengarry": "Glen-GARR-ee",
+		"inveraray": "Inver-AIR-ah",
+		"inverness": "Inver-NESS",
+		"kilmallie": "Kil-MAL-ee",
+		"kilmory": "Kil-MOR-ee",
+		"kinlochshiel": "Kin-loch-SHEEL",
+		"kyles": "Kyles Athletic",
+		"lewis": "Lewis",
+		"lochaber": "Loch-AH-ber",
+		"lochcarron": "Loch-CARR-on",
+		"lovat": "LUV-at",
+		"newtonmore": "Newton-MORE",
+		"oban_camanachd": "OH-ban CAM-an-ack",
+		"oban_celtic": "OH-ban KEL-tic",
+		"skye": "Skye",
+		"stirling": "Stirling",
+		"strachur_dunoon": "Stra-HOOR Dun-OON",
+		"strathglass": "Strath-GLASS",
+		"strathspey": "Strath-SPAY",
+		"tayforth": "Tay-FORTH",
+		"uddingston": "UDD-ing-stun"
+	},
+	"grounds": {
+		"aberdour": {
+			"name": "Aberdour",
+			"say": "Aber-DOWER"
+		},
+		"kingussie": {
+			"name": "Dell, Kingussie",
+			"say": "Dell, in King-YOO-see"
+		},
+		"tighnabruaich": {
+			"name": "Tighnabruaich",
+			"say": "Tie-na-BROO-ach"
+		},
+		"portree": {
+			"name": "Portree",
+			"say": "Port-REE"
+		}
+	},
 	"lines": {
+		"intro": [
+			"This is Dougal Glenorchy, your commentator for another great game of shinty between {home} and {away} at the beautiful {ground}"
+		],
 		"match_start": [
 			"And we're under way!",
 			"The referee throws it up, and here we go!",
 			"Right then, let's get this started.",
 			"There's the throw-up. Game on!",
 			"Camans crossed, ball in the air, and we're off!",
-			"Away we go! Nae hanging about here.",
+			"Away we go! Nay hanging about here.",
 			"A grand day for it, and the ball's in the air.",
 			"Here we go then. Settle in, folks.",
 			"They've been waiting all week for this. We're under way!",
@@ -26,52 +86,46 @@
 		"throw_up": [
 			"The referee throws it up again.",
 			"Back to the middle, and up she goes.",
-			"Another throw-up. Shoulder to shoulder, the pair of them.",
 			"Camans crossed, here's the throw.",
-			"Up it goes between the two centres.",
-			"Throw-up in the middle. Watch the sticks.",
+			"Up it goes between the two full centres.",
+			"Throw-up in the middle.",
 			"The two centres square up again.",
-			"Restart. Ball goes up, sticks go up.",
+			"Restart, and we're back at it",
 			"And the throw-up gets us going again.",
-			"Back to the centre spot for the throw."
+			"and back to the centre spot for the throw up."
 		],
 		"throw_up_won": [
 			"Won cleanly at the throw-up.",
-			"Quick hands at the throw. Good start.",
+			"Smart thinking at the throw. Good start.",
 			"That's the throw-up won, and they're away.",
 			"Nicely taken out of the air.",
 			"First to it in the middle.",
 			"Timed that throw-up to perfection.",
-			"Clean as a whistle from the throw.",
-			"Wins the throw and sets off."
+			"Clean as a whistle from the throw."
 		],
 		"big_hit": [
 			"Whit a hit!",
 			"Oh, he's skelped that!",
-			"Ya beauty! Right off the bas!",
-			"That'll sting the hands!",
+			"Ya beauty!!",
 			"He's absolutely leathered it!",
 			"There's a wallop for you!",
-			"Some clatter off that caman!",
 			"Hear the crack off that!",
 			"That's been struck with real venom.",
-			"Oh, he's given that one laldy!",
-			"Whit a dunt on the ball!",
+			"Hit that with a vengeance!",
 			"He's hit that like it owed him money!",
-			"That one's away to Inverness!",
-			"Wallop! Pure timing, that.",
 			"A massive hit, right through the ball.",
-			"He's no' feart to hit it, is he?",
-			"That's a proper shinty hit, that.",
+			"That's a proper clearance",
 			"Fair whacked it there.",
 			"You'll hear that one back in the village!",
-			"A rasper of a hit!"
+			"That'll go the distance",
+			"Clearance",
+			"Nicely cleared"
 		],
 		"shot": [
 			"He's having a go!",
 			"Shot!",
 			"Here's the strike at goal!",
-			"Lets fly at goal!",
+			"What a shot",
 			"Has a hit from there!",
 			"Goes for goal!",
 			"Aims for the corner!",
@@ -85,39 +139,40 @@
 		],
 		"mishit": [
 			"Och, he's got that all wrong.",
-			"Off the toe of the caman, that.",
-			"A bit thin, that one.",
+			"They've botched that one",
+			"A bit thin that",
 			"Scuffed it. He'll no' want to see that again.",
-			"That's come off the heel.",
-			"Didnae catch that right at all.",
+			"Not his cleanest hit",
+			"Didnay catch that right at all.",
 			"Oof. A shoogly one, that.",
-			"Mishit! The ball's dribbled away.",
+			"Miss-hit! The ball's dribbled away.",
 			"Well, that's no' what he meant.",
-			"That one's skewed off the bas.",
+			"Skewed that away",
 			"Poor connection there.",
-			"He'll be checking his caman after that one."
+			"He'll be checking his caman after that one.",
+			"Well, he's forgot his glasses"
 		],
 		"air_shot": [
 			"Swung and missed!",
 			"Fresh air! He's missed it entirely!",
 			"Ooh, a big swing at nothing.",
-			"Whiffed it! The ball's still sitting there.",
-			"He's taken a big swing and found nae ball.",
-			"That's an air shot, and he knows it.",
+			"A lot of swinging for not a lot of ball",
+			"He's taken a big swing and found nay ball.",
+			"Nay even topped it.",
 			"Missed it altogether. Oh dear.",
 			"The ball's no' even moved!",
-			"All that wind-up, and nothing at the end of it.",
-			"Swish! Nae contact at all."
+			"A lotta wind up for nay ball",
+			"Swish! Nay contact at all."
 		],
 		"goal": [
 			"GOAL! Oh, ya beauty!",
-			"It's in! The net's bulging!",
+			"It's in! The net bulges!",
 			"Goal! What a finish!",
 			"GOAL! The crowd are on their feet!",
 			"In the back of the net! Get in there!",
 			"Oh, that's a goal! Absolutely magic!",
-			"Goal! The keeper had nae chance!",
-			"It's in! You could hear that one in Fort William!",
+			"Goal! The keeper had nay chance!",
+			"It's in! You could hear that one in Dublin!",
 			"GOAL! Ya dancer!",
 			"That's a goal! Pure dead brilliant!",
 			"In it goes! Cool as you like!",
@@ -126,12 +181,9 @@
 			"Right in the corner! Goal!",
 			"GOAL! Take a bow, son!",
 			"It's there! What a strike!",
-			"Goal! Jings, that was quick!",
-			"In! The goal judge's hand is up!",
 			"That's buried! Goal!",
 			"Goal! They'll be talking about that one in the bar tonight!",
 			"It's in! Absolute scenes!",
-			"Goal! Crivvens, what a hit!",
 			"GOAL! Into the net like a rocket!",
 			"There it is! Goal!"
 		],
@@ -145,15 +197,15 @@
 			"Goal! All square, and it's anybody's now!",
 			"Level! What a response!",
 			"GOAL! That's the equaliser, and they deserved it!",
-			"It's in! Back from the brink!"
+			"It's in! Back from the brink!",
+			"GOAL! Ladies and gents there is all to play for!"
 		],
 		"goal_late": [
-			"GOAL! Surely that's the winner!",
 			"It's in! At this stage of the game!",
 			"GOAL! Oh, the drama! Late, late on!",
 			"Goal! That might just be the one that settles it!",
 			"Late goal! The place has gone daft!",
-			"GOAL! You couldnae write it!",
+			"GOAL! You couldknee write it!",
 			"It's in! The clock's ticking and they've scored!",
 			"Goal! Heartbreak for one lot, heaven for the other!",
 			"GOAL! Right at the death!",
@@ -166,8 +218,8 @@
 			"Denied! Brilliant from the goalie!",
 			"Saved! He's had a stormer, that keeper!",
 			"Kept out! The keeper's quick off his line.",
-			"What a save! Tremendous reactions!",
-			"Turned away! Nae way past him today.",
+			"What a save! Tremendous reaction",
+			"Turned away! Nay way past him today.",
 			"Brave stop from the keeper!",
 			"He's flung himself at that and kept it out!",
 			"Saved! The keeper reads it all the way.",
@@ -189,7 +241,10 @@
 			"The post saves them! Lucky, lucky!",
 			"Bang! Off the upright!",
 			"The crossbar's still shaking after that!",
-			"Clips the post! The width of a caman away from a goal."
+			"Clips the post! The width of a caman away from a goal.",
+			"Woodwork! That's a let off for the defence",
+			"So close! What a let off",
+			"So unlucky, and what a let off for the defence"
 		],
 		"wide": [
 			"Wide!",
@@ -201,19 +256,19 @@
 			"Wide. He'll feel he should have done better.",
 			"Close, but no' close enough.",
 			"Sails past the goal.",
-			"Nae danger to the keeper, that.",
+			"Nay danger to the keeper, that.",
 			"Off target! Away into the crowd behind the goal.",
 			"Wide of the mark.",
 			"It's drifted past the post.",
 			"Ach, just wide!"
 		],
 		"no_goal": [
-			"No goal! Straight in from a free hit doesnae count.",
+			"No goal! Straight in from a free hit doesnay count.",
 			"The referee's chalked it off!",
 			"No goal! It's been ruled out.",
 			"They thought they'd scored, but it's no goal.",
 			"Disallowed! The celebrations are cut short.",
-			"It went in, but it doesnae count!"
+			"It went in, but it doesnay count!"
 		],
 		"tackle": [
 			"Good tackle!",
@@ -225,36 +280,35 @@
 			"That's a cracking tackle.",
 			"In with the caman and away with the ball.",
 			"Robbed him!",
-			"Clean tackle, nae fuss.",
+			"Clean tackle, nay fuss.",
 			"He's had his pocket picked there.",
-			"Stole that right off the bas."
+			"Stole that right off his stick."
 		],
 		"stick_battle": [
 			"Sticks flying here!",
 			"A right stramash for the ball!",
 			"Battle on! Neither one giving an inch.",
 			"Caman on caman, and the ball's in the middle of it.",
-			"Wee bit of a fankle here.",
-			"Hammer and tongs for the ball!",
+			"What a ruckus",
 			"This is a proper tussle.",
 			"Nobody's backing down in this one."
 		],
 		"clash": [
-			"Clash of the camans!",
+			"Clash of the ash!",
 			"Hear the wood on that!",
-			"Sticks meet in mid-air!",
-			"Clack! The camans come together.",
+			"Sticks meet!",
+			"The camans come together.",
 			"Swung together! Ball goes loose.",
 			"That's a crack of timber.",
 			"The sticks have clattered!",
 			"Wood on wood. Lovely sound."
 		],
 		"cleek": [
-			"Cleeked! Hooked his stick away!",
+			"Cleeked! knocked his stick away!",
 			"Lovely cleek, that.",
 			"The cleek stops the hit dead.",
 			"Clever! Caught his caman mid-swing.",
-			"Hooked away. Smart defending.",
+			"Cleeked away. Smart defending.",
 			"A textbook cleek.",
 			"He's cleeked him just in time.",
 			"That's how you cleek a stick.",
@@ -271,18 +325,18 @@
 			"Throws himself in front of it.",
 			"Stopped dead!",
 			"That's been blocked at source.",
-			"Nae way through there.",
+			"Nay way through there.",
 			"Fine block. That was dangerous.",
 			"Got his body behind it."
 		],
 		"late_block": [
 			"Late block, and he's taken one there!",
-			"Ooh, that's a sair one. Late with the block.",
+			"Ooh, that's a sore one. Late with the block.",
 			"Brave, but late. He'll feel that.",
 			"Got there a fraction late and paid for it.",
 			"That'll leave a mark. Late in with the block.",
 			"Oof, he's caught the full swing there.",
-			"Late block. Nae foul, but plenty of pain.",
+			"Late block. Nay foul, but plenty of pain.",
 			"He'll need the magic sponge after that."
 		],
 		"shoulder": [
@@ -305,7 +359,7 @@
 			"He's hit the deck!",
 			"Down he goes!",
 			"Clattered to the ground!",
-			"He's taken a right dunt there.",
+			"He's taken a right knock there.",
 			"Sent flying!",
 			"He's on the grass. Hope he's alright."
 		],
@@ -314,13 +368,13 @@
 			"The referee's blown for a foul.",
 			"Whistle goes. That's a free hit.",
 			"Foul! The ref's seen that one.",
-			"That's a foul, nae doubt about it.",
+			"That's a foul, nay doubt about it.",
 			"The referee's having none of that.",
 			"Free hit. Daft challenge.",
-			"Peep! That's a foul.",
+			"That's a foul.",
 			"Ach, needless foul.",
 			"The whistle goes again.",
-			"Penalised! A free hit.",
+			"A free hit.",
 			"That was always a foul.",
 			"The referee points. Free hit.",
 			"Clumsy, that. Free hit.",
@@ -335,7 +389,7 @@
 			"The ref's waved it away.",
 			"That looked a foul to me, but play goes on.",
 			"Nothing given! The bench is up in arms.",
-			"Away wi' ye, referee!"
+			"REFEREEE! Who's pocket is he in? Outrageous!"
 		],
 		"penalty": [
 			"Penalty!",
@@ -369,7 +423,8 @@
 			"Yellow card. Daft, daft challenge.",
 			"A caution for that.",
 			"He's on a yellow now.",
-			"Name taken. Yellow card."
+			"Name taken. Yellow card.",
+			"He knows what he did there. Yellow"
 		],
 		"red_card": [
 			"Red card! He's off!",
@@ -378,14 +433,15 @@
 			"Off he goes! Red card!",
 			"It's a red! They're down a man!",
 			"Straight red! Early bath for him.",
-			"Red card! The referee had nae choice.",
-			"Sent off! That'll cost them."
+			"Red card! The referee had nay choice.",
+			"Sent off! That'll cost them.",
+			"Good riddance, the dirty little man."
 		],
 		"shy": [
 			"A shy here.",
 			"Out of play. It's a shy.",
 			"Over the sideline. Shy.",
-			"Shy, out on the touchline.",
+			"Shy, out of play.",
 			"Tossed up and struck. Here's the shy.",
 			"The ball's out. Shy coming.",
 			"Shy. Let's see where this goes.",
@@ -397,17 +453,17 @@
 			"A corner hit. Everyone up to the D.",
 			"Corner, and here come the big men.",
 			"They've conceded a corner.",
-			"Corner hit. Dangerous position.",
-			"It's a corner. Big chance here.",
-			"Corner! Pack the D!"
+			"Corner hit. Dangerous moment.",
+			"It's a corner. Big chance here."
 		],
 		"hit_out": [
-			"Hit-out for the keeper.",
-			"Out for a hit-out.",
-			"Over the byline. Hit-out.",
-			"Gone behind. Hit-out.",
+			"Bye-hit for the keeper.",
+			"Out for a Bye-hit.",
+			"Over the byline. Bye-hit.",
+			"Gone behind. Bye-hit.",
 			"Hit-out. Reset from the back.",
-			"Out of play behind the goal. Hit-out."
+			"Out of play behind the goal. bye-hit.",
+			"bye-hit"
 		],
 		"control": [
 			"Lovely touch.",
@@ -418,7 +474,7 @@
 			"Plucked out of the air!",
 			"First touch, pure class.",
 			"Tamed that one nicely.",
-			"Like it was glued to the bas.",
+			"Like it was glued to the caman.",
 			"Sweet touch to bring it down."
 		],
 		"slip": [
@@ -426,8 +482,8 @@
 			"Lost his footing!",
 			"Down on the wet grass!",
 			"Oops! Legs went from under him.",
-			"Slipped! Slippy out there today.",
-			"Whoops! Doon he goes.",
+			"Slipped! Wet out there today.",
+			"Whoops! Down he goes.",
 			"The pitch has caught him out.",
 			"Lost his feet there."
 		],
@@ -438,7 +494,7 @@
 			"Looks painful, that.",
 			"He's no' right after that one.",
 			"Down injured. Fingers crossed.",
-			"That's a sair yin.",
+			"That's a sore won.",
 			"He'll be feeling that in the morning."
 		],
 		"substitution": [
@@ -458,7 +514,7 @@
 			"The whistle goes, and that's the break.",
 			"Half time. Plenty to talk about.",
 			"And the referee blows for the interval.",
-			"That's the half. Whit a game so far.",
+			"That's the half. What a game so far.",
 			"Half time! Get the kettle on.",
 			"The first half's done.",
 			"In they go for a breather."
@@ -473,15 +529,15 @@
 		],
 		"full_time": [
 			"And there's the final whistle!",
-			"Full time!",
-			"That's it! It's all over!",
+			"Full time! What a game today",
+			"That's it! It's all over! What a game",
 			"The referee blows, and that's the game.",
 			"Full time. What a match that was.",
 			"It's over! Handshakes all round.",
 			"Final whistle. One lot happy, one lot scunnered.",
 			"There it is. Full time.",
 			"All over! Some game of shinty, that.",
-			"Peep, peep, peeeep! Full time!",
+			"Full time! Anyone for a pint after?",
 			"That's the end of it. Off to the clubhouse.",
 			"Full time. They'll be talking about that one for weeks."
 		],
@@ -489,14 +545,14 @@
 			"It's going to penalties!",
 			"Penalties to decide it!",
 			"Nerves of steel needed now. Penalties!",
-			"Penalty shootout! I cannae watch!",
+			"Penalty shootout! I canny watch!",
 			"Down to penalties. Heart in the mouth stuff.",
 			"Penalties it is. Who wants to be a hero?"
 		],
 		"shootout_score": [
 			"Scored!",
 			"Buried it!",
-			"Nae mistake there!",
+			"Nay mistake there!",
 			"In! Cool as you like.",
 			"Smashed in!",
 			"Scores! The keeper went the wrong way.",
@@ -530,7 +586,7 @@
 			"Keep your eyes on the ball, folks.",
 			"Somebody needs to take charge of this game.",
 			"The managers are pacing the line.",
-			"Nae quarter given out there.",
+			"Nay quarter given out there.",
 			"It's a cracking afternoon of shinty.",
 			"This is what the game's all about.",
 			"Tense out there.",

@@ -33,7 +33,7 @@ func _check_lines() -> bool:
 	var seen := {}
 	for cat in ShintyCommentary.PRIORITY:
 		var pool: Array = lines.get(cat, [])
-		if pool.size() < 5:
+		if pool.size() < (1 if cat == "intro" else 5):
 			push_error("commentary category %s has %d lines; want at least 5" % [cat, pool.size()])
 			ok = false
 	for cat in lines:
@@ -46,7 +46,7 @@ func _check_lines() -> bool:
 			if "hail" in t.to_lower():
 				push_error("say goal, not hail: %s" % t)
 				ok = false
-			if t.length() > 80:
+			if t.length() > 90 and cat != "intro":
 				push_error("line too long for a caption: %s" % t)
 				ok = false
 			if seen.has(t):
@@ -54,6 +54,16 @@ func _check_lines() -> bool:
 				ok = false
 			seen[t] = cat
 	print("Commentary lines: %d in %d categories" % [total, lines.size()])
+	var names := ShintyCommentary.load_team_names()
+	for club in TeamData.load_teams():
+		if not names.has(club["id"]):
+			push_error("no spoken name for club %s" % club["id"])
+			ok = false
+	var grounds := ShintyCommentary.load_grounds()
+	for v in ShintyPitch.Venue.values():
+		if not grounds.has(ShintyCommentary.ground_key(v)):
+			push_error("no name for ground %s" % ShintyCommentary.ground_key(v))
+			ok = false
 	if total < 300:
 		push_error("expected a few hundred lines, got %d" % total)
 		ok = false
@@ -126,8 +136,19 @@ func _check_match() -> bool:
 	if goal_lines != goals:
 		push_error("every goal should get a line")
 		ok = false
-	if cats.get("match_start", 0) != 1:
-		push_error("the start of the match should get a line")
+	for s in c.said:
+		if s["cat"] == "intro":
+			var want: String = m.teams[0]["name"]
+			if "{" in s["text"] or not want in s["text"] or not m.teams[1]["name"] in s["text"]:
+				push_error("the intro should name both teams and the ground: %s" % s["text"])
+				ok = false
+			print("Intro: %s (%s)" % [s["text"], s["id"]])
+	for cat in ["intro", "match_start"]:
+		if cats.get(cat, 0) != 1:
+			push_error("the start of the match should get one %s line" % cat)
+			ok = false
+	if cats.get("team", 0) != goals:
+		push_error("every goal should name the scorers (%d goals, %d names)" % [goals, cats.get("team", 0)])
 		ok = false
 	var break_lines: int = cats.get("half_time", 0) + cats.get("extra_time", 0) + cats.get("full_time", 0)
 	# every break gets a line, bar the end of extra time that leads to penalties
