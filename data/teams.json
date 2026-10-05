@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "note": "Clubs from shinty.com/clubs/ (read 2026-09-27). Players and ratings are made-up placeholders, rated by the club's first team's 2026 league and table position (Premiership 80-89, National Division 70s, Division 1 60s, Division 2 50s; a club with a second team is rated by its first team). Kingussie and Aberdour are listed first as the default fixture. Kits: colors holds the home kit (primary shirt, secondary trim, shorts, socks, optional pattern hoops/stripes) and colors.away the change kit, worn when the home kit would clash. colors.source is \"club\" when the colours come from the club (website, kit shop or shinty.com) and \"crest\" when they are taken from the club crest. Ratings run 1-99; the first player at each position starts, the rest are substitutes.",
+  "note": "Clubs from shinty.com/clubs/ (read 2026-09-27). Players and ratings are made-up placeholders, rated by the club's first team's 2026 league and table position (Premiership 80-89, National Division 70s, Division 1 60s, Division 2 50s; a club with a second team is rated by its first team). Kingussie and Aberdour are listed first as the default fixture. Kits: colors holds the home kit (primary shirt, secondary trim, shorts, socks, optional pattern hoops/stripes/sash/halves/panels/yoke/band, optional sleeves colour) and colors.away the change kit, worn when the home kit would clash. colors.source is \"club\" when the colours come from the club (website, kit shop or shinty.com) and \"crest\" when they are taken from the club crest. Ratings run 1-99; the first player at each position starts, the rest are substitutes. colors.pattern_source \"placeholder\" marks a design picked for variety until the club's real one is known.",
   "teams": [
     {
       "id": "kingussie",
@@ -242,6 +242,8 @@
         "secondary": "#f4f4f4",
         "shorts": "#16161a",
         "socks": "#f4f4f4",
+        "pattern": "panels",
+        "pattern_source": "placeholder",
         "away": {
           "primary": "#f4f4f4",
           "secondary": "#16161a",
@@ -469,6 +471,8 @@
         "secondary": "#f4f4f4",
         "shorts": "#f4f4f4",
         "socks": "#1f4fb8",
+        "pattern": "yoke",
+        "pattern_source": "placeholder",
         "away": {
           "primary": "#f4f4f4",
           "secondary": "#1f4fb8",
@@ -696,6 +700,8 @@
         "secondary": "#f2b705",
         "shorts": "#16161a",
         "socks": "#c8102e",
+        "pattern": "sash",
+        "pattern_source": "placeholder",
         "away": {
           "primary": "#16161a",
           "secondary": "#f2b705",
@@ -923,6 +929,8 @@
         "secondary": "#6cb4e4",
         "shorts": "#16254f",
         "socks": "#16254f",
+        "pattern": "band",
+        "pattern_source": "placeholder",
         "away": {
           "primary": "#6cb4e4",
           "secondary": "#16254f",
@@ -1150,6 +1158,8 @@
         "secondary": "#f4f4f4",
         "shorts": "#f4f4f4",
         "socks": "#c8102e",
+        "pattern": "halves",
+        "pattern_source": "placeholder",
         "away": {
           "primary": "#1f8a3b",
           "secondary": "#f4f4f4",
@@ -1377,6 +1387,8 @@
         "secondary": "#f4f4f4",
         "shorts": "#f4f4f4",
         "socks": "#1f8a3b",
+        "pattern": "yoke",
+        "pattern_source": "placeholder",
         "away": {
           "primary": "#f4f4f4",
           "secondary": "#1f8a3b",
@@ -1832,6 +1844,8 @@
         "secondary": "#f4f4f4",
         "shorts": "#f4f4f4",
         "socks": "#c8102e",
+        "pattern": "panels",
+        "pattern_source": "placeholder",
         "away": {
           "primary": "#f4f4f4",
           "secondary": "#c8102e",
@@ -2059,6 +2073,8 @@
         "secondary": "#16254f",
         "shorts": "#16254f",
         "socks": "#6cb4e4",
+        "pattern": "yoke",
+        "pattern_source": "placeholder",
         "away": {
           "primary": "#16254f",
           "secondary": "#6cb4e4",
@@ -2514,6 +2530,8 @@
         "secondary": "#16161a",
         "shorts": "#16161a",
         "socks": "#f6c700",
+        "pattern": "band",
+        "pattern_source": "placeholder",
         "away": {
           "primary": "#16161a",
           "secondary": "#f6c700",
@@ -2969,6 +2987,8 @@
         "secondary": "#16161a",
         "shorts": "#16161a",
         "socks": "#f6c700",
+        "pattern": "sash",
+        "pattern_source": "placeholder",
         "away": {
           "primary": "#16161a",
           "secondary": "#f6c700",
@@ -3196,6 +3216,8 @@
         "secondary": "#f4f4f4",
         "shorts": "#f4f4f4",
         "socks": "#16254f",
+        "pattern": "sash",
+        "pattern_source": "placeholder",
         "away": {
           "primary": "#f4f4f4",
           "secondary": "#16254f",
@@ -3878,6 +3900,8 @@
         "secondary": "#16161a",
         "shorts": "#16161a",
         "socks": "#f6c700",
+        "pattern": "panels",
+        "pattern_source": "placeholder",
         "away": {
           "primary": "#16161a",
           "secondary": "#f4f4f4",
@@ -4105,6 +4129,8 @@
         "secondary": "#16254f",
         "shorts": "#16254f",
         "socks": "#c8102e",
+        "pattern": "yoke",
+        "pattern_source": "placeholder",
         "away": {
           "primary": "#f4f4f4",
           "secondary": "#16254f",
@@ -4332,6 +4358,8 @@
         "secondary": "#f4f4f4",
         "shorts": "#f4f4f4",
         "socks": "#1f4fb8",
+        "pattern": "sash",
+        "pattern_source": "placeholder",
         "away": {
           "primary": "#f4f4f4",
           "secondary": "#1f4fb8",
@@ -4559,6 +4587,8 @@
         "secondary": "#16161a",
         "shorts": "#16161a",
         "socks": "#7a1f3d",
+        "pattern": "band",
+        "pattern_source": "placeholder",
         "away": {
           "primary": "#f4f4f4",
           "secondary": "#7a1f3d",
@@ -5013,6 +5043,8 @@
         "secondary": "#f4f4f4",
         "shorts": "#f4f4f4",
         "socks": "#c8102e",
+        "pattern": "band",
+        "pattern_source": "placeholder",
         "away": {
           "primary": "#f4f4f4",
           "secondary": "#1f4fb8",
@@ -5696,6 +5728,8 @@
         "secondary": "#f4f4f4",
         "shorts": "#f4f4f4",
         "socks": "#1f4fb8",
+        "pattern": "panels",
+        "pattern_source": "placeholder",
         "away": {
           "primary": "#f4f4f4",
           "secondary": "#1f4fb8",
@@ -5923,6 +5957,8 @@
         "secondary": "#16161a",
         "shorts": "#16161a",
         "socks": "#f4f4f4",
+        "pattern": "yoke",
+        "pattern_source": "placeholder",
         "away": {
           "primary": "#1f4fb8",
           "secondary": "#16161a",
@@ -6150,6 +6186,8 @@
         "secondary": "#f4f4f4",
         "shorts": "#16254f",
         "socks": "#1f4fb8",
+        "pattern": "band",
+        "pattern_source": "placeholder",
         "away": {
           "primary": "#f4f4f4",
           "secondary": "#1f4fb8",
@@ -6377,6 +6415,8 @@
         "secondary": "#16161a",
         "shorts": "#16161a",
         "socks": "#c8102e",
+        "pattern": "sash",
+        "pattern_source": "placeholder",
         "away": {
           "primary": "#f4f4f4",
           "secondary": "#16161a",
@@ -6832,6 +6872,8 @@
         "secondary": "#6cb4e4",
         "shorts": "#16254f",
         "socks": "#16254f",
+        "pattern": "panels",
+        "pattern_source": "placeholder",
         "away": {
           "primary": "#6cb4e4",
           "secondary": "#16254f",
@@ -7286,6 +7328,8 @@
         "secondary": "#f5d000",
         "shorts": "#16254f",
         "socks": "#6cb4e4",
+        "pattern": "panels",
+        "pattern_source": "placeholder",
         "away": {
           "primary": "#16254f",
           "secondary": "#6cb4e4",
@@ -7513,6 +7557,8 @@
         "secondary": "#f4f4f4",
         "shorts": "#f4f4f4",
         "socks": "#7a1f3d",
+        "pattern": "yoke",
+        "pattern_source": "placeholder",
         "away": {
           "primary": "#f4f4f4",
           "secondary": "#7a1f3d",
@@ -7740,6 +7786,8 @@
         "secondary": "#2f6fd0",
         "shorts": "#16161a",
         "socks": "#16161a",
+        "pattern": "sash",
+        "pattern_source": "placeholder",
         "away": {
           "primary": "#2f6fd0",
           "secondary": "#f4f4f4",
@@ -7967,6 +8015,8 @@
         "secondary": "#16161a",
         "shorts": "#16161a",
         "socks": "#f6c700",
+        "pattern": "band",
+        "pattern_source": "placeholder",
         "away": {
           "primary": "#16161a",
           "secondary": "#f6c700",
@@ -8194,6 +8244,8 @@
         "secondary": "#f5d000",
         "shorts": "#16161a",
         "socks": "#5b2a86",
+        "pattern": "sash",
+        "pattern_source": "placeholder",
         "away": {
           "primary": "#f5d000",
           "secondary": "#5b2a86",

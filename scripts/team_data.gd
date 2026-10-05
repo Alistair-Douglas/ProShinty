@@ -226,7 +226,9 @@ static func kits_clash(a: Dictionary, b: Dictionary) -> bool:
 
 static func shirt_colours(kit: Dictionary) -> Array:
 	var out := [Color(str(kit.get("primary", "#cc2222")))]
-	if str(kit.get("pattern", "")) != "":
+	# Hoops, stripes and halves are as much the second colour as the first;
+	# a sash, panels, a yoke or a chest band are only a touch of it.
+	if str(kit.get("pattern", "")) in ["hoops", "stripes", "halves"]:
 		out.append(Color(str(kit.get("secondary", "#ffffff"))))
 	return out
 

@@ -259,7 +259,9 @@ func _chance(salt: int) -> float:
 func _body() -> void:
 	var skin := ShintyMesh.skin(m.skin_color)
 	var shirt_pattern := _team_pattern()
-	var shirt := ShintyMesh.fabric(m.shirt_color, m.trim_color, Vector2(-9, -9), Vector2(-9, -9), shirt_pattern[0], shirt_pattern[1])
+	var sleeves := Color(str(m.get_meta("kit_sleeves"))) if str(m.get_meta("kit_sleeves", "")) != "" and not m.is_keeper else Color(0, 0, 0, 0)
+	var shirt := ShintyMesh.fabric(m.shirt_color, m.trim_color, Vector2(-9, -9), Vector2(-9, -9), shirt_pattern[0], shirt_pattern[1],
+		0.82, 1, sleeves)
 	var chest_band := ShintyMesh.fabric(m.shirt_color, m.trim_color, Vector2(0.105, 0.14) if shirt_pattern[0] == 0 else Vector2(-9, -9),
 		Vector2(-9, -9), shirt_pattern[0], shirt_pattern[1])
 	var shorts := ShintyMesh.fabric(m.shorts_color, m.shirt_color, Vector2(-9, -9), Vector2(-9, -9), 0, 0.1, 0.75)
@@ -420,6 +422,8 @@ func _imported_body(mats: Dictionary) -> void:
 				for j in 4:
 					torso_bones.append(bones[i * 4 + j])
 					torso_weights.append(weights[i * 4 + j])
+		if key == "torso":
+			_centre_torso_u(verts, uvs)
 		# Skin shading baked by the converter (flush, lips, beard zones).
 		var cols := PackedColorArray()
 		var c: Array = sd.get("c", [])
@@ -477,6 +481,28 @@ func _imported_body(mats: Dictionary) -> void:
 
 
 var _torso_pts := PackedVector3Array()
+
+
+## The shirt's u (angle round the body x 0.15, 0 at the front) measured
+## round the body's own middle at each height, halfway between its front and
+## back, so designs that read the angle (sash, halves, panels) sit square
+## even where the body isn't centred on the spine. The seam down the back
+## keeps the side the converter gave it.
+static func _centre_torso_u(verts: PackedVector3Array, uvs: PackedVector2Array) -> void:
+	var lo := {}
+	var hi := {}
+	for p in verts:
+		var b := roundi(p.y / 0.04)
+		lo[b] = minf(lo.get(b, p.z), p.z)
+		hi[b] = maxf(hi.get(b, p.z), p.z)
+	for i in verts.size():
+		var p := verts[i]
+		var b := roundi(p.y / 0.04)
+		var a := atan2(p.x, -(p.z - (lo[b] + hi[b]) * 0.5))
+		var was := uvs[i].x
+		if absf(a) > 2.4 and signf(a) != signf(was) and was != 0.0:
+			a += TAU * signf(was)
+		uvs[i].x = a * 0.15
 
 
 ## Depth of the shirt surface at a spot on a torso bone, for things printed
@@ -650,7 +676,13 @@ static func _station_value(st: Array, z: float, k: int) -> float:
 	return st[0][k] if z > st[0][0] else st[st.size() - 1][k]
 
 
-## Shirt pattern from team data: colors.pattern = "hoops" or "stripes".
+## Shirt design from team data: colors.pattern = "hoops", "stripes",
+## "sash", "halves", "panels", "yoke" or "band" (else plain), in the
+## secondary colour; colors.sleeves (optional) colours the sleeves of the
+## last five. Keepers wear plain.
+const PATTERNS := ["", "hoops", "stripes", "sash", "halves", "panels", "yoke", "band"]
+
+
 func _team_pattern() -> Array:
 	var p := str(m.get_meta("kit_pattern", "")).to_lower()
 	if m.is_keeper:
@@ -659,7 +691,7 @@ func _team_pattern() -> Array:
 		return [1, 0.14]
 	if p == "stripes":
 		return [2, 0.06]
-	return [0, 0.12]
+	return [maxi(0, PATTERNS.find(p)), 0.12]
 
 
 # --- Kit details -----------------------------------------------------------------

@@ -187,9 +187,16 @@ uniform vec4 trim_color : source_color = vec4(1.0);
 // Bands in the trim colour along the mesh (v in metres): x = start, y = end.
 uniform vec4 band_a = vec4(-9.0, -9.0, 0.0, 0.0);
 uniform vec4 band_b = vec4(-9.0, -9.0, 0.0, 0.0);
-// Pattern: 0 plain, 1 hoops, 2 vertical stripes
+// Pattern: 0 plain, 1 hoops, 2 vertical stripes, 3 sash, 4 halves, 5 side
+// panels, 6 yoke, 7 chest band. 3 to 7 read an imported body's shirt
+// coordinates: on the body (part 0) u is the angle round it x 0.15 (0 at
+// the front, + towards the player's right) and v the height in metres from
+// just under the chest; on a sleeve (part 1) they paint the sleeve whole.
 uniform float pattern = 0.0;
 uniform float pattern_scale = 0.12;
+uniform float part = 0.0;
+// Sleeves in their own colour when alpha > 0.5 (patterns 3 to 7).
+uniform vec4 sleeve_color : source_color = vec4(0.0);
 uniform float roughness = 0.82;
 uniform float weave = 1.0;
 // Knitted ribs running down the cloth (socks), as a height in metres.
@@ -202,10 +209,34 @@ void fragment() {
 	float t = max(in_band(UV.y, band_a), in_band(UV.y, band_b));
 	if (pattern > 0.5 && pattern < 1.5) {
 		t = max(t, step(0.5, fract(UV.y / pattern_scale)));
-	} else if (pattern > 1.5) {
+	} else if (pattern > 1.5 && pattern < 2.5) {
 		t = max(t, step(0.5, fract(UV.x / pattern_scale)));
+	} else if (pattern > 2.5 && part < 0.5) {
+		float a = UV.x / 0.15;
+		// Across the body, roughly metres (+ = the player's right), front
+		// and back alike: 0 down the middle, 0.17 at the sides.
+		float side = (abs(a) < 1.5708 ? a : sign(a) * 3.14159 - a) * 0.108;
+		float v = UV.y;
+		float d = 0.0;
+		if (pattern < 3.5) {  // sash: left shoulder to right hip, front and back
+			d = 1.0 - smoothstep(0.045, 0.05, abs(side + 0.8 * (v - 0.02)));
+		} else if (pattern < 4.5) {  // halves: the player's right half
+			d = step(0.0, side);
+		} else if (pattern < 5.5) {  // side panels under the arms
+			d = step(0.13, abs(side)) * step(v, 0.19);
+		} else if (pattern < 6.5) {  // yoke over the shoulders
+			d = step(0.15 - 0.02 * cos(a), v);
+		} else {  // one broad band across the chest
+			d = step(-0.01, v) * step(v, 0.11);
+		}
+		t = max(t, d);
+	} else if (pattern > 5.5 && pattern < 6.5) {
+		t = 1.0;  // a yoke runs on down the sleeves
 	}
 	c = mix(c, trim_color.rgb, t);
+	if (pattern > 2.5 && part > 0.5 && sleeve_color.a > 0.5) {
+		c = sleeve_color.rgb;
+	}
 	// Knit: fine diagonal weave, only visible up close.
 	vec2 k = UV * 520.0;
 	float knit = sin(k.x + k.y) * sin(k.x - k.y);
@@ -351,8 +382,9 @@ static func _shader(key: String, code: String) -> Shader:
 
 
 static func fabric(base: Color, trim: Color, band_a := Vector2(-9, -9), band_b := Vector2(-9, -9),
-		pattern := 0, pattern_scale := 0.12, roughness := 0.82) -> ShaderMaterial:
-	var key := "fab/%s/%s/%s/%s/%d/%.3f/%.2f" % [base.to_html(), trim.to_html(), band_a, band_b, pattern, pattern_scale, roughness]
+		pattern := 0, pattern_scale := 0.12, roughness := 0.82, part := 0, sleeves := Color(0, 0, 0, 0)) -> ShaderMaterial:
+	var key := "fab/%s/%s/%s/%s/%d/%.3f/%.2f/%d/%s" % [base.to_html(), trim.to_html(), band_a, band_b, pattern, pattern_scale, roughness,
+		part, sleeves.to_html()]
 	if _cache.has(key):
 		return _cache[key]
 	var m := ShaderMaterial.new()
@@ -364,6 +396,8 @@ static func fabric(base: Color, trim: Color, band_a := Vector2(-9, -9), band_b :
 	m.set_shader_parameter("pattern", float(pattern))
 	m.set_shader_parameter("pattern_scale", pattern_scale)
 	m.set_shader_parameter("roughness", roughness)
+	m.set_shader_parameter("part", float(part))
+	m.set_shader_parameter("sleeve_color", sleeves)
 	_cache[key] = m
 	return m
 
