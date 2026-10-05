@@ -207,6 +207,7 @@ func setup(player: Dictionary, team: Dictionary = {}) -> void:
 	if str(caman_design.get("helmet", "")) != "":
 		helmet_color = Color(str(caman_design["helmet"]))
 	set_meta("kit_pattern", str(team.get("colors", {}).get("pattern", "")))
+	set_meta("kit_sleeves", str(team.get("colors", {}).get("sleeves", "")))
 	rebuild()
 
 

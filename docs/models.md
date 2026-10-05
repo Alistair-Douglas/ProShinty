@@ -84,7 +84,13 @@ animation or physics.
   number on the front, a big number on the back (no names: shinty shirts
   don't carry them) and the team's sponsor across the front in matches.
   Socks have trim hoops. A team can set
-  `colors.pattern` to `"hoops"` or `"stripes"`.
+  `colors.pattern` to `"hoops"`, `"stripes"`, `"sash"`, `"halves"`,
+  `"panels"` (under the arms), `"yoke"` (shoulders and sleeves) or `"band"`
+  (across the chest), in the secondary colour, and `colors.sleeves` to give
+  the last five sleeves of their own. The last five read the imported body's
+  shirt coordinates (angle round the body, height), so they need a Blender
+  body. `colors.pattern_source: "placeholder"` marks a design picked for
+  variety until the club's real one is known.
 - **Boots** are low-cut football boots: a flat sole plate with a little toe
   spring, a heel collar round the ankle, a lace panel over the instep, a
   wide forefoot turned in at the big toe, a side flash, and conical studs.
