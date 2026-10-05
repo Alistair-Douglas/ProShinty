@@ -129,8 +129,11 @@ func _check_match() -> bool:
 		goals += 1 if e["type"] == "goal" else 0
 		breaks += 1 if e["type"] == "half_end" else 0
 	var cats := {}
+	var voiced := 0
 	for s in c.said:
 		cats[s["cat"]] = cats.get(s["cat"], 0) + 1
+		voiced += 1 if s["voiced"] else 0
+	print("%d of %d lines had a recording" % [voiced, c.said.size()])
 	var goal_lines: int = cats.get("goal", 0) + cats.get("goal_equaliser", 0) + cats.get("goal_late", 0)
 	print("Goals %d, goal lines %d; %d lines said in %d categories: %s" % [goals, goal_lines, c.said.size(), cats.size(), str(cats)])
 	if goal_lines != goals:
