@@ -14,7 +14,7 @@ const CAMAN_MASS := 0.36      ## effective mass of caman head plus hands at cont
 const RESTITUTION := 0.6      ## ash wood on a leather ball
 const SWEET_SPOT := 0.08      ## m: contacts closer than this are clean
 const MAX_REACH := 0.35       ## m: further than this from the head is a miss
-const MIN_HEAD_SPEED := 3.0   ## m/s for a gentle tap (a few yards along the grass)
+const MIN_HEAD_SPEED := 9.0   ## m/s for a gentle tap
 const MAX_HEAD_SPEED := 30.0  ## m/s for a full swing by an average hitter
 
 
