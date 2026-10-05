@@ -16,6 +16,9 @@ hits off the posts or bar from `match.ball_sim.post_hits`:
 | half time | `whistle_half.wav`, two blasts |
 | full time | `whistle_full.wav`, two short blasts and a long one |
 
+Match commentary (captions and voice files) lives in `commentary/`: see
+`commentary/README.md`.
+
 The crowd chattering (`crowd_chatter.wav`) loops quietly under the whole match
 and pauses with the game.
 

@@ -552,7 +552,15 @@ func _build_controls() -> void:
 	cam.size = Vector2(250, 74)
 	cam.changed.connect(func(i): Game.set_camera_view(i))
 	s.add_child(cam)
-	cam.focus_neighbor_bottom = back.get_path()
+	# Match commentary: captions, voice, both or off (broadcast/commentary.gd).
+	var talk := ShintyStepper.new("Commentary", Game.COMMENTARY_NAMES, Game.commentary)
+	talk.position = Vector2(1000, 210)
+	talk.size = Vector2(250, 74)
+	talk.changed.connect(func(i): Game.set_commentary(i))
+	s.add_child(talk)
+	cam.focus_neighbor_bottom = talk.get_path()
+	talk.focus_neighbor_top = cam.get_path()
+	talk.focus_neighbor_bottom = back.get_path()
 	for c in [back, gfx, mus, show]:
 		c.focus_neighbor_top = cam.get_path()
 	back.focus_neighbor_right = gfx.get_path()

@@ -23,7 +23,7 @@ shinty_player.gd (~1,700), shinty_pitch.gd (~1,300) and main_menu.gd (~850).
 | Weather | scripts/weather.gd, pitch/rain.gd |
 | Player model, poses, look | models/shinty_player.gd (skeleton, actions), models/shinty_player_look.gd (mesh, face, kit), models/shinty_pose_tweaks.gd |
 | Grounds | pitch/shinty_pitch.gd plus one file per ground in pitch/venues/; tree and car models in pitch/models/ via pitch/scenery_models.gd |
-| TV coverage, replays, graphics, crowd, judges, pre-match | broadcast/ |
+| TV coverage, replays, graphics, crowd, judges, pre-match, commentary | broadcast/ (commentary lines in data/commentary.json, voice files in audio/commentary/) |
 | Menus, loading screen | scripts/main_menu.gd, scripts/loading_screen.gd, ui/ |
 | Global state, settings, input bindings | scripts/game.gd (autoload `Game`) |
 | Squads, ratings, kits | data/teams.json, scripts/team_data.gd |
