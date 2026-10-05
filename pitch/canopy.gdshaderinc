@@ -83,7 +83,14 @@ void fragment() {
 	}
 #endif
 	float mottle = mottle_at(leaf_pos);
-	vec3 col = COLOR.rgb * mix(0.45, 1.1, height_shade);
+	// The instance colour is linear. The Compatibility renderer lights and
+	// outputs in sRGB, so there it goes back to sRGB or the leaves come out
+	// almost black.
+	vec3 leaf = COLOR.rgb;
+	if (OUTPUT_IS_SRGB) {
+		leaf = mix(leaf * 12.92, 1.055 * pow(leaf, vec3(1.0 / 2.4)) - 0.055, step(vec3(0.0031308), leaf));
+	}
+	vec3 col = leaf * mix(0.45, 1.1, height_shade);
 #ifndef FAR
 	if (is_card > 0.5) {
 		float a = leaves(UV, card_seed);
@@ -104,5 +111,5 @@ void fragment() {
 	ALBEDO = col;
 	ROUGHNESS = 0.85;
 	SPECULAR = 0.2;
-	BACKLIGHT = COLOR.rgb * 0.3;
+	BACKLIGHT = leaf * 0.3;
 }
