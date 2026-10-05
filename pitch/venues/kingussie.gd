@@ -1,15 +1,18 @@
 extends RefCounted
-## Kingussie Camanachd's pitch, The Dell, laid out from the satellite view.
+## Kingussie Camanachd's pitch, The Dell, laid out from the satellite view
+## and a drone photo of a match day.
 ##
 ## The real pitch runs north-west to south-east; here its long axis is X as
 ## usual, so -X is the north-west end and -Z the north-east side. North-west
-## end: the covered stand and a hut behind the hail. North-east side:
-## dugouts, a portakabin and the big gravel car park, with young tree
-## plantations beyond and the town up the slope. South-west side and south-east
-## end: a belt of birch and alder, then the River Spey curving round the
-## ground, with the A9 beyond. The pitch is railed all round, striped
-## lengthways, and there is a ball-stop net behind the south-east hail.
-## The Monadhliath and the Cairngorms close in on the horizon.
+## end: a green ball-stop net behind the hail and the small timber clubhouse
+## by the corner. North-east side: dugouts, small covered stands, a
+## portakabin and the big gravel car park with match-day marquees, young tree
+## plantations beyond and the town up the slope. South-west side: a tall line
+## of spruce close along the touchline, hospitality trailers and parked cars
+## in front of it, then the River Spey, which curves round the south-east end
+## behind the other ball-stop net, with the A9 beyond. The pitch is railed all
+## round and striped lengthways. The Monadhliath and the Cairngorms close in
+## on the horizon.
 
 const WATER_LEVEL := -1.0
 
@@ -141,7 +144,7 @@ func _build_trees(root: Node3D, rng: RandomNumberGenerator) -> void:
 			for s in [-1.0, 1.0]:
 				if rng.randf() < 0.75:
 					var q: Vector2 = a + dir * t + side * s * rng.randf_range(12.0, 24.0)
-					if absf(q.x) < hl + 14.0 and absf(q.y) < hw + 18.0:
+					if absf(q.x) < hl + 14.0 and absf(q.y) < hw + 20.0:
 						continue
 					var h: float = p.height_m(q.x, q.y)
 					var base := Vector3(q.x, h, q.y)
@@ -153,6 +156,13 @@ func _build_trees(root: Node3D, rng: RandomNumberGenerator) -> void:
 					else:
 						p.add_pine(near, rng, base)
 			t += rng.randf_range(5.0, 9.0)
+	# The tall line of spruce along the south-west side, a few metres back from
+	# the rail, and round the corners.
+	var x := -hl - 18.0
+	while x < hl + 22.0:
+		var q := Vector2(x, hw + rng.randf_range(13.0, 17.0))
+		p.add_pine(near, rng, Vector3(q.x, p.height_m(q.x, q.y), q.y))
+		x += rng.randf_range(3.2, 4.6)
 	# Young plantations north-east of the car park, in blocks.
 	for block in [Rect2(-10, -150, 45, 30), Rect2(45, -130, 35, 45), Rect2(20, -95, 30, 18)]:
 		var bz: float = block.position.y
@@ -220,29 +230,53 @@ func _build_ground_furniture(root: Node3D) -> void:
 		var r: MeshInstance3D = p.add_box(holder, Vector3(a.distance_to(b), 0.06, 0.06), Vector3(mid.x, 1.08, mid.y), rail_mat)
 		r.rotation.y = -atan2(b.y - a.y, b.x - a.x)
 
-	# Covered stand behind the north-west hail, facing down the pitch.
-	var stand := Node3D.new()
-	stand.name = "Stand"
-	stand.position = Vector3(-hl - 13.0, 0, -hw * 0.45)
-	holder.add_child(stand)
-	var width := 18.0
-	p.add_box(stand, Vector3(0.3, 4.6, width), Vector3(-3.0, 2.3, 0), steel)            # back wall
-	for s in [-1.0, 1.0]:
-		p.add_box(stand, Vector3(6.0, 4.6, 0.3), Vector3(0, 2.3, s * width * 0.5), steel)  # ends
-	var roof: MeshInstance3D = p.add_box(stand, Vector3(6.8, 0.15, width + 0.6), Vector3(0.3, 4.75, 0), roof_mat)
-	roof.rotation.z = -0.1
-	p.add_box(stand, Vector3(5.6, 4.3, width - 0.4), Vector3(-0.1, 2.2, 0), dark)       # shadowed interior
-	for tier in 4:
-		var tx := 2.2 - tier * 1.2
-		p.add_box(stand, Vector3(1.2, 0.45 + tier * 0.45, width - 0.6), Vector3(tx, (0.45 + tier * 0.45) * 0.5, 0), p.mat("stand_step", Color(0.6, 0.6, 0.58), 0.9))
-		p.add_box(stand, Vector3(0.5, 0.12, width - 0.8), Vector3(tx - 0.2, 0.5 + tier * 0.45, 0), seat)
-	# Club hut beside the stand.
+	# Ball-stop nets behind both hails: green netting on tall posts over a row
+	# of solid green panels.
+	var net_green := Color(0.14, 0.42, 0.26)
+	var panel: Material = p.mat("net_panel", Color(0.3, 0.62, 0.38), 0.7)
+	for end in [-1.0, 1.0]:
+		var nx: float = end * (hl + 7.0)
+		p.add_fence(root, Vector2(nx, -21.0), Vector2(nx, 21.0), 7.0, 4.2, net_green, true, 0.22)
+		p.add_box(holder, Vector3(0.12, 1.3, 42.0), Vector3(nx, 0.65, 0), panel)
+	# The club's small timber clubhouse by the north-west corner, with a deck.
 	var hut := Node3D.new()
-	hut.position = Vector3(-hl - 20.0, 0, -hw * 0.45 - 16.0)
+	hut.name = "Clubhouse"
+	hut.position = Vector3(-hl - 16.0, 0, hw * 0.35)
 	holder.add_child(hut)
-	p.add_box(hut, Vector3(5.0, 2.8, 4.0), Vector3(0, 1.4, 0), p.mat("timber", Color(0.55, 0.42, 0.3), 0.9))
-	var hr: MeshInstance3D = p.add_roof(hut, Vector3(4.6, 1.2, 5.6), Vector3(0, 3.4, 0), roof_mat)
-	hr.rotation.y = PI * 0.5
+	var timber: Material = p.mat("timber", Color(0.55, 0.42, 0.3), 0.9)
+	var hut_roof: Material = p.mat("hut_roof_green", Color(0.18, 0.3, 0.22), 0.7)
+	p.add_box(hut, Vector3(7.0, 3.0, 9.0), Vector3(0, 1.5, 0), timber)
+	var hr: MeshInstance3D = p.add_roof(hut, Vector3(8.0, 1.8, 9.8), Vector3(0, 3.9, 0), hut_roof)
+	hr.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	p.add_box(hut, Vector3(2.5, 0.25, 9.0), Vector3(4.7, 0.55, 0), timber)
+	p.add_box(hut, Vector3(0.1, 1.4, 1.0), Vector3(3.53, 1.7, -2.2), p.mat("window", Color(0.12, 0.14, 0.17), 0.2))
+	p.add_box(hut, Vector3(0.1, 2.0, 1.0), Vector3(3.53, 1.0, 1.5), p.mat("door_dark", Color(0.18, 0.2, 0.22), 0.7))
+	# Small covered stands on the car park side, past the dugouts.
+	for sx in [30.0, 40.0]:
+		var st := Node3D.new()
+		st.position = Vector3(sx, 0, -hw - 6.5)
+		holder.add_child(st)
+		p.add_box(st, Vector3(7.0, 2.6, 0.15), Vector3(0, 1.3, -1.4), steel)
+		for s in [-1.0, 1.0]:
+			p.add_box(st, Vector3(0.15, 2.6, 2.8), Vector3(s * 3.5, 1.3, 0), steel)
+		p.add_box(st, Vector3(7.4, 0.12, 3.2), Vector3(0, 2.66, -0.1), roof_mat)
+		for tier in 2:
+			p.add_box(st, Vector3(6.6, 0.4 + tier * 0.4, 0.9), Vector3(0, (0.4 + tier * 0.4) * 0.5, 0.6 - tier * 0.9), p.mat("stand_step", Color(0.6, 0.6, 0.58), 0.9))
+			p.add_box(st, Vector3(6.4, 0.1, 0.4), Vector3(0, 0.45 + tier * 0.4, 0.5 - tier * 0.9), seat)
+	# Match-day marquees on the gravel, and hospitality trailers in front of
+	# the spruce on the other side.
+	var canvas: Material = p.mat("marquee", Color(0.95, 0.95, 0.94), 0.8)
+	for mq in [[Vector3(-hl * 0.35, 0, -hw - 46.0), Vector3(34.0, 3.0, 9.0)], [Vector3(-hl - 6.0, 0, -hw - 24.0), Vector3(14.0, 3.0, 10.0)]]:
+		var c: Vector3 = mq[0]
+		var sz: Vector3 = mq[1]
+		p.add_box(holder, sz, c + Vector3(0, sz.y * 0.5, 0), canvas)
+		var mr: MeshInstance3D = p.add_roof(holder, Vector3(sz.z + 0.2, 1.6, sz.x + 0.2), c + Vector3(0, sz.y + 0.8, 0), canvas)
+		mr.rotation.y = PI * 0.5
+	var trailer: Material = p.mat("trailer_white", Color(0.92, 0.93, 0.94), 0.5)
+	for tx in [hl * 0.38, hl * 0.62]:
+		p.add_box(holder, Vector3(13.0, 3.6, 2.6), Vector3(tx, 2.2, hw + 8.5), trailer)
+		p.add_box(holder, Vector3(13.0, 0.4, 2.6), Vector3(tx, 0.2, hw + 8.5), p.mat("tyre", Color(0.08, 0.08, 0.08), 0.8))
+	p.add_box(holder, Vector3(16.0, 3.8, 2.6), Vector3(-hl - 2.0, 2.3, hw + 11.0), trailer)
 
 	# Dugouts either side of halfway on the north-east side, and a portakabin.
 	for sx in [-9.0, 9.0]:
@@ -260,8 +294,6 @@ func _build_ground_furniture(root: Node3D) -> void:
 	p.add_box(holder, Vector3(2.4, 2.2, 1.8), Vector3(-1.0, 1.1, hw + 5.5), white)
 	p.add_box(holder, Vector3(2.8, 0.12, 2.2), Vector3(-1.0, 2.26, hw + 5.5), roof_mat)
 
-	# Ball-stop net behind the south-east hail.
-	p.add_fence(root, Vector2(hl + 7.0, -20.0), Vector2(hl + 7.0, 20.0), 7.0, 5.0, Color(0.15, 0.15, 0.15), true, 0.15)
 
 
 func _build_town(root: Node3D, rng: RandomNumberGenerator) -> void:
@@ -288,3 +320,5 @@ func _build_cars(root: Node3D, rng: RandomNumberGenerator) -> void:
 	p.park_row(holder, rng, Vector3(28.0, 0, -hw - 13.0), Vector3(hl - 4.0, 0, -hw - 13.0), -PI * 0.5, 0.6)
 	p.park_row(holder, rng, Vector3(-hl + 12.0, 0, -hw - 26.0), Vector3(hl - 10.0, 0, -hw - 26.0), PI * 0.5, 0.35)
 	p.add_van(holder, Vector3(-hl - 20.0, 0, -hw - 30.0), 0.4)
+	# More on the grass in front of the spruce at the north-west end.
+	p.park_row(holder, rng, Vector3(-hl + 6.0, 0, hw + 9.0), Vector3(-hl * 0.45, 0, hw + 9.0), PI * 0.5, 0.7)
