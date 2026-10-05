@@ -22,6 +22,12 @@ const BASE_HEIGHT := 1.80
 const CAMAN_LENGTH := 1.14  ## a full-size caman, measured off a real one
 const GRIP_TOP := 0.05     ## distance of the top hand from the butt of the caman
 const GRIP_LOW := 0.24     ## distance of the lower hand from the butt
+## Running carry across the body (right-hander, hips space): the lower hand
+## at the hip, the shaft's direction from the butt, and [lower, top] grips
+## from the butt.
+const DIAG_HAND := Vector3(0.15, 0.0, -0.2)
+const DIAG_STICK := Vector3(-0.58, 0.8, -0.16)
+const DIAG_GRIP := Vector2(0.05, 0.45)
 ## Walking carry, hips space (x mirrors for lefties): where the hand hangs,
 ## and which way the caman points from butt to bas (down and back, trailing).
 const WALK_HAND := Vector3(0.24, -0.12, 0.0)
@@ -236,7 +242,8 @@ static func body_from_stats(p: Dictionary) -> Dictionary:
 
 
 ## Whether a player carries the caman up by the shoulder when running (about
-## two in five do) rather than low by the waist. Stable for each player.
+## two in five do) rather than across the body in both hands. Stable for
+## each player.
 static func carries_on_shoulder(p: Dictionary) -> bool:
 	return (_seed_of(p) / 7) % 5 < 2
 
@@ -912,6 +919,7 @@ func _pose(_delta: float) -> void:
 	# the backswing, so the hit itself is always two-handed.
 	var carry := carry_w
 	var carry_top = null
+	var carry_arm_swing := 1.0  # the free arm swings with the run (not when both hands hold)
 	if carry > 0.001:
 		var mx := -1.0 if left_handed else 1.0
 		var pump := sin(ph) * run   # > 0: front (left) leg forward
@@ -928,13 +936,21 @@ func _pose(_delta: float) -> void:
 		hand = hand.lerp(Vector3(WALK_HAND.x * mx, WALK_HAND.y, WALK_HAND.z - 0.1 * swing_w), walk_k)
 		cd = cd.lerp(Vector3(WALK_STICK.x * mx, WALK_STICK.y, WALK_STICK.z + 0.08 * swing_w), walk_k).normalized()
 		face_c = face_c.lerp(Vector3(0.0, 0.4, 1.0), walk_k)
+		# Running, the rest carry it across the body in both hands: lower
+		# hand at the butt by the hip, top hand up the shaft at the chest,
+		# the bas up past the other shoulder (Alistair's photo).
+		var diag := 0.0 if shoulder_carry else gait
 		if shoulder_carry:
 			# Up by the shoulder: hand at the chest, the caman standing up
 			# past the shoulder and a little back, the bas curling back.
 			hand = Vector3(0.2 * mx, 0.24 + bob, -0.2 - 0.05 * pump) + lean_fwd
 			cd = Vector3(0.22 * mx, 0.9, 0.34 + 0.05 * pump).normalized()
 			face_c = Vector3(0.0, 0.3, 1.0)
-		var carry_grip := GRIP_LOW
+		elif diag > 0.0:
+			hand = hand.lerp(Vector3(DIAG_HAND.x * mx, DIAG_HAND.y + bob, DIAG_HAND.z - 0.03 * pump) + lean_fwd, diag)
+			cd = cd.lerp(Vector3(DIAG_STICK.x * mx, DIAG_STICK.y, DIAG_STICK.z), diag).normalized()
+			face_c = face_c.lerp(Vector3(0.0, 0.2, 1.0), diag)
+		var carry_grip := lerpf(GRIP_LOW, DIAG_GRIP.x, diag)
 		if not carry_tw.is_empty():
 			# Tweaks are for a right-hander: mirror them across for a left.
 			var off: Vector3 = carry_tw["caman"] / maxf(carry, 0.001)
@@ -949,6 +965,9 @@ func _pose(_delta: float) -> void:
 		var top_run := Vector3(-0.17 * mx, 0.24 - 0.08 * pump + bob, -0.16 + 0.22 * pump) + lean_fwd * 1.3
 		var top_walk := Vector3(-0.23 * mx, -0.14, 0.02 + 0.14 * swing_w)
 		carry_top = hips_g.origin + yaw_b * top_run.lerp(top_walk, walk_k)
+		if diag > 0.0:
+			carry_top = carry_top.lerp(carry_t.origin + d_c * DIAG_GRIP.y, diag)
+		carry_arm_swing = 1.0 - diag
 	# Keep both grips within arm's reach: slide the caman towards the shoulders.
 	for iter in 3:
 		var grips := [[top_side, grip_top], [low_side, grip_low]]
@@ -986,7 +1005,7 @@ func _pose(_delta: float) -> void:
 		free_target = top.lerp(carry_top, carry)
 	# A runner's free arm swings with the elbow tucked down and back.
 	var shaft_dir := -ct.basis.y
-	_solve_arm(top_side, free_target if free_target != null else top, carry if carry_top != null else 0.0,
+	_solve_arm(top_side, free_target if free_target != null else top, carry * carry_arm_swing if carry_top != null else 0.0,
 		shaft_dir if free_target == null else Vector3.ZERO)
 	_solve_arm(low_side, _free_low if _free_low != null else low, carry if carry_top != null else 0.0,
 		shaft_dir if _free_low == null else Vector3.ZERO)

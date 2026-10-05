@@ -107,9 +107,11 @@ func _run() -> void:
 	for i in 60:
 		runner.advance(1.0 / 60.0)
 	var carried := runner.get_caman_head_position()
-	check(carried.y > 0.15 and carried.y < 0.8 and carried.z < -0.4, "running, the caman head is carried low out in front (%s)" % carried)
-	check(_top_hand_gap(runner) > 0.15, "running, the top hand is off the caman (%.2f m)" % _top_hand_gap(runner))
-	check(_hook_y(runner) > 0.3, "running, the hook of the caman faces up (%.2f)" % _hook_y(runner))
+	# Carried across the body in both hands: the head up past the far
+	# shoulder, the top hand on the shaft.
+	var far := 1.0 if runner.left_handed else -1.0
+	check(carried.y > 1.3 and carried.x * far > 0.15, "running, the caman is carried across the body, head up past the far shoulder (%s)" % carried)
+	check(_top_hand_off_shaft(runner) < 0.08, "running, the top hand holds the shaft (%.2f m)" % _top_hand_off_shaft(runner))
 	runner.look_at_point(runner.global_transform * Vector3(0, 0, -2.5))
 	for i in 40:
 		runner.advance(1.0 / 60.0)
@@ -453,6 +455,17 @@ func _top_hand_gap(m: ShintyPlayerModel) -> float:
 	var wrist := sk.global_transform * sk.get_bone_global_pose(sk.find_bone(side + "Hand")).origin
 	var grip: Vector3 = m._caman.global_transform * Vector3(0, -ShintyPlayerModel.GRIP_TOP, 0)
 	return maxf(0.0, wrist.distance_to(grip) - ShintyPlayerModel.HAND_GRIP * m.height_cm / 180.0)
+
+
+## How far the top hand is from anywhere on the shaft.
+func _top_hand_off_shaft(m: ShintyPlayerModel) -> float:
+	var sk: Skeleton3D = m.get_node("Skeleton3D")
+	var side := "Right" if m.left_handed else "Left"
+	var wrist := sk.global_transform * sk.get_bone_global_pose(sk.find_bone(side + "Hand")).origin
+	var butt: Vector3 = m._caman.global_transform * Vector3.ZERO
+	var tip: Vector3 = m._caman.global_transform * Vector3(0, -0.9, 0)
+	var on := Geometry3D.get_closest_point_to_segment(wrist, butt, tip)
+	return maxf(0.0, wrist.distance_to(on) - ShintyPlayerModel.HAND_GRIP * m.height_cm / 180.0)
 
 
 ## Which way the hook of the bas points: +1 straight up, -1 at the grass.
