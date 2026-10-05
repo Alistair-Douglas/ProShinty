@@ -59,6 +59,14 @@
 		"mossfield": {
 			"name": "Mossfield, Oban",
 			"say": "Moss-field, in OH-ban"
+		},
+		"col_glen": {
+			"name": "Glendaruel",
+			"say": "Glen-da-ROO-el"
+		},
+		"lochcarron": {
+			"name": "Lochcarron",
+			"say": "Loch-CARR-on"
 		}
 	},
 	"lines": {

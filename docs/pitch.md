@@ -10,6 +10,9 @@ it for a match, and picking a home team moves the match to that team's ground.
 | Kingussie (The Dell) | A satellite view of the club |
 | Tighnabruaich (Kyles Athletic) | An aerial photo of the ground |
 | Portree (Skye Camanachd) | Aerial views, a terrain map and photos of the ground |
+| Mossfield Park (Oban) | Aerial views and photos of the ground (some aerials stretched, so used for layout only) |
+| Col Glen (Glendaruel) | An aerial view and photos from the touchline |
+| Lochcarron | Aerial views and street photos |
 
 ## The pitch
 
@@ -69,6 +72,33 @@ top, then moorland rising to the hills. North-west end: the wooded gully of
 the Lon na h-Atha, with glamping pods on the hillside beyond. Floodlight
 poles stand along both sides. To the south-east the land falls to Portree
 Bay, with Ben Tianavaig's flat top across the water.
+
+**Mossfield Park, Oban.** The pitch sits in a hollow on the edge of the town,
+ringed by wooded hills. Far side: the covered stand left of halfway (white
+terraced steps with yellow stair edges, blue steelwork, a curved roof), with
+spectators on its terracing, then a wall of tall conifers, the fenced training
+pitch and a wooded crag with a rock face. Near side: a gravel track that
+sweeps round the east end, the club's white flat-roofed buildings, sheds and
+containers towards the west, and past halfway the grass mound, whose steep
+banks the crowd sits on. West end: tall trees, the gravel yard and car park,
+then the town running down to Oban Bay. East end: trees and a craggy knoll.
+
+**Col Glen, Glendaruel.** An open country pitch on the floor of the glen, by
+Kilmodan Primary School. Yellow posts and rope run along both touchlines.
+Far side: alder, birch and oak along the River Ruel, fields across it, and a
+steep hillside of forestry blocks and open grass. Near side: the school and
+its car park towards the east end, a shed and a picnic bench, and houses
+along the road. East end: a polytunnel garden and the play park. West end: a
+burn with trees, and hay bales in the fields down the glen.
+
+**Lochcarron.** Between the A896 and the shore of Loch Carron. West end: a
+chain-link fence with tall ball-stop poles behind the hail, the main road,
+and the village and woods on the hillside above. Far side: the white
+single-storey cottages of Murray Square, and the small white clubhouse with a
+red roof and a green shed by the shore end. Near side: a post-and-wire fence,
+Park Road with its street lights and houses, the gym, and the Allt nan Carnan
+burn behind. East end: a gravel oval, the playground and boats on the shingle,
+then the loch with hills across the water.
 
 ## Using it
 

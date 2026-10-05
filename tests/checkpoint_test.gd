@@ -199,9 +199,9 @@ func _drive_menu_matches() -> bool:
 				quit(1)
 				return true
 			var n: int = scene.home_pick.item_count
-			scene.home_pick.select([0, 2, 20, 30, 7][_venue] % n)
+			scene.home_pick.select([0, 2, 20, 30, 7, 12, 25][_venue] % n)
 			scene.home_pick.item_selected.emit(scene.home_pick.selected)
-			scene.away_pick.select([1, n - 1, 5, 9, 3][_venue] % n)
+			scene.away_pick.select([1, n - 1, 5, 9, 3, 11, 14][_venue] % n)
 			scene.away_pick.item_selected.emit(scene.away_pick.selected)
 			scene.pitch_pick.select(_venue)
 			scene.side_pick.select(_venue % 2)

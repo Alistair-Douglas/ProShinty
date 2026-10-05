@@ -19,6 +19,12 @@ extends Node3D
 ## - Mossfield Park (Oban): in a hollow ringed by wooded hills, with the
 ##   covered stand and a wall of conifers on one side, the grass mound and the
 ##   club buildings on the other, and a crag above.
+## - Col Glen (Glendaruel): an open country pitch by the village school, with
+##   the River Ruel and its trees along one side and steep forestry and open
+##   hill rising behind.
+## - Lochcarron: between the main road and the shore of Loch Carron, with
+##   white cottages along one side, houses along the other, a small
+##   red-roofed clubhouse, and the hills across the loch.
 ##
 ## Everything is generated when the node enters the tree (also in the editor).
 ## The layout of each ground lives in venues/; this script holds the pitch,
@@ -29,7 +35,7 @@ extends Node3D
 ## touchline at -Z. Match code that works in yards with the origin in a corner
 ## (like the 2D game) converts with sim_to_world() / world_to_sim().
 
-enum Venue { ABERDOUR, KINGUSSIE, TIGHNABRUAICH, PORTREE, MOSSFIELD }
+enum Venue { ABERDOUR, KINGUSSIE, TIGHNABRUAICH, PORTREE, MOSSFIELD, COL_GLEN, LOCHCARRON }
 enum Lighting { SUMMER_AFTERNOON, SUMMER_EVENING, OVERCAST, WINTER_SUN, RAIN }
 enum Detail { LOW, MEDIUM, HIGH }
 
@@ -37,11 +43,11 @@ enum Detail { LOW, MEDIUM, HIGH }
 const SceneryModels := preload("res://pitch/scenery_models.gd")
 
 ## Display names for menus, in Venue order.
-const VENUE_NAMES := ["Aberdour", "Kingussie (The Dell)", "Tighnabruaich (Kyles Athletic)", "Portree (Skye)", "Mossfield (Oban)"]
+const VENUE_NAMES := ["Aberdour", "Kingussie (The Dell)", "Tighnabruaich (Kyles Athletic)", "Portree (Skye)", "Mossfield (Oban)", "Col Glen (Glendaruel)", "Lochcarron"]
 ## Each ground's layout script in venues/, by Venue.
-const VENUE_FILES := ["aberdour.gd", "kingussie.gd", "tighnabruaich.gd", "portree.gd", "mossfield.gd"]
+const VENUE_FILES := ["aberdour.gd", "kingussie.gd", "tighnabruaich.gd", "portree.gd", "mossfield.gd", "colglen.gd", "lochcarron.gd"]
 ## The club that plays at each venue, for matching a home team to its ground.
-const VENUE_CLUBS := ["Aberdour", "Kingussie", "Kyles", "Skye", "Oban"]
+const VENUE_CLUBS := ["Aberdour", "Kingussie", "Kyles", "Skye", "Oban", "Col Glen", "Lochcarron"]
 const YARD_M := 0.9144
 const GOAL_WIDTH_YD := 4.0      # 12 ft between the posts
 const GOAL_HEIGHT_YD := 3.3333  # 10 ft to the crossbar
