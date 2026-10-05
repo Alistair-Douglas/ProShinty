@@ -27,11 +27,15 @@ const END_ROWS := [5.6, 6.5]
 ## metres (x along the pitch, y across) measured from the centre spot, with
 ## the pitch's half length and half width added by _keep_clear().
 const KEEP_CLEAR := {
-	1: [  # Kingussie: dugouts, portakabin, container, timekeeper's box
+	1: [  # Kingussie: dugouts, portakabin, container, timekeeper's box,
+		# the small stands, the trailers and cars in front of the spruce
 		[Vector2(-12.0, -7.0), Vector2(24.0, 3.2)],
 		[Vector2(16.0, -9.8), Vector2(8.0, 3.6)],
 		[Vector2(-22.5, -10.2), Vector2(7.0, 3.4)],
 		[Vector2(-2.8, 4.2), Vector2(3.6, 2.6)],
+		[Vector2(26.0, -8.5), Vector2(18.0, 4.0)],
+		[Vector2(18.0, 6.8), Vector2(42.0, 3.6)],
+		[Vector2(-71.0, 6.8), Vector2(40.0, 4.0)],
 	],
 }
 ## The team dugouts either side of halfway on the far side, at every ground
