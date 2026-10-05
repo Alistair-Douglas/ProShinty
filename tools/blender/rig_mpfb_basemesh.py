@@ -43,14 +43,18 @@ def joint(name):
     return c / len(pts)
 
 
-# MPFB leaves some of its female targets (breasts) switched on a little even
-# for a fully male human; on a muscular body they read as a bust under the
-# shirt, so they go.
-if human.get("MPFB_HUM_gender", 0.0) > 0.9 and human.data.shape_keys:
+# Players are men: MPFB's female targets go (it leaves them on a little even
+# for a fully male human, and a muscular body then reads as a bust under the
+# shirt), and a human saved part male has its male targets scaled up to make
+# up the difference, as if its gender slider were at 1.
+gender = human.get("MPFB_HUM_gender", 1.0)
+if gender >= 0.5 and human.data.shape_keys:
     for k in human.data.shape_keys.key_blocks:
         if "$fe-" in k.name and k.value > 0.0:
             print("dropped female target %s (%.3f)" % (k.name, k.value))
             k.value = 0.0
+        elif "$ma-" in k.name and gender < 0.999:
+            k.value = min(1.0, k.value / gender)
 # --height H re-weighs MPFB's height targets as if its height slider were H
 # (0.5 average). The game scales every body to its own height anyway, so a
 # tall MPFB human only comes out slender: long thin limbs and a narrow chest.

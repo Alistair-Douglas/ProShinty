@@ -143,7 +143,11 @@ joints from MPFB's joint vertex groups, builds the rig, weights the body and
 exports the .glb for step 2. `models/bodies/average.json` comes from
 Alistair's "Character medium" MPFB body (male, muscle 1.0, weight 0.5), rigged
 with `--height 0.5`: the game scales every body to its own height, so MPFB's
-tall setting only made it slender. The rig script also switches off the small
+tall setting only made it slender. `lean.json` (build 0.15) comes from his "Tall skinny"
+body and `stocky.json` (build 0.85) from his "Very short and stocky" one, both
+rigged at their own height; the game picks lean, average or stocky by each
+player's build. The rig script makes a part-male human fully male (it drops
+the female targets and scales the male ones up). The rig script also switches off the small
 female chest targets MPFB leaves on for a male human, and the converter hangs
 the shirt off the chest and shoulder blades (`drape()`) instead of hugging
 the skin, so a muscular chest doesn't read as a bust. The sponsor print is
