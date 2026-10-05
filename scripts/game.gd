@@ -218,9 +218,10 @@ func match_config() -> Dictionary:
 
 
 ## Match controls follow FIFA's Xbox layout where shinty has the same thing:
-## A pass, B shoot, X long hit / cross, Y through ball (block without the
-## ball), RT sprint, LT shield, LB switch player; RB cleeks and a click of
-## the left stick barges, which FIFA has no button for. A pass or hit goes
+## A pass, B shoot, X long hit / cross, Y through ball (without the ball,
+## block or cleek, whichever fits where you stand), RT sprint, LT shield,
+## LB switch player; a click of the left stick barges, which FIFA has no
+## button for. A pass or hit goes
 ## where the left stick points the moment its button goes down.
 func _setup_input() -> void:
 	_bind("move_left", [KEY_A, KEY_LEFT], [], [JOY_AXIS_LEFT_X, -1.0])
@@ -233,7 +234,6 @@ func _setup_input() -> void:
 	_bind("pass", [KEY_E], [JOY_BUTTON_A])
 	_bind("switch", [KEY_Q], [JOY_BUTTON_LEFT_SHOULDER])
 	_bind("block", [KEY_F], [JOY_BUTTON_Y])
-	_bind("cleek", [KEY_C], [JOY_BUTTON_RIGHT_SHOULDER])
 	_bind("barge", [KEY_R], [JOY_BUTTON_LEFT_STICK])
 	_bind("sprint", [KEY_SHIFT], [], [JOY_AXIS_TRIGGER_RIGHT, 1.0])
 	_bind("pause", [KEY_ESCAPE, KEY_P], [JOY_BUTTON_START])

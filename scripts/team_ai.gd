@@ -112,6 +112,7 @@ func off_ball(p, dt: float) -> void:
 	var t: int = p.team
 	var spot = _restart_spot(p)
 	if spot != null:
+		spot = _outside_d(p, spot)
 		m._steer_to(p, spot, p.pos.distance_to(spot) > 5.0 and p.stamina > 0.15)
 		return
 	if attacking[t]:
@@ -120,7 +121,7 @@ func off_ball(p, dt: float) -> void:
 		_follow_attack(p, pl)
 	else:
 		_defend(p, pl)
-	var tgt := _legal(t, pl.target)
+	var tgt := _outside_d(p, _legal(t, pl.target))
 	m._steer_to(p, tgt, pl.sprint and p.stamina > 0.15)
 
 
@@ -584,6 +585,25 @@ func _count_jobs(t: int, job: int) -> int:
 ## Keep targets on the park, a few yards in so passes to them stay in play.
 func _in_pitch(v: Vector2) -> Vector2:
 	return Vector2(clamp(v.x, 4.0, m.PITCH.x - 4.0), clamp(v.y, 6.0, m.PITCH.y - 6.0))
+
+
+## The full forward and the full back never sit inside the D: they stand on
+## its edge or further out (the full forward at the goal they attack, the
+## full back at their own). Off the ball only; going for the ball they go
+## where it is.
+func _outside_d(p, v: Vector2) -> Vector2:
+	var g: Vector2
+	match p.position_code:
+		"FF": g = m.target_goal(p.team)
+		"FB": g = m.own_goal(p.team)
+		_: return v
+	var r: float = m.D_RADIUS + 0.5
+	var off := v - g
+	if off.length() >= r:
+		return v
+	if off.length() < 0.01:
+		off = Vector2(m.attack_dir[p.team] * (1.0 if p.position_code == "FB" else -1.0), 0)
+	return g + off.normalized() * r
 
 
 ## Shinty's area rule: no attacker in the opposition D before the ball gets

@@ -60,6 +60,41 @@ static func start_block(m, p) -> void:
 	m.anim(p, "block")
 
 
+## The one counter button: block or cleek, whichever fits where you stand.
+## Behind the swinger (on the side their swing comes back from) you get your
+## stick under the arc: a cleek, if the swing is a big enough one to cleek.
+## In front of them, or against a smaller swing, you block.
+static func start_counter(m, p) -> void:
+	if counter_kind(m, p) == "cleek":
+		start_cleek(m, p)
+	else:
+		start_block(m, p)
+
+
+## "cleek" or "block" for `p` right now: read off the nearest opponent who is
+## swinging, or has the ball and might.
+static func counter_kind(m, p) -> String:
+	var s = null
+	var best := CLEEK_RANGE + 1.0
+	for q in m.squads[1 - p.team]:
+		if q.swing_t < 0.0 and q != m.carrier:
+			continue
+		var d: float = p.pos.distance_to(q.pos)
+		if d < best:
+			best = d
+			s = q
+	if s == null:
+		return "block"
+	if s.swing_t >= 0.0 and not cleekable(s):
+		return "block"
+	# The way the hit is going: the swing's own direction once it's started,
+	# else where they face.
+	var dir: Vector2 = s.swing_req.get("dir", s.facing) if s.swing_t >= 0.0 else s.facing
+	if dir == Vector2.ZERO:
+		return "block"
+	return "cleek" if (p.pos - s.pos).dot(dir.normalized()) < 0.0 else "block"
+
+
 static func start_cleek(m, p) -> void:
 	if p.block_t > 0.0 or p.cleek_t > 0.0 or p.stagger > 0.0 or p.swing_t >= 0.0:
 		return

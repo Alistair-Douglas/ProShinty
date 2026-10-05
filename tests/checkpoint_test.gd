@@ -297,7 +297,7 @@ func _bot(m: Node) -> void:
 		_counted = true
 	if _swing_hold == 0:
 		_counted = false
-	for a in ["move_left", "move_right", "move_up", "move_down", "switch", "pass", "block", "cleek", "barge", "sprint", "shield"]:
+	for a in ["move_left", "move_right", "move_up", "move_down", "switch", "pass", "block", "barge", "sprint", "shield"]:
 		Input.action_release(a)
 	var target: Vector2 = m.ball_pos
 	if m.carrier == h:
@@ -328,10 +328,8 @@ func _bot(m: Node) -> void:
 			Input.action_press("pass")
 	elif m.carrier != null and m.carrier.team != h.team and near:
 		var r := randf()
-		if r < 0.03:
-			Input.action_press("block")
-		elif r < 0.06:
-			Input.action_press("cleek")
+		if r < 0.06:
+			Input.action_press("block")   # block or cleek, by where you stand
 		elif r < 0.09:
 			Input.action_press("barge")
 		elif r < 0.15:
@@ -347,6 +345,6 @@ func _bot(m: Node) -> void:
 
 
 func _release_all() -> void:
-	for a in ["move_left", "move_right", "move_up", "move_down", "switch", "pass", "block", "cleek", "barge", "sprint", "shoot", "hit", "shield"]:
+	for a in ["move_left", "move_right", "move_up", "move_down", "switch", "pass", "block", "barge", "sprint", "shoot", "hit", "shield"]:
 		Input.action_release(a)
 	_swing_hold = 0

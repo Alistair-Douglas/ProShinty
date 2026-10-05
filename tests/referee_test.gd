@@ -27,6 +27,7 @@ func _process(_delta: float) -> bool:
 		_test_card_rate()
 		_test_swing_into_player()
 		_test_late_block_no_foul()
+		_test_counter_by_position()
 		_test_full_pace_barge_floors()
 		print("Referee tests: %s" % ("all passed" if _failures == 0 else "%d failed" % _failures))
 		quit(0 if _failures == 0 else 1)
@@ -377,6 +378,34 @@ func _test_late_block_no_foul() -> void:
 			late = true
 	_check(late, "the swing catches the blocker")
 	_check(m.referee.calls.is_empty(), "no foul given")
+	m.free()
+
+
+## One button counters a swing: from behind the swinger it's a cleek, from in
+## front a block, and a swing under half power can only be blocked.
+func _test_counter_by_position() -> void:
+	print("Block or cleek by position")
+	var m = _new_match()
+	var p = _outfield(m, 0, "CHF")
+	var q = _outfield(m, 1, "CHB")
+	for o in m.squads[0] + m.squads[1]:
+		if o != p and o != q:
+			o.pos = Vector2(5, 5)
+	q.pos = Vector2(60, 30)
+	q.facing = Vector2.RIGHT
+	q.swing_t = 0.3
+	q.swing_req = {"dir": Vector2.RIGHT, "share": 0.8}
+	m.carrier = q
+	p.pos = q.pos + Vector2(-1.5, 0.3)
+	_check(m.Counters.counter_kind(m, p) == "cleek", "behind a big swing: cleek")
+	p.pos = q.pos + Vector2(1.5, 0.3)
+	_check(m.Counters.counter_kind(m, p) == "block", "in front of it: block")
+	p.pos = q.pos + Vector2(-1.5, 0.3)
+	q.swing_req["share"] = 0.3
+	_check(m.Counters.counter_kind(m, p) == "block", "behind a soft swing: block (cleeks need half power)")
+	q.swing_req["share"] = 0.8
+	m.Counters.start_counter(m, p)
+	_check(p.cleek_t > 0.0 and p.block_t == 0.0, "the button starts the cleek")
 	m.free()
 
 

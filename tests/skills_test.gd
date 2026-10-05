@@ -127,8 +127,8 @@ func _dummy_tests() -> void:
 	m.free()
 
 
-## Hit a through ball and follow it until it lands. Returns [highest, where
-## it first came down].
+## Hit a through ball and follow it until it lands or the marker gets to
+## it. Returns [highest, where it first came down].
 func _through(chip: bool) -> Array:
 	var m = _new_match(11)
 	var h = m.human
@@ -142,8 +142,9 @@ func _through(chip: bool) -> Array:
 	mate.pos = h.pos + Vector2(m.attack_dir[0] * 22.0, 4.0)
 	mate.vel = Vector2.ZERO
 	q.pos = h.pos + Vector2(m.attack_dir[0] * 6.0, 1.0)   # in the way
-	var spot: Vector2 = mate.pos + Vector2(m.attack_dir[0], 0) * m.THROUGH_LEAD
-	m._human_through(h, (mate.pos - h.pos).normalized(), chip)
+	var aim: Vector2 = (mate.pos - h.pos).normalized()
+	var spot: Vector2 = h.pos + aim * m.through_reach(0.5)   # where it's played: the stick, half weight
+	m._human_through(h, aim, chip, 0.5)
 	var top := 0.0
 	var landed = null
 	var struck := false
@@ -151,6 +152,8 @@ func _through(chip: bool) -> Array:
 		m.step(1.0 / 60.0)
 		if m.carrier == null:
 			struck = true
+		if struck and m.last_team != h.team:
+			break   # the marker got to it: what they do with it isn't the pass
 		if struck:
 			top = maxf(top, m.ball_z)
 			if landed == null and top > 0.3 and m.ball_z <= 0.05:

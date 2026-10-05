@@ -17,10 +17,9 @@ where to play (Aberdour, Kingussie, Tighnabruaich or Portree), and play a full 1
 | Sprint | Shift | RB |
 | Hit (hold for more power, release to swing), or poke at the carrier's ball | Space | X / Square |
 | Pass to the team-mate you're facing | E | A / Cross |
-| Block (back of the stick over their ball) | F | Y / Triangle |
+| Block in front of the swinger, cleek from behind them (no ball) | F | Y / Triangle |
 | Chipped through ball, lifted over the defence | Q + F | LB + Y |
 | Dummy: start a hit, then pull out of it so the marker bites | E while holding Space or X | A while holding B or X |
-| Cleek (stick up under their swing) | C | B / Circle |
 | Shoulder barge | R | Left stick click |
 | Switch player | Q | LB |
 | Pause (M to quit while paused) | Esc | Start |

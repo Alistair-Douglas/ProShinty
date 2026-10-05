@@ -73,6 +73,9 @@ func _process(_d: float) -> bool:
 		_check(not m.manual_step, "match released")
 		_check(view.ball.visible, "ball shown")
 		clock_at_end = m.clock
+		# The live cameras are what's on test: a foul replay mid-way would
+		# hold the match and freeze them.
+		view.director.replays_enabled = false
 		return false
 	# Cameras: 90 frames each, unzoomed then zoomed.
 	if frame >= prematch_done_frame + 120:

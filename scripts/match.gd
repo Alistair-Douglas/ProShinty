@@ -23,6 +23,18 @@ const REACH := 1.7           # how far a caman reaches
 const REACH_HEIGHT := 2.3
 const KEEPER_REACH_HEIGHT := 3.2
 const THIGH_HEIGHT := 1.0       # a body stop below this is on the thigh, above it the chest
+const SAVE_AT_50 := 0.5          # a 50-rated keeper keeps out about half the shots on target
+const SAVE_TOP_AIR := 0.93       # the best keep out this many in the air...
+const SAVE_TOP_GROUND := 0.42    # ...and this many along the ground
+const SAVE_AIR_Z := 0.5          # a shot crossing higher than this is in the air
+const SAVE_SPREAD := 0.4         # a shot down the middle is saved this much more than one by the post
+const SAVE_EDGE_USUAL := 0.7     # where most shots cross (0 the middle, 1 a post)
+const SAVE_HARD := 0.06          # a hard shot is saved less often...
+const SAVE_CORNER := 0.1         # ...and one high into a corner less again
+const SAVE_LINE_GAP := 0.4       # a saved ball is stopped at least this far out from the line
+const SURE_REACH := 0.8          # extra reach for a keeper who has read the shot
+const KEEPER_HIGH := 1.8         # a shot this high is a high one
+const CORNER_IN := 1.0           # within this of a post is in the corner
 const KEEPER_STICK_HEIGHT := 1.2   # above this a keeper turns the ball away with the caman
 const SHOT_INSIDE := 0.45       # shots are aimed this far inside the post
 const LOW_SHOT := 0.35          # a low shot crosses the line about this high (yards)
@@ -33,7 +45,8 @@ const GOAL_PAUSE := 3.0
 const HALF_TIME_PAUSE := 7.0     # long enough to see everyone walk off towards the dugouts
 const EXTRA_TIME_PAUSE := 4.0    # the break before extra time: players stay out on the pitch
 const THROW_UP_AIM_MAX := 1.1   # rad: how far off straight up the park a throw-up can be aimed
-const THROUGH_LEAD := 8.0       # yd: a through ball is played this far ahead of the runner
+const THROUGH_MIN := 8.0        # a tapped through ball runs this far (yards)
+const THROUGH_MAX := 45.0       # a fully held one this far
 const CHIP_ANGLE := 36.0        # degrees: a chipped through ball is launched this steeply
 const CHIP_PACE := 1.12         # a lofted strike comes off a little slower than asked: make it up
 const WALK_SPEED := 1.6
@@ -114,6 +127,7 @@ class Player:
 	var accel := Vector2.ZERO
 	var stagger := 0.0       # off balance after a hard hit
 	var lunge := 0.0         # poke check or keeper dive in progress
+	var dive_rest := 0.0     # keeper: getting up after a dive, no second dive yet
 	var hop := Vector2.ZERO  # a sideways jump, feet together, to get in line with a ball
 	var hop_t := 0.0         # time left in the jump
 	var stick := Vector3.ZERO    # caman head: pitch x, y and height
@@ -142,6 +156,8 @@ class Player:
 	var shielding := false   # carrier holding the ball up, body between it and the man
 	var judge := Vector3.ZERO  # how far off this player's read of the ball in the air is
 	var judge_flight := -1     # the flight that read was made for
+	var beat_flight := -1      # keeper: the shot already judged for beating them
+	var sure_flight := -1      # keeper: the shot they've read and will keep out
 	var use_body := false      # going to take this ball on the body, stick out of the way
 	var hold_t := 0.0        # AI: how long to keep holding it up
 	var sold := 0.0          # bit on a dummy: committed and planted for this long
@@ -200,6 +216,7 @@ var battle := {}
 const SHOOT_RANGE := 70.0   # the shoot button aims at goal from within this many yards
 var charge_aim := Vector2.RIGHT   # where the stick pointed as the hit button went down
 var charge_steer := Vector2.ZERO  # and the steer for a shot (zero: the far corner)
+var charge_chip := false          # LB was held as Y went down: a chipped through ball
 var charge_kind := "shoot"   # which button is being held: "shoot" (at goal) or "hit" (long)
 var steer := Vector2.ZERO   # smoothed human steering direction
 var message := ""
@@ -566,6 +583,7 @@ func _update_players(dt: float) -> void:
 		p.stagger = max(0.0, p.stagger - dt)
 		p.lunge = max(0.0, p.lunge - dt)
 		p.sold = max(0.0, p.sold - dt)
+		p.dive_rest = max(0.0, p.dive_rest - dt)
 		if p.hop_t > 0.0:
 			var step: float = min(dt, p.hop_t)
 			p.pos += p.hop * step / HOP_TIME
@@ -718,7 +736,7 @@ func _ai_team(t: int, dt: float) -> void:
 		if state == State.THROW_UP:
 			p.desired = Vector2.ZERO
 			continue
-		if p.is_keeper():
+		if p.is_keeper() and not (p == carrier and p == set_piece_taker_now()):
 			_ai_keeper(p, dt)
 		elif p.sold > 0.0:
 			p.desired = Vector2.ZERO   # bought a dummy: planted, going nowhere
@@ -1018,14 +1036,18 @@ func _human_control(dt: float) -> void:
 		charge_steer = hit_aim if hit_aim != Vector2.ZERO else raw
 	if Input.is_action_just_pressed("block"):
 		# Y / F: with the ball it's a through ball (as in FIFA); without it,
-		# a block on an opponent's swing.
+		# a block or a cleek on an opponent's swing, picked by where you are.
 		if carrier == p and p.swing_t < 0.0 and p != set_piece_taker_now() and not p.shy_ready:
-			# Holding LB (switch, which does nothing on the ball) chips it.
-			_human_through(p, aim, Input.is_action_pressed("switch"))
+			# Hold for weight, as in FIFA: the longer, the further it's
+			# played. Holding LB (switch, which does nothing on the ball)
+			# as Y goes down chips it.
+			charge = 0.0
+			charge_kind = "block"
+			charge_aim = aim
+			charge_steer = aim
+			charge_chip = Input.is_action_pressed("switch")
 		else:
-			Counters.start_block(self, p)
-	if Input.is_action_just_pressed("cleek"):
-		Counters.start_cleek(self, p)
+			Counters.start_counter(self, p)
 	if Input.is_action_just_pressed("barge"):
 		Counters.start_barge(self, p)
 	if charge >= 0.0 and Input.is_action_just_pressed("pass") and carrier == p \
@@ -1043,6 +1065,8 @@ func _human_control(dt: float) -> void:
 			var restart: bool = p == set_piece_taker_now() or (p.shy_ready and carrier == p)
 			if charge_kind == "shoot" and not restart:
 				_human_shoot(p, charge_steer, charge)
+			elif charge_kind == "block":
+				_human_through(p, charge_aim, charge_chip, minf(charge, 1.0))
 			else:
 				_human_hit(p, aim if restart else charge_aim, charge)
 			charge = -1.0
@@ -1155,8 +1179,8 @@ func _human_hit(p: Player, aim: Vector2, charged: float) -> void:
 	# launched, so a full clearance is a proper parabola, not a skimmer.
 	# A long hit is the full swing: at full power it carries past halfway
 	# from a hit-out.
-	var speed: float = lerp(10.0, _full_speed(p) * LONG_HIT_BOOST, max(power, 0.2))
-	_strike_speed(p, aim, speed, _loft_at(speed, lerp(8.0, LONG_HIT_ANGLE, power)), "shooting", max(power, 0.2))
+	var speed: float = lerp(6.0, _full_speed(p) * LONG_HIT_BOOST, max(power, 0.05))
+	_strike_speed(p, aim, speed, _loft_at(speed, lerp(8.0, LONG_HIT_ANGLE, power)), "shooting", max(power, 0.05))
 
 
 func _human_pass(p: Player, aim: Vector2) -> void:
@@ -1182,37 +1206,12 @@ func _human_pass(p: Player, aim: Vector2) -> void:
 		_strike_speed(p, aim, 18.0, 0.5, "passing")
 
 
-## A through ball: played into the space ahead of a team-mate making a run
-## (the one most in line with the stick), for them to run onto.
-func _human_through(p: Player, aim: Vector2, chip: bool = false) -> void:
-	var best: Player = null
-	var best_score := -INF
-	for m in squads[p.team]:
-		if m == p or m.is_keeper():
-			continue
-		var off: Vector2 = m.pos - p.pos
-		var d := off.length()
-		if d < 4.0 or d > 55.0:
-			continue
-		var cosang := aim.dot(off / d)
-		var fwd: float = (m.pos.x - p.pos.x) * attack_dir[p.team]
-		if cosang < 0.3 or fwd < 0.0:
-			continue
-		var s := cosang * 30.0 + fwd * 0.3 - d * 0.3
-		if s > best_score:
-			best_score = s
-			best = m
-	if best == null:
-		if chip:
-			_strike_speed(p, aim, 16.0, 7.0, "passing")
-		else:
-			_strike_speed(p, aim, 20.0, 0.4, "passing")
-		return
-	# Into space ahead of them: where they're running, or up the park.
-	var run: Vector2 = best.vel.normalized() if best.vel.length() > 2.0 else Vector2(attack_dir[p.team], 0)
-	if run.x * attack_dir[p.team] < 0.2:
-		run = (run + Vector2(attack_dir[p.team], 0) * 0.8).normalized()
-	var spot: Vector2 = best.pos + run * THROUGH_LEAD
+## A through ball, played where the stick points and weighted by how long
+## the button was held: a tap rolls it a few yards, a full hold sends it
+## well up the park. Chipped, it is lifted over the defence to drop there.
+## You switch to whoever is nearest where it's going.
+func _human_through(p: Player, aim: Vector2, chip: bool = false, weight: float = 0.5) -> void:
+	var spot: Vector2 = p.pos + aim * through_reach(weight)
 	spot = Vector2(clampf(spot.x, 2.0, PITCH.x - 2.0), clampf(spot.y, 2.0, PITCH.y - 2.0))
 	var d := p.pos.distance_to(spot)
 	if chip:
@@ -1223,10 +1222,43 @@ func _human_through(p: Player, aim: Vector2, chip: bool = false) -> void:
 		var cs: float = sqrt(0.5 * GRAVITY * d * (1.0 + d * SHOT_DRAG) / up) * CHIP_PACE
 		_strike_speed(p, (spot - p.pos).normalized(), cs, cs * up, "passing")
 	else:
-		var speed: float = clampf(d * 0.75 + 10.0, 14.0, 34.0)
+		var speed: float = clampf(_roll_speed_for(d), 8.0, 34.0)
 		_strike_speed(p, (spot - p.pos).normalized(), speed, 0.4, "passing")
-	if p.team == human_side:
+	if p.team != human_side:
+		return
+	var best: Player = null
+	var best_d := INF
+	for m in squads[p.team]:
+		if m == p or m.is_keeper():
+			continue
+		var md: float = m.pos.distance_to(spot)
+		if md < best_d:
+			best_d = md
+			best = m
+	if best != null and best_d < 20.0:
 		human = best
+
+
+## How far a through ball of this weight (0 a tap, 1 a full hold) goes.
+func through_reach(weight: float) -> float:
+	return lerpf(THROUGH_MIN, THROUGH_MAX, clampf(weight, 0.0, 1.0))
+
+
+## Speed (yd/s) a ball along the grass needs to roll `d` yards and stop,
+## from the ball physics' grass resistance and drag (dry pitch).
+func _roll_speed_for(d: float) -> float:
+	var a: float = ShintyBallPhysics.ROLL_DECEL / ShintyMatchAdapter.YARD
+	var c: float = ShintyBallPhysics.ROLL_DRAG
+	var lo := 0.0
+	var hi := 60.0
+	for i in 30:
+		var v := (lo + hi) * 0.5
+		var run: float = v / c - a / (c * c) * log(1.0 + c * v / a)
+		if run < d:
+			lo = v
+		else:
+			hi = v
+	return (lo + hi) * 0.5
 
 
 ## A dummy: shape to hit, then pull out of it. A computer marker close
@@ -1652,14 +1684,15 @@ func _try_tackle(t: Player, o: Player) -> void:
 	# Rarely a clean steal: a poke that gets there usually starts a battle.
 	var roll := randf()
 	var won := roll < chance * 0.3
-	events.append({"type": "tackle", "by": t, "on": o, "won": won, "at": o.pos})
+	events.append({"type": "tackle", "by": t, "on": o, "won": won, "at": o.pos, "one_hand": d > Body.TWO_HAND_REACH})
 	if not won and roll < chance:
 		battle = {"t": t, "o": o, "time": 0.0, "effort": {}}
 		events.append({"type": "battle", "team": t.team, "at": ball_pos})
 		t.cooldown = 0.2
 		return
-	if not won and shielded and randf() < 0.06:
-		# Reaching through the carrier's body for the ball: caman on the man.
+	if not won and shielded and d > Body.TWO_HAND_REACH and randf() < 0.06:
+		# Reaching one-handed through the carrier's body for the ball: caman
+		# on the man.
 		events.append({"type": "foul", "kind": "hack", "by": t, "on": o, "at": o.pos, "severity": 0.3})
 		trip(o)
 		spill(o, t)
@@ -1945,6 +1978,10 @@ func _ball_touches(before: Vector3) -> void:
 			var hands: float = 0.75 + p.r("keeping") / 100.0 * 0.45 + (0.8 if p.lunge > 0.0 else 0.0)
 			if body_d < hands and min(before.z, now.z) < KEEPER_REACH_HEIGHT:
 				d = min(d, body_d * Body.CONTACT_R / hands)
+		if keeping and d < reach + SURE_REACH and _keeper_beaten(p, sp):
+			continue
+		if keeping and p.sure_flight == flight:
+			reach += SURE_REACH   # read it early: a full-stretch dive gets there
 		if d < reach and d < best_d:
 			best = p
 			best_d = d
@@ -1964,6 +2001,7 @@ func _ball_touches(before: Vector3) -> void:
 			_body_touch(body, sp)
 		return
 	var p := best
+	var read_it: bool = best_keeper and p.sure_flight == flight
 	p.touch_block = 0.25
 	events.append({"type": "touch", "by": p, "at": ball_pos, "hands": best_keeper and p.pos.distance_to(ball_pos) > Body.CONTACT_R})
 	# One-handed at full stretch you can stop or tap a ball, rarely control it.
@@ -1982,6 +2020,8 @@ func _ball_touches(before: Vector3) -> void:
 	var chance: float
 	if best_keeper:
 		chance = clamp(0.36 + p.r("keeping") / 100.0 * 0.5 - (sp - 20.0) * 0.012 - stretch * 0.3 + _skill_mod(p.team), 0.2, 0.95)
+		if read_it:
+			chance = 1.0   # read it: it's kept out
 	# Straight at the keeper: it hits the body. Low, the feet are together
 	# and the stick is down in front of them, so it never goes through the
 	# legs; higher, it comes off the body or the stick and back out.
@@ -2012,6 +2052,50 @@ func _ball_touches(before: Vector3) -> void:
 	else:
 		# Off the keeper's caman: wood, so it comes off it rather than through it.
 		_stick_rebound(p, p.r("keeping") / 100.0, ball_z > FEET_HEIGHT)
+
+
+## A shot on target reaching the keeper: saved or not is judged once a
+## shot, from the keeper's rating. A 50-rated keeper keeps out about half;
+## the best keep out about four in five in the air and half along the
+## ground. A hard shot, and one high into a corner, beat them more often.
+## A beaten keeper is left grasping as it goes by; one who reads it gets
+## there (sure_flight), and it comes off the stick or the body.
+func _keeper_beaten(k: Player, sp: float) -> bool:
+	if k.beat_flight == flight:
+		return false
+	var g := own_goal(k.team)
+	var toward: float = -attack_dir[k.team]
+	if ball_vel.x * toward < 5.0:
+		return false
+	var t: float = (g.x - ball_pos.x) / ball_vel.x
+	if t < 0.0 or t > 1.5:
+		return false
+	var y: float = ball_pos.y + ball_vel.y * t
+	var z: float = ball_z + ball_vz * t - 0.5 * GRAVITY * t * t
+	if absf(y - g.y) > GOAL_W / 2.0 or z > CROSSBAR or z < -0.5:
+		return false   # going wide or over: nothing to beat
+	k.beat_flight = flight
+	if randf() < keeper_save_chance(k, sp, y - g.y, maxf(z, ball_z)):
+		k.sure_flight = flight
+		return false
+	k.touch_block = maxf(k.touch_block, t + 0.2)
+	return true
+
+
+## Chance that keeper `k` keeps out a shot on target at `speed`, crossing
+## `off` yards from the middle of the goal at height `z`.
+func keeper_save_chance(k: Player, speed: float, off: float, z: float) -> float:
+	var skill: float = (float(k.data.get("keeping", 50)) - 50.0) / 49.0
+	var air: bool = z > SAVE_AIR_Z
+	var save: float = lerpf(SAVE_AT_50, SAVE_TOP_AIR if air else SAVE_TOP_GROUND, skill) if skill >= 0.0 \
+		else SAVE_AT_50 + skill * 0.5
+	# Down the middle is easier, out by the posts harder (most shots go
+	# for the corners, which is what the rating numbers above are for).
+	save += SAVE_SPREAD * (SAVE_EDGE_USUAL - clampf(absf(off) / (GOAL_W / 2.0), 0.0, 1.0))
+	save -= SAVE_HARD * clampf((speed - 20.0) / 15.0, 0.0, 1.0)
+	if z > KEEPER_HIGH and absf(off) > GOAL_W / 2.0 - CORNER_IN:
+		save -= SAVE_CORNER
+	return clampf(save + _skill_mod(k.team), 0.1, 0.97)
 
 
 ## An outfield player's caman has got to the ball. Nothing goes through a
@@ -2141,6 +2225,11 @@ func _running(p: Player) -> float:
 ## and it drops dead in front of them to gather with the caman. Otherwise it
 ## comes off them, losing most of its pace.
 func _body_touch(p: Player, sp: float) -> void:
+	if p.is_keeper() and p.sure_flight == flight:
+		# A keeper who has read the shot takes it on the body: kept out.
+		events.append({"type": "touch", "by": p, "at": ball_pos, "hands": false, "body": true})
+		_keeper_save(p, "feet" if ball_z < FEET_HEIGHT + 0.25 else "stick")
+		return
 	var feet: bool = ball_z < FEET_HEIGHT
 	var at_them: bool = ball_vel.dot(p.pos - ball_pos) > 0.0
 	var limit: float = BODY_STOP_SPEED + p.r("control") * 0.12
@@ -2234,6 +2323,11 @@ func _keeper_save(k: Player, how: String = "smother") -> void:
 	var flat := ball_pos - k.pos
 	var reach: float = Body.max_reach(k)
 	var at := k.pos + flat.limit_length(reach)
+	# Stopped in front of the line, never just behind it: a save that
+	# trickles over would be a goal.
+	var line_x: float = own_goal(k.team).x
+	if (at.x - line_x) * attack_dir[k.team] < SAVE_LINE_GAP:
+		at.x = line_x + attack_dir[k.team] * SAVE_LINE_GAP
 	_place_ball(at, ball_z)
 	k.stick = Vector3(at.x, at.y, min(ball_z, KEEPER_REACH_HEIGHT))
 	if how == "stick":
@@ -2300,6 +2394,8 @@ func _check_ball_out() -> void:
 
 func _restart(team: int, spot: Vector2, label: String) -> void:
 	var taker := _nearest_outfield(team, spot, null)
+	if label == "Hit-out" and _keeper_of(team) != null:
+		taker = _keeper_of(team)   # the keeper takes the bye-hits
 	var toward := (Vector2(PITCH.x / 2.0, PITCH.y / 2.0) - spot).normalized()
 	if label == "Hit-out":
 		toward = Vector2(attack_dir[team], 0)
