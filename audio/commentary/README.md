@@ -50,7 +50,12 @@ again: `status` below lists the stale ones.
 python3 tools/commentary_voice.py list lines.csv     # every id and line, for any TTS service
 python3 tools/commentary_voice.py status             # what's recorded, stale or orphaned
 ELEVENLABS_API_KEY=... python3 tools/commentary_voice.py elevenlabs <voice id>
+python3 tools/commentary_voice.py import "Recording 129.m4a" intro_01_a   # your own recording
 ```
+
+`import` takes your own recordings (a phone's .m4a, .wav, anything ffmpeg
+reads), trims the silence off each end, levels them all to the same loudness
+and saves `<id>.ogg` here. Give it as many file and id pairs as you like.
 
 The `elevenlabs` command records every line that has no file yet, or whose
 text has changed, as `<id>.mp3` here, and keeps `manifest.json` (id to the text

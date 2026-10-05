@@ -16,12 +16,18 @@ See audio/commentary/README.md.
       file says in audio/commentary/manifest.json. --only team and --only
       ground record the club and ground names (spelt as they should sound).
 
+  python3 tools/commentary_voice.py import FILE ID [FILE ID ...]
+      Turns your own recordings (any format ffmpeg reads, e.g. a phone's
+      .m4a) into audio/commentary/<id>.ogg: mono, silence trimmed off both
+      ends, levelled so every line plays at the same loudness. Needs ffmpeg.
+
 Standard library only.
 """
 import csv
 import json
 import os
 import re
+import subprocess
 import sys
 import time
 import urllib.error
@@ -131,8 +137,37 @@ def cmd_elevenlabs(args):
     print("recorded %d lines" % made)
 
 
+# Trim the silence off each end (the reverse trims the tail), then level to
+# the same loudness with a little headroom.
+TRIM = "silenceremove=start_periods=1:start_threshold=-50dB:start_silence=0.04"
+LEVEL = "highpass=f=70,loudnorm=I=-16:TP=-1.5:LRA=11,aresample=44100,alimiter=limit=0.8:level=false"
+
+
+def cmd_import(args):
+    if not args or len(args) % 2:
+        sys.exit("usage: commentary_voice.py import FILE ID [FILE ID ...]")
+    known = {l[0]: l[2] for l in lines()}
+    man = manifest()
+    for src, id_ in zip(args[::2], args[1::2]):
+        if id_ not in known:
+            sys.exit("%s: no line has that id (see: commentary_voice.py list)" % id_)
+        for e in EXTS:
+            old = os.path.join(OUT, id_ + e)
+            if os.path.exists(old):
+                os.remove(old)
+        out = os.path.join(OUT, id_ + ".ogg")
+        filt = ",".join([TRIM, "areverse", TRIM, "areverse", LEVEL])
+        subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", src,
+                        "-af", filt, "-ac", "1", "-ar", "44100", "-c:a", "libvorbis", "-q:a", "5", out],
+                       check=True)
+        man[id_] = known[id_]
+        print("%s -> %s: %s" % (os.path.basename(src), id_, known[id_]))
+    with open(MANIFEST, "w", encoding="utf-8") as f:
+        json.dump(man, f, indent=1, sort_keys=True, ensure_ascii=False)
+
+
 if __name__ == "__main__":
-    cmds = {"list": cmd_list, "status": cmd_status, "elevenlabs": cmd_elevenlabs}
+    cmds = {"list": cmd_list, "status": cmd_status, "elevenlabs": cmd_elevenlabs, "import": cmd_import}
     if len(sys.argv) < 2 or sys.argv[1] not in cmds:
         sys.exit(__doc__)
     os.makedirs(OUT, exist_ok=True)
