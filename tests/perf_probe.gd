@@ -60,7 +60,7 @@ func _run() -> void:
 		root.add_child(m)
 		for i in 30:
 			await process_frame
-		var name: String = ["Aberdour", "Kingussie", "Tighnabruaich", "Portree"][venue]
+		var name: String = ShintyPitch.VENUE_FILES[venue].get_basename().capitalize()
 		print(_fmt(name, await _sample(40)))
 		if "split" in args:
 			var view = m.get_node("View")

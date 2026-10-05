@@ -42,7 +42,7 @@ func _run(scene: Node3D) -> void:
 		cam.set_view(s[1])
 		for i in 12:
 			await process_frame
-		var name: String = ["aberdour", "kingussie", "tighnabruaich", "portree"][s[0]] + "_" + s[3]
+		var name: String = ShintyPitch.VENUE_FILES[s[0]].get_basename() + "_" + s[3]
 		root.get_viewport().get_texture().get_image().save_png("res://renders/%s.png" % name)
 		print("saved ", name)
 	pitch.venue = 0

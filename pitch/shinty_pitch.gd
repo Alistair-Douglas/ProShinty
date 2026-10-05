@@ -16,6 +16,15 @@ extends Node3D
 ##   club and the school on one side, a steep heather bank with the ad boards
 ##   on the other, a wooded gully and glamping pods past one end, and Portree
 ##   Bay and Ben Tianavaig beyond the other.
+## - Mossfield Park (Oban): in a hollow ringed by wooded hills, with the
+##   covered stand and a wall of conifers on one side, the grass mound and the
+##   club buildings on the other, and a crag above.
+## - Col Glen (Glendaruel): an open country pitch by the village school, with
+##   the River Ruel and its trees along one side and steep forestry and open
+##   hill rising behind.
+## - Lochcarron: between the main road and the shore of Loch Carron, with
+##   white cottages along one side, houses along the other, a small
+##   red-roofed clubhouse, and the hills across the loch.
 ##
 ## Everything is generated when the node enters the tree (also in the editor).
 ## The layout of each ground lives in venues/; this script holds the pitch,
@@ -26,7 +35,7 @@ extends Node3D
 ## touchline at -Z. Match code that works in yards with the origin in a corner
 ## (like the 2D game) converts with sim_to_world() / world_to_sim().
 
-enum Venue { ABERDOUR, KINGUSSIE, TIGHNABRUAICH, PORTREE }
+enum Venue { ABERDOUR, KINGUSSIE, TIGHNABRUAICH, PORTREE, MOSSFIELD, COL_GLEN, LOCHCARRON }
 enum Lighting { SUMMER_AFTERNOON, SUMMER_EVENING, OVERCAST, WINTER_SUN, RAIN }
 enum Detail { LOW, MEDIUM, HIGH }
 
@@ -34,9 +43,11 @@ enum Detail { LOW, MEDIUM, HIGH }
 const SceneryModels := preload("res://pitch/scenery_models.gd")
 
 ## Display names for menus, in Venue order.
-const VENUE_NAMES := ["Aberdour", "Kingussie (The Dell)", "Tighnabruaich (Kyles Athletic)", "Portree (Skye)"]
+const VENUE_NAMES := ["Aberdour", "Kingussie (The Dell)", "Tighnabruaich (Kyles Athletic)", "Portree (Skye)", "Mossfield (Oban)", "Col Glen (Glendaruel)", "Lochcarron"]
+## Each ground's layout script in venues/, by Venue.
+const VENUE_FILES := ["aberdour.gd", "kingussie.gd", "tighnabruaich.gd", "portree.gd", "mossfield.gd", "colglen.gd", "lochcarron.gd"]
 ## The club that plays at each venue, for matching a home team to its ground.
-const VENUE_CLUBS := ["Aberdour", "Kingussie", "Kyles", "Skye"]
+const VENUE_CLUBS := ["Aberdour", "Kingussie", "Kyles", "Skye", "Oban", "Col Glen", "Lochcarron"]
 const YARD_M := 0.9144
 const GOAL_WIDTH_YD := 4.0      # 12 ft between the posts
 const GOAL_HEIGHT_YD := 3.3333  # 10 ft to the crossbar
@@ -205,6 +216,14 @@ func intro_flight() -> Dictionary:
 	return f
 
 
+## Extra spectators the ground has room for, such as on a stand's terracing:
+## [position, facing, front row] in metres, as ShintyCrowd places them.
+func crowd_spots(rng: RandomNumberGenerator, density: float) -> Array:
+	if _layout == null or not _layout.has_method("crowd_spots"):
+		return []
+	return _layout.crowd_spots(rng, density)
+
+
 func board_rows() -> Array:
 	var rows: Array
 	if _layout != null and _layout.has_method("board_rows"):
@@ -252,8 +271,7 @@ func _rebuild(finish := true) -> void:
 	noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
 	noise.frequency = 0.012
 	_mats.clear()
-	var files := ["aberdour.gd", "kingussie.gd", "tighnabruaich.gd", "portree.gd"]
-	_layout = _load_local("venues/" + files[venue]).new(self)
+	_layout = _load_local("venues/" + VENUE_FILES[venue]).new(self)
 
 	var s := units_per_yard / YARD_M
 	var root := Node3D.new()  # everything below is in metres
