@@ -115,6 +115,14 @@ static func swing_like_match(player_data: Dictionary, dir: Vector2, speed: float
 		"face_degrees": ShintyCaman.face_degrees(player_data.get("caman", {}), back_face),
 	})
 	var v: Vector3 = res["velocity"] * TO_YARDS
+	# The gentlest swing the strike model has still sends the ball a good
+	# way; a softer touch than that (a weighted short pass) is the same
+	# contact with less pace on it.
+	var floor_speed: float = ShintyStrike.MIN_HEAD_SPEED * (0.85 + 0.3 * skill / 99.0) \
+		* (1.0 + ShintyStrike.RESTITUTION) * ShintyStrike.CAMAN_MASS \
+		/ (ShintyStrike.CAMAN_MASS + ShintyBallPhysics.MASS) * TO_YARDS
+	if speed < floor_speed and not res["miss"]:
+		v *= maxf(speed, 1.0) / floor_speed
 	return {"ball_vel": Vector2(v.x, v.z), "ball_vz": v.y, "spin": res["spin"],
 		"miss": res["miss"], "mishit": res["mishit"], "quality": res["quality"],
 		"kind": res["kind"], "curve": res["curve"], "side_spin": res["side_spin"]}
