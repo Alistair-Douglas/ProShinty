@@ -424,7 +424,7 @@ def main():
                     np.add.at(cnt, tri[:, c3], 1)
             f = acc / np.maximum(cnt, 1)
         zone[:, 3] = f
-    SLEEVE, CUFF = 0.155, 0.185
+    SLEEVE, CUFF = 0.19, 0.215  # sleeves to just above the elbow
     WAIST_SHIRT, WAIST_SHORTS = 1.0, 1.06
     SHORTS_LEG = 0.25  # down to mid-thigh, as shinty shorts are worn
     NECKLINE = 1.5
@@ -552,7 +552,7 @@ def main():
             nrm = np.where(near[:, None], nn, nrm)
         elif name == "shirt" and has_fit:  # sleeves as the measured shirt hangs
             for k, vi in enumerate(used):
-                p[k] += nrm[k] * (lift + min(0.03, zone[vi, 3] * 0.05))
+                p[k] += nrm[k] * (lift + min(0.008, zone[vi, 3] * 0.02))  # close on the arm
         elif name == "shirt":  # sleeves loosen towards the hem
             for k, vi in enumerate(used):
                 g = dom[vi]
@@ -560,7 +560,7 @@ def main():
                 p[k] += nrm[k] * (lift + 0.008 * min(1.0, max(0.0, d) / CUFF))
         elif name == "cuff":
             for k, vi in enumerate(used):
-                p[k] += nrm[k] * (lift + (min(0.03, zone[vi, 3] * 0.05) + 0.001 if has_fit else 0.008))
+                p[k] += nrm[k] * (lift + (min(0.008, zone[vi, 3] * 0.02) + 0.001 if has_fit else 0.008))
         elif name == "shorts":  # looser towards the hem of each leg
             for k, vi in enumerate(used):
                 g = dom[vi]
@@ -574,12 +574,15 @@ def main():
             for k, vi in enumerate(used):
                 y = p[k][1]
                 loose = 0.014 * min(1.0, max(0.0, (REF["UpperChest"][1] - y) / (REF["UpperChest"][1] - WAIST_SHIRT)))
-                fitv = min(0.035, zone[vi, 3] * 0.05) if has_fit else 0.0  # as the measured shirt sits
+                # As the measured shirt sits, but snug over the shoulders: a
+                # shinty shirt follows their slope down to the sleeve.
+                snug = min(1.0, max(0.0, (REF["UpperChest"][1] + 0.02 - y) / 0.1))
+                fitv = min(0.035, zone[vi, 3] * 0.05) * snug if has_fit else 0.0
                 loose = max(0.0, loose - fitv)
                 out_dir = np.array([p[k][0], 0.0, p[k][2]])
                 out_dir /= max(np.linalg.norm(out_dir), 1e-9)
                 p[k] += nrm[k] * (lift + fitv) + out_dir * (loose + (0.006 if y < WAIST_SHORTS + 0.02 else 0.0))
-            p, nrm = drape(p, inv.reshape(-1, 3), nrm)
+            p, nrm = drape(p, inv.reshape(-1, 3), nrm, top=REF["UpperChest"][1] - 0.03)
         else:
             p += nrm * lift
         uv = np.zeros((len(used), 2))
