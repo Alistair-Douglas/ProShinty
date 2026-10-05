@@ -9,7 +9,6 @@ const LIMIT := 0.02      ## metres
 
 func _initialize() -> void:
 	var ok := true
-	var files := ["aberdour.gd", "kingussie.gd", "tighnabruaich.gd", "portree.gd"]
 	for v in ShintyPitch.VENUE_NAMES.size():
 		var p := ShintyPitch.new()
 		p.hl = p.length_yd * ShintyPitch.YARD_M * 0.5
@@ -17,7 +16,7 @@ func _initialize() -> void:
 		p.noise.seed = p.layout_seed
 		p.noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
 		p.noise.frequency = 0.012
-		p._layout = load("res://pitch/venues/" + files[v]).new(p)
+		p._layout = load("res://pitch/venues/" + ShintyPitch.VENUE_FILES[v]).new(p)
 		var worst := 0.0
 		var at := Vector2.ZERO
 		var x := -p.hl - MARGIN

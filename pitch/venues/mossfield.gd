@@ -15,7 +15,7 @@ extends RefCounted
 
 const WATER_LEVEL := -12.0
 const MOUND_H := 4.5
-const CRAG_H := 72.0
+const CRAG_H := 60.0
 
 var p: ShintyPitch
 var hl: float
@@ -73,7 +73,7 @@ func ground_look() -> Dictionary:
 		"stripe_width": 5.0,
 		"stripe_strength": 0.1,
 		"grass_color": Color(0.27, 0.47, 0.15),
-		"rough_color": Color(0.14, 0.22, 0.1),     # the wooded hills from afar
+		"rough_color": Color(0.09, 0.16, 0.07),    # the wooded hills from afar
 		"earth_color": Color(0.36, 0.35, 0.32),    # rock on the crags
 		"gravel_color": Color(0.44, 0.42, 0.39),
 		"sand_color": Color(0.27, 0.27, 0.28),     # tarmac
@@ -103,7 +103,7 @@ func height_m(x: float, z: float) -> float:
 	hills += 12.0 * smoothstep(60.0, 220.0, r) * (1.0 - west)
 	# The crag behind the far side, its rock face towards the pitch, and the
 	# knoll past the east end.
-	var c := CRAG_H * smoothstep(120.0, 48.0, pos.distance_to(crag)) * (0.88 + 0.12 * n)
+	var c := CRAG_H * minf(1.0, 1.3 * smoothstep(125.0, 45.0, pos.distance_to(crag))) * (0.9 + 0.1 * n)
 	var k := 42.0 * smoothstep(105.0, 30.0, pos.distance_to(knoll)) * (0.9 + 0.1 * n)
 	var rough := p.noise.get_noise_2d(x * 0.2, z * 0.2) * 3.0 + n * 1.2
 	var land := (maxf(hills, maxf(c, k)) + rough) * p.wildness(x, z, 6.0, 6.0)
@@ -125,12 +125,13 @@ func ground_mask(x: float, z: float, h: float) -> Color:
 	var c := Color(0, 0, 0, 0)
 	var pos := Vector2(x, z)
 	# The wooded hills: dark green from a distance.
-	c.g = smoothstep(6.0, 25.0, h) * p.wildness(x, z, 20.0, 20.0)
+	c.g = smoothstep(4.0, 15.0, h) * p.wildness(x, z, 20.0, 20.0)
 	# Rock on the crag's face and the knoll's top.
 	var dc := pos.distance_to(crag)
-	var face := smoothstep(110.0, 95.0, dc) * smoothstep(55.0, 70.0, dc) * smoothstep(0.2, 0.6, (z - crag.y) / maxf(dc, 1.0))
-	var top := smoothstep(45.0, 25.0, pos.distance_to(knoll)) * 0.7
-	c.r = maxf(face, top) * (0.6 + 0.4 * absf(p.noise.get_noise_2d(x * 0.3, z * 0.3)) * 2.0)
+	var face := smoothstep(100.0, 90.0, dc) * smoothstep(70.0, 80.0, dc) * smoothstep(0.5, 0.8, (z - crag.y) / maxf(dc, 1.0))
+	var top := smoothstep(30.0, 18.0, pos.distance_to(knoll)) * 0.7
+	var patchy := smoothstep(0.05, 0.35, p.noise.get_noise_2d(x * 0.15, z * 0.15))
+	c.r = maxf(face, top) * patchy * 0.75
 	# Gravel: the track and the yard; tarmac on the roads.
 	if p.dist_to_path(pos, track) < 2.6 or yard.has_point(pos):
 		c.b = 1.0
@@ -185,19 +186,19 @@ func _build_trees(root: Node3D, rng: RandomNumberGenerator) -> void:
 	var x := -hl - 12.0
 	while x < hl + 2.0:
 		var q := Vector2(x, -hw - rng.randf_range(14.0, 18.0))
-		if rng.randf() < 0.65:
-			p.add_dark_round(near, rng, Vector3(q.x, 0.0, q.y))
-		else:
-			p.add_pine(near, rng, Vector3(q.x, 0.0, q.y))
-		x += rng.randf_range(4.0, 6.0) / detail
+		p.add_pine(near, rng, Vector3(q.x, 0.0, q.y))
+		x += rng.randf_range(3.5, 5.5) / detail
 	# Tall trees along the west end, between the pitch and the yard.
 	var z := -hw - 8.0
 	while z < hw * 0.5:
 		var q := Vector2(-hl - rng.randf_range(8.0, 11.0), z)
-		if rng.randf() < 0.6:
+		if absf(z) < 16.0:
+			z += 4.0
+			continue   # keep the view down the pitch from behind the hail clear
+		if rng.randf() < 0.75:
 			p.add_pine(near, rng, Vector3(q.x, 0.0, q.y))
 		else:
-			p.add_dark_round(near, rng, Vector3(q.x, 0.0, q.y))
+			p.add_broadleaf(near, rng, Vector3(q.x, 0.0, q.y), rng.randf_range(0.8, 1.0))
 		z += rng.randf_range(4.5, 7.0) / detail
 	# Trees past the east end and round the mound, and by the club buildings.
 	for i in int(34 * detail):
@@ -214,24 +215,37 @@ func _build_trees(root: Node3D, rng: RandomNumberGenerator) -> void:
 		p.add_broadleaf(near, rng, Vector3(q.x, p.height_m(q.x, q.y), q.y), rng.randf_range(0.6, 0.9))
 	# Woods on the crag, the knoll and the hills round about: thinner further out.
 	var spacing: float = [17.0, 12.5, 10.0][p.scenery_detail]
-	var gz := -700.0
-	while gz < 700.0:
-		var gx := -500.0
-		while gx < 700.0:
+	var gz := -420.0
+	while gz < 420.0:
+		var gx := -300.0
+		while gx < 450.0:
 			var r := Vector2(gx, gz).length()
-			var step := spacing * (1.0 + r / 260.0)
-			if fmod(absf(gx), step) < spacing and p.noise.get_noise_2d(gx * 0.5, gz * 0.5) > -0.15:
-				var px := gx + rng.randf_range(-3.0, 3.0)
-				var pz := gz + rng.randf_range(-3.0, 3.0)
+			var keep := 1.0 - smoothstep(250.0, 420.0, r)
+			if rng.randf() < keep and p.noise.get_noise_2d(gx * 0.5, gz * 0.5) > 0.0:
+				var px := gx + rng.randf_range(-0.5, 0.5) * spacing
+				var pz := gz + rng.randf_range(-0.5, 0.5) * spacing
 				var h: float = p.height_m(px, pz)
 				var c := ground_mask(px, pz, h)
-				if h > 4.0 and c.b == 0.0 and c.a == 0.0 and c.r < 0.4 and not _built_up(Vector2(px, pz)):
+				if h > 3.0 and c.b == 0.0 and c.a == 0.0 and c.r < 0.3 and not _built_up(Vector2(px, pz)):
 					if r < 200.0:
 						p.add_broadleaf(near, rng, Vector3(px, h, pz), rng.randf_range(0.7, 1.0))
 					else:
 						p.add_woodland(far, rng, Vector3(px, h - 0.4, pz), 0.45)
 			gx += spacing
-		gz += spacing * (1.0 + absf(gz) / 400.0)
+		gz += spacing
+	# The crag and the knoll are wooded all over but for the rock.
+	for hill in [[crag, 115.0], [knoll, 100.0]]:
+		var n_trees := int(PI * hill[1] * hill[1] / (spacing * spacing * 0.8))
+		for i in n_trees:
+			var a := rng.randf() * TAU
+			var q: Vector2 = hill[0] + Vector2(cos(a), sin(a)) * hill[1] * sqrt(rng.randf())
+			var h: float = p.height_m(q.x, q.y)
+			var c := ground_mask(q.x, q.y, h)
+			if c.r < 0.3 and c.a == 0.0 and h > 3.0:
+				p.add_woodland(far, rng, Vector3(q.x, h - 0.4, q.y), 0.5)
+	for i in int(40 * detail):
+		var q := Vector2(rng.randf_range(-hl - 520.0, -hl - 150.0), rng.randf_range(-330.0, 300.0))
+		p.add_woodland(far, rng, Vector3(q.x, p.height_m(q.x, q.y) - 0.4, q.y), 0.3)
 	p.emit_trees(root, near, 12, 7, 64, "TreesNear")
 	p.emit_trees(root, far, 8, 5, 22, "Woodland")
 
@@ -292,13 +306,13 @@ func _build_stand(root: Node3D) -> void:
 	for i in segs:
 		var t := float(i + 1) / segs
 		var zz := lerpf(front_z, back - 0.6, t)
-		var yy := lerpf(5.9, 6.3, t) + 0.8 * sin(PI * t)
+		var yy := lerpf(5.9, 6.2, t) + 1.4 * sin(PI * t)
 		var a := prev
 		var b := Vector2(zz, yy)
 		var seg := p.add_box(holder, Vector3(L + 1.4, 0.14, a.distance_to(b) + 0.05), Vector3(0, (a.y + b.y) * 0.5, (a.x + b.x) * 0.5), roof_mat)
 		seg.rotation.x = atan2(a.y - b.y, b.x - a.x)
 		prev = b
-	p.add_box(holder, Vector3(L + 1.4, 0.5, 0.1), Vector3(0, 5.75, front_z + 0.02), roof_mat)
+	p.add_box(holder, Vector3(L + 1.4, 0.8, 0.1), Vector3(0, 5.6, front_z + 0.02), roof_mat)
 	# A rail along the front of the walkway.
 	p.add_box(holder, Vector3(L + 2.0, 0.05, 0.05), Vector3(0, 1.05, 0.05), p.mat("rail_steel", Color(0.7, 0.71, 0.72), 0.4))
 
@@ -375,13 +389,15 @@ func _build_houses(root: Node3D, rng: RandomNumberGenerator) -> void:
 	for q in [Vector2(-70.0, -hw - 88.0), Vector2(-40.0, -hw - 92.0), Vector2(hl + 70.0, -hw - 60.0), Vector2(hl + 95.0, -hw - 20.0),
 			Vector2(hl + 70.0, hw + 70.0), Vector2(hl + 40.0, -hw - 95.0)]:
 		p.add_house(holder, rng, Vector3(q.x, p.height_m(q.x, q.y), q.y), rng.randf_range(-0.4, 0.4))
-	var rows: int = [3, 5, 7][p.scenery_detail]
+	# The town: streets of houses running down to the bay.
+	var rows: int = [4, 6, 9][p.scenery_detail]
 	for row in rows:
-		for i in 9:
-			if rng.randf() > 0.75:
+		var yaw := rng.randf_range(-0.3, 0.3)
+		for i in 16:
+			if rng.randf() > 0.7:
 				continue
-			var q := Vector2(-hl - 170.0 - row * 55.0 - rng.randf_range(0.0, 20.0), -260.0 + i * 62.0 + rng.randf_range(-15.0, 15.0))
-			p.add_house(holder, rng, Vector3(q.x, p.height_m(q.x, q.y), q.y), rng.randf_range(-0.5, 0.5))
+			var q := Vector2(-hl - 160.0 - row * 34.0 - rng.randf_range(0.0, 8.0), -330.0 + i * 40.0 + rng.randf_range(-8.0, 8.0))
+			p.add_house(holder, rng, Vector3(q.x, p.height_m(q.x, q.y), q.y), yaw + rng.randf_range(-0.1, 0.1))
 
 
 func _build_cars(root: Node3D, rng: RandomNumberGenerator) -> void:
@@ -390,6 +406,7 @@ func _build_cars(root: Node3D, rng: RandomNumberGenerator) -> void:
 	root.add_child(holder)
 	for i in 4:
 		var x := -hl - 22.0 - i * 9.0
-		p.park_row(holder, rng, Vector3(x, 0, -hw + 4.0), Vector3(x, 0, hw - 4.0), 0.0 if i % 2 == 0 else PI, 0.55)
+		for side in [-1.0, 1.0]:
+			p.park_row(holder, rng, Vector3(x, 0, side * 14.0), Vector3(x, 0, side * (hw - 4.0)), 0.0 if i % 2 == 0 else PI, 0.55)
 	p.park_row(holder, rng, Vector3(-hl * 0.75, 0, hw + 12.0), Vector3(-hl * 0.6, 0, hw + 12.0), PI * 0.5, 0.6)
 	p.park_row(holder, rng, Vector3(-hl * 0.12, 0, hw + 26.0), Vector3(-6.0, 0, hw + 26.0), -PI * 0.5, 0.5)

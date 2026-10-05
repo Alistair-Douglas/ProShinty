@@ -33,6 +33,9 @@ const KEEP_CLEAR := {
 		[Vector2(-22.5, -10.2), Vector2(7.0, 3.4)],
 		[Vector2(-2.8, 4.2), Vector2(3.6, 2.6)],
 	],
+	4: [  # Mossfield: the stand (its terracing has its own spectators)
+		[Vector2(-48.0, -12.0), Vector2(34.0, 8.2)],
+	],
 }
 ## The team dugouts either side of halfway on the far side, at every ground
 ## (scripts/subs_bench.gd builds them where a ground has none of its own).
@@ -80,6 +83,7 @@ func build(pitch: ShintyPitch, colors: Array, quality := 1, seed := 1877) -> voi
 		["West", _end_spots(rng, pitch, -hl, -1.0, density * 0.5, clear)],
 		["East", _end_spots(rng, pitch, hl, 1.0, density * 0.5, clear)],
 	]
+	groups.append(["Stand", pitch.crowd_spots(rng, density)])
 	for g in groups:
 		# Split each side by figure: standing (adults and children) or wheelchair.
 		var by_kind := [[], []]
