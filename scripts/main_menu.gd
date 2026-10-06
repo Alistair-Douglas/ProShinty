@@ -36,6 +36,7 @@ var squad_crest: ShintyCrest
 var squad_grid: GridContainer
 var squad_title: Label
 var squad_sub: Label
+var squad_stars: ShintyStars
 
 # Caman designer
 var design := {}
@@ -410,6 +411,10 @@ func _build_squads() -> void:
 	squad_sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	squad_sub.custom_minimum_size = Vector2(300, 0)
 	left.add_child(squad_sub)
+	squad_stars = ShintyStars.new()
+	squad_stars.custom_minimum_size = Vector2(ShintyStars.width_for(26.0), 26.0)
+	squad_stars.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	left.add_child(squad_stars)
 
 	var panel := PanelContainer.new()
 	var sb := ShintyStyle.box(ShintyStyle.PANEL)
@@ -441,6 +446,7 @@ func _refresh_squad() -> void:
 			bits.append(str(team[k]))
 	bits.append("Team OVR %d" % int(team["overall"]))
 	squad_sub.text = "  ·  ".join(bits)
+	squad_stars.stars = ShintyStyle.stars(int(team["overall"]))
 	for c in squad_grid.get_children():
 		c.queue_free()
 	for col in SQUAD_COLUMNS:

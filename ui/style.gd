@@ -136,10 +136,16 @@ static func rating_color(ovr: int) -> Color:
 	return Color("c7865a")
 
 
-## Team rating out of five stars, in half stars, spread across the ratings the
-## squads actually use.
+## Team rating out of five stars, in half stars: half a star per 5 points
+## from 50 (1 star) to 79 (3.5), then tighter steps at the top so the best
+## sides reach five stars.
+const STAR_BANDS := [[87, 5.0], [84, 4.5], [80, 4.0], [75, 3.5], [70, 3.0], [65, 2.5], [60, 2.0], [55, 1.5], [50, 1.0]]
+
 static func stars(ovr: int) -> float:
-	return clampf(snappedf((ovr - 52) / 5.0, 0.5), 0.5, 5.0)
+	for band in STAR_BANDS:
+		if ovr >= band[0]:
+			return band[1]
+	return 0.5
 
 
 ## Readable text colour on top of `bg`.
