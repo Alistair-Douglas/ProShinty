@@ -195,6 +195,11 @@ func _team_block(team: Dictionary, at: Vector2, right: bool, you: bool) -> void:
 		ShintyStyle.GOLD if you else ShintyStyle.MUTED)
 	sub.position = at + Vector2(63, 34)
 	add_child(sub)
+	var stars := ShintyStars.new()
+	stars.stars = ShintyStyle.stars(int(team["overall"]))
+	stars.size = Vector2(ShintyStars.width_for(14.0), 14.0)
+	stars.position = at + Vector2(64, 58)
+	add_child(stars)
 
 
 func _draw_bar() -> void:
